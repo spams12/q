@@ -9,7 +9,7 @@ import { db } from '../../lib/firebase';
 import { ServiceRequest } from '../../lib/types';
 
 
-export default function TasksScreen() {
+const TasksScreen: React.FC = () => {
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -200,7 +200,9 @@ export default function TasksScreen() {
       </Animated.View>
     </ThemedView>
   );
-}
+};
+
+export default TasksScreen;
 
 type AnimatedTaskItemProps = {
   item: ServiceRequest;

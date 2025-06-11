@@ -8,6 +8,9 @@ export interface Theme {
   icon: string;
   tabInactive: string;
   tabActive: string;
+  card: string;
+  border: string;
+  primary: string;
 }
 
 // Define the shape of the themes object
@@ -25,6 +28,9 @@ export const themes: Themes = {
     icon: '#121212',
     tabInactive: 'gray',
     tabActive: '#007AFF',
+    card: '#FFFFFF',
+    border: '#DDDDDD',
+    primary: '#007AFF',
   },
   dark: {
     background: '#121212',
@@ -33,6 +39,9 @@ export const themes: Themes = {
     icon: '#FFFFFF',
     tabInactive: 'gray',
     tabActive: '#007AFF',
+    card: '#1E1E1E',
+    border: '#333333',
+    primary: '#007AFF',
   },
 };
 

@@ -1,39 +1,71 @@
-import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useColorScheme } from 'react-native';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
-import { ThemeProvider, useTheme } from '../context/ThemeContext';
+import { ThemeProvider } from '../context/ThemeContext';
+import { auth } from '../lib/firebase';
 
-function AppContent() {
-  const { themeName } = useTheme();
-  const colorScheme = useColorScheme();
-  const navigationTheme = themeName === 'dark' || colorScheme === 'dark' ? DarkTheme : DefaultTheme;
+// Prevent the splash screen from auto-hiding before asset loading is complete.
+SplashScreen.preventAutoHideAsync();
 
+function RootLayoutNav() {
   return (
-    <NavigationThemeProvider value={navigationTheme}>
+    <ThemeProvider>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
-      <StatusBar style={themeName === 'dark' ? 'light' : 'dark'} />
-    </NavigationThemeProvider>
+    </ThemeProvider>
   );
 }
 
 export default function RootLayout() {
-  const [loaded] = useFonts({
+  const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
 
-  if (!loaded) {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoaded, setAuthLoaded] = useState(false);
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (error) throw error;
+  }, [error]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      // setUser(currentUser);
+      setAuthLoaded(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!authLoaded) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+
+    if (!user && !inAuthGroup) {
+      router.replace('/login');
+    } else if (user && inAuthGroup) {
+      // router.replace('/(tabs)/tasks');
+      router.replace('/login');
+    }
+  }, [user, authLoaded, segments, router]);
+
+  useEffect(() => {
+    if (loaded && authLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [loaded, authLoaded]);
+
+  if (!loaded || !authLoaded) {
     return null;
   }
 
-  return (
-    <ThemeProvider>
-      <AppContent />
-    </ThemeProvider>
-  );
+  return <RootLayoutNav />;
 }
