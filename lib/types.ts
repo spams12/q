@@ -82,11 +82,16 @@ export interface Attachment {
 
 export interface User {
   id: string;
-  uid?: string;
-  displayName?: string;
-  name?: string;
+  name: string;
+  email: string;
+  role: string;
+  lastLogin: any;
+  status: string;
+  teamId?: string;
   photoURL?: string;
-  [key: string]: any;
+  createdAt?: any;
+  phone?: string;
+  stockItems?: UserStockItem[];
 }
 
 
@@ -146,19 +151,13 @@ export interface ServiceRequest {
 }
 
 export interface UserStockItem {
-  id: string; // Unique ID for this stock item entry
-  itemType:
-    | "connectorType"
-    | "deviceModel"
-    | "cable"
-    | "hook"
-    | "bag"
-    | "maintenanceType"
-    | string; // Type of item from settings or general
-  itemId: string; // ID from InvoiceSettings (e.g., connectorType.id, deviceModel.id) or a generic ID
+  id: string;
+  itemType: "packageType" | "cableLength" | "connectorType" | "deviceModel" | "maintenanceType";
+  itemId: string;
   itemName: string;
   quantity: number;
-  lastUpdated: string;
+  lastUpdated: any;
+  notes?: string;
 }
 
 export interface UserStock {
@@ -173,20 +172,13 @@ export interface StockTransaction {
   id: string;
   userId: string;
   userName: string;
-  itemType:
-    | "connectorType"
-    | "deviceModel"
-    | "cable"
-    | "hook"
-    | "bag"
-    | "maintenanceType"
-    | string;
+  itemType: "packageType" | "cableLength" | "connectorType" | "deviceModel" | "maintenanceType";
   itemId: string;
   itemName: string;
-  quantity: number; // Amount transacted (positive for addition, negative for reduction but here it's absolute)
-  type: "invoice" | "adjustment" | "initial" | "transfer";
-  sourceId?: string; // e.g., invoice ID, adjustment ID
+  quantity: number;
+  type: "addition" | "reduction" | "inventory" | "invoice";
+  sourceId?: string;
   sourceName?: string;
-  timestamp: string;
+  timestamp: any;
   notes?: string;
 }

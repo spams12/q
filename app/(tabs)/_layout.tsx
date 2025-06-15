@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
 
@@ -8,7 +8,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'المهام',
           tabBarIcon: ({ color, size }) => (
             <FontAwesome name="home" size={size} color={color} />
           ),
@@ -21,6 +21,15 @@ export default function TabLayout() {
           title: 'التكتات التي انشئتها',
           tabBarIcon: ({ color, size }) => (
             <FontAwesome name="list-alt" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="stock-management"
+        options={{
+          title: 'المخزن',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="store" size={size} color={color} />
           ),
         }}
       />

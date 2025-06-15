@@ -186,7 +186,6 @@ id: item.id,
           <DetailRow label="رقم الهاتف:" value={item.customerPhone || ''} theme={theme} />
           <DetailRow label="العنوان:" value={item.customerEmail || ''} theme={theme} />
           <DetailRow label="تاريخ الإنشاء:" value={formatTimestamp(item.createdAt)} theme={theme} />
-          <DetailRow label="آخر تحديث:" value={formatTimestamp(item.lastUpdated)} theme={theme} />
           
           <View style={[styles.separator, { backgroundColor: theme.background }]} />
           
