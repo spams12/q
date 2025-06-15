@@ -1,58 +1,192 @@
-import { Timestamp } from 'firebase/firestore';
+export interface PackageType {
+  id: string;
+  name: string;
+  price: number;
+  isActive: boolean;
+}
+
+export interface CableLength {
+  id: string;
+  length: number;
+  price: number;
+  isCustom?: boolean;
+  isActive: boolean;
+}
+
+export interface ConnectorType {
+  id: string;
+  name: string;
+  price: number;
+  isActive: boolean;
+}
+
+export interface DeviceModel {
+  id: string;
+  name: string;
+  price: number;
+  type: string; // e.g., "ONU", "ONT"
+  isActive: boolean;
+}
+
+export interface MaintenanceType {
+  id: string;
+  name: string;
+  basePrice: number;
+  description: string;
+  isActive: boolean;
+}
+
+export interface InvoiceSettings {
+  id: string;
+  teamId: string;
+  lastUpdated: string;
+  packageTypes: PackageType[];
+  cableLengths: CableLength[];
+  connectorTypes: ConnectorType[];
+  deviceModels: DeviceModel[];
+  maintenanceTypes: MaintenanceType[];
+}
+
+export interface InvoiceItem {
+  id: string;
+  type:
+    | "newCustomerInstallation"
+    | "maintenance"
+    | "transportationFee"
+    | "expenseReimbursement"
+    | "subscriptionRenewal"
+    | "customItem";
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  packageType?: string;
+  cableLength?: number | string; // Can be number or "custom"
+  connectorType?: string[];
+  receiverDevice?: string; // Appears in serializedItems, might be legacy or part of deviceModel
+  numHooks?: number;
+  numBags?: number;
+  maintenanceType?: string; // e.g., "cableReplacement", "connectorReplacement"
+  deviceModel?: string;
+  additionalNotes?: string;
+  subscriberId?: string | null;
+  isPaid?: boolean;
+}
+
+export interface Attachment {
+  downloadURL: string;
+  fileName: string;
+  mimeType?: string;
+  size?: number;
+}
+
+export interface User {
+  id: string;
+  uid?: string;
+  displayName?: string;
+  name?: string;
+  photoURL?: string;
+  [key: string]: any;
+}
+
+
+
+export interface Invoice {
+  id: string;
+  linkedServiceRequestId: string;
+  createdBy: string;
+  createdAt: string;
+  lastUpdated: string;
+  items: InvoiceItem[];
+  totalAmount: number;
+  status: "draft" | "pending" | "paid" | "cancelled";
+  notes?: string;
+  customerName?: string;
+  creatorName?: string;
+  type: "invoice"; // Or other types if applicable
+  teamId?: string | null;
+  teamCreatorId?: string | null; // Assuming this might exist
+  subscriberId?: string | null;
+}
 
 export interface Comment {
   id: string;
-  text: string;
   userId: string;
   userName: string;
-  createdAt: Timestamp | string;
-}
-
-export interface UserResponse {
-  userId: string;
-  response: 'accepted' | 'rejected';
-  timestamp: Timestamp | string;
-}
-
-export interface Subscriber {
-  userId: string;
-  userName: string;
+  content: string;
+  timestamp: any;
+  createdAt?: any;
+  isStatusChange?: boolean;
+  attachments?: Attachment[];
 }
 
 export interface ServiceRequest {
   id: string;
   customerId: string;
   customerName: string;
-  customerEmail: string;
-  customerPhone: string;
-  address?: string;
+  customerEmail?: string;
+  customerPhone?: string;
   title: string;
   description: string;
-  type: string;
-  status: string;
-  priority: string;
-  date: Timestamp | string;
-  createdAt?: Timestamp | string;
-  lastUpdated: Timestamp | string;
+  type: string; // e.g., "مشكلة", "طلب جديد"
+  status: string; // e.g., "مفتوح", "قيد المعالجة", "مغلق"
+  priority: string; // e.g., "عالية", "متوسطة", "منخفضة"
+  date: string; // Original date, might be ISO string
+  createdAt: string; // Firestore timestamp or ISO string
+  lastUpdated: string; // Firestore timestamp or ISO string
   assignedTo?: string;
   assignedUsers?: string[];
-  attachments?: string[];
-  notes?: string;
+  attachments?: string[]; // URLs or identifiers
   comments?: Comment[];
-  creatorId?: string;
-  creatorName?: string;
-  location?: {
-    lat: number;
-    lng: number;
-  };
-  newInstallImages?: string[];
-  invoiceIds?: string[];
-  userResponses?: UserResponse[];
-  subscribers?: Subscriber[];
-  senttouser?: boolean;
-  onLocation?: boolean;
-  onLocationTimestamp?: Timestamp | null;
-  completionTimestamp?: Timestamp | null;
-  estimatedTime?: number;
+  creatorId: string;
+  creatorName: string;
+  subscribers?: string[]; // IDs of users subscribed to this request
   subscriberId?: string | null;
+  invoiceIds?: string[];
+}
+
+export interface UserStockItem {
+  id: string; // Unique ID for this stock item entry
+  itemType:
+    | "connectorType"
+    | "deviceModel"
+    | "cable"
+    | "hook"
+    | "bag"
+    | "maintenanceType"
+    | string; // Type of item from settings or general
+  itemId: string; // ID from InvoiceSettings (e.g., connectorType.id, deviceModel.id) or a generic ID
+  itemName: string;
+  quantity: number;
+  lastUpdated: string;
+}
+
+export interface UserStock {
+  id: string; // User's UID
+  userId: string;
+  userName?: string | null;
+  items: UserStockItem[];
+  lastUpdated: string;
+}
+
+export interface StockTransaction {
+  id: string;
+  userId: string;
+  userName: string;
+  itemType:
+    | "connectorType"
+    | "deviceModel"
+    | "cable"
+    | "hook"
+    | "bag"
+    | "maintenanceType"
+    | string;
+  itemId: string;
+  itemName: string;
+  quantity: number; // Amount transacted (positive for addition, negative for reduction but here it's absolute)
+  type: "invoice" | "adjustment" | "initial" | "transfer";
+  sourceId?: string; // e.g., invoice ID, adjustment ID
+  sourceName?: string;
+  timestamp: string;
+  notes?: string;
 }

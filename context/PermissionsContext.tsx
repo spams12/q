@@ -49,7 +49,7 @@ export const PERMISSIONS = {
   VIEW_TECHNICIAN_STATS: "view_technician_stats",
   IS_ADMIN: "is_admin",
   VIEW_USER_INVENTORY: "view_user_inventory",
-  ASSSINE_TICKETS : "ticket_assigner",
+  ASSIGN_TICKETS : "ticket_assigner",
   MANAGE_TEAMS: "manage_teams", // New permission for managing teams
 }
 
@@ -105,7 +105,7 @@ const PERMISSION_MAP: Record<string, string> = {
   "viewTechnicianStats": PERMISSIONS.VIEW_TECHNICIAN_STATS,
   "viewSettings": PERMISSIONS.VIEW_SETTINGS,
   "viewUserInventory": PERMISSIONS.VIEW_USER_INVENTORY,
-  "ticket_assigner": PERMISSIONS.ASSSINE_TICKETS,
+  "ticket_assigner": PERMISSIONS.ASSIGN_TICKETS,
   // Manage permissions
   "manageProducts": PERMISSIONS.MANAGE_PRODUCTS,
   "manageCategories": PERMISSIONS.MANAGE_CATEGORIES,
@@ -176,7 +176,6 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   const [isCurrentUserTeamLeader, setIsCurrentUserTeamLeader] = useState<boolean>(false); // State for team leader status
 
   useEffect(() => {
-    // If auth is still loading, set our loading state and reset user-specific data
     if (authLoading) {
       setLoading(true);
       setUserPermissions([]);
@@ -186,7 +185,7 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
       setUserUid(null);
       setCurrentUserTeamId(null);
       setIsCurrentUserTeamLeader(false);
-      return; // Exit early
+      return; 
     }
 
     const fetchUserPermissionsAndInfo = async () => {
@@ -215,17 +214,15 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
           where("email", "==", user.email),
           limit(1)
         );
-        
         const querySnapshot = await getDocs(q);
         
         if (!querySnapshot.empty) {
-          const userDocData = querySnapshot.docs[0].data();
-          
+          const userDocSnapshot = querySnapshot.docs[0];
+          const userDocData = userDocSnapshot.data();
           // Set user name: from 'name' field in Firestore, fallback to Firebase Auth display name
           setUserName((userDocData.name as string) || user.displayName || null);
           
-          // Set user UID: from 'uid' field in Firestore, fallback to Firebase Auth UID (canonical)
-          setUserUid((userDocData.uid as string) || user.uid);
+          setUserUid(userDocSnapshot.id || user.uid);
           
           // Fetch and set team information
           const teamId = userDocData.teamId as string | null;
@@ -237,7 +234,7 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
               const teamDocSnap = await getDoc(teamDocRef);
               if (teamDocSnap.exists()) {
                 const teamData = teamDocSnap.data();
-                setIsCurrentUserTeamLeader(teamData.leaderId === ((userDocData.uid as string) || user.uid));
+                setIsCurrentUserTeamLeader(teamData.leaderId === (userDocData.uid as string || user.uid));
               } else {
                 console.warn(`Team document with ID ${teamId} not found.`);
                 setIsCurrentUserTeamLeader(false);

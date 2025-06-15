@@ -2,6 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { initializeApp } from "firebase/app";
 import { getReactNativePersistence, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getDownloadURL, getStorage, ref, uploadBytes } from "firebase/storage";
+import { CommentAttachment } from "./types";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBHErhfhQHFURogL_WENFXy8ajwwQ7Zw_E",
@@ -21,6 +23,19 @@ const auth = initializeAuth(app, {
 });
 
 const db = getFirestore(app);
+const storage = getStorage(app);
 
-export { auth, db };
+export const uploadCommentAttachment = async (file: File, ticketId: string): Promise<CommentAttachment> => {
+  const storageRef = ref(storage, `serviceRequests/${ticketId}/comments/${file.name}`);
+  await uploadBytes(storageRef, file);
+  const downloadURL = await getDownloadURL(storageRef);
+  return {
+    downloadURL,
+    fileName: file.name,
+    fileSize: file.size,
+    fileType: file.type,
+  };
+};
+
+export { auth, db, storage };
 

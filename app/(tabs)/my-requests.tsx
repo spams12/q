@@ -1,12 +1,12 @@
-import { usePermissions } from '@/context/PermissionsContext';
 import { useTheme } from '@/context/ThemeContext';
+import useFirebaseAuth from '@/hooks/use-firebase-auth';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { collection, doc, getDocs, limit, orderBy, query, Timestamp, updateDoc, where } from 'firebase/firestore';
+import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ViewToken } from 'react-native';
-import { useSharedValue, withSpring } from 'react-native-reanimated';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ViewToken } from 'react-native';
+import { useSharedValue } from 'react-native-reanimated';
 import FilterDialog from '../../components/FilterDialog';
 import InfoCard from '../../components/InfoCard';
 import { db } from '../../lib/firebase';
@@ -26,225 +26,142 @@ interface LoadingStates {
   Done: boolean;
 }
 
-const TasksScreen: React.FC = () => {
-  // Data caching states
+const MyRequestsScreen: React.FC = () => {
   const [cachedData, setCachedData] = useState<CachedData>({
     Open: [],
     Accepted: [],
     Done: []
   });
-  
   const [loadingStates, setLoadingStates] = useState<LoadingStates>({
     Open: true,
     Accepted: false,
     Done: false
   });
 
-  // UI states
   const [activeTab, setActiveTab] = useState<TabKey>('Open');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
-  const { userUid } = usePermissions();
-  const router = useRouter();
-  // Animation values
-  const viewableItems = useSharedValue<ViewToken[]>([]);
-  const tabIndicatorX = useSharedValue(0);
-  
+  const { user } = useFirebaseAuth();
   const { theme } = useTheme();
-  
-  // Refs for optimization
-  const dataCache = useRef<Map<TabKey, { data: ServiceRequest[]; timestamp: number }>>(new Map());
-  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+  const router = useRouter();
 
-  // Status mapping
-  const getStatusFilter = useCallback((tab: TabKey): string => {
+  const viewableItems = useSharedValue<ViewToken[]>([]);
+
+  const dataCache = useRef<Map<TabKey, { data: ServiceRequest[]; timestamp: number }>>(new Map());
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+  const getStatusFilter = useCallback((tab: TabKey): string[] => {
     const statusMap = {
-      'Open': 'مفتوح',
-      'Accepted': 'قيد المعالجة',
-      'Done': 'مكتمل'
+      'Open': ['مفتوح'],
+      'Accepted': ['قيد المعالجة', 'مقبولة'],
+      'Done': ['منجزة', 'مغلق', 'مكتمل']
     };
     return statusMap[tab];
   }, []);
 
-  // Optimized data fetching with caching
-  const fetchTabData = useCallback(async (tab: TabKey, forceRefresh = false) => {
-    // Check cache first
+  const fetchRequests = useCallback(async (tab: TabKey, forceRefresh = false) => {
+    if (!user?.uid) {
+      setLoadingStates(prev => ({ ...prev, [tab]: false }));
+      return;
+    }
+
     const cached = dataCache.current.get(tab);
     const now = Date.now();
-    
+
     if (!forceRefresh && cached && (now - cached.timestamp) < CACHE_DURATION) {
       setCachedData(prev => ({ ...prev, [tab]: cached.data }));
       return;
     }
 
     setLoadingStates(prev => ({ ...prev, [tab]: true }));
-    
+
     try {
       const statusFilter = getStatusFilter(tab);
-      const q = query(
-        collection(db, 'serviceRequests'), 
-        where('status', '==', statusFilter),
-        where("assignedUsers", "array-contains", userUid),
+      let q = query(
+        collection(db, 'serviceRequests'),
+        where('creatorId', '==', user?.uid),
+        where('status', 'in', statusFilter),
         orderBy('createdAt', 'desc'),
-        limit(50) // Reduced limit for faster loading
+        limit(50)
       );
-      
+
       const querySnapshot = await getDocs(q);
-      const requests = querySnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
+      const fetchedRequests = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
       } as ServiceRequest));
-      
-      // Update cache
-      dataCache.current.set(tab, { data: requests, timestamp: now });
-      setCachedData(prev => ({ ...prev, [tab]: requests }));
-      
+
+      dataCache.current.set(tab, { data: fetchedRequests, timestamp: now });
+      setCachedData(prev => ({ ...prev, [tab]: fetchedRequests }));
+
     } catch (error) {
       console.error(`Error fetching ${tab} requests:`, error);
       setCachedData(prev => ({ ...prev, [tab]: [] }));
     } finally {
       setLoadingStates(prev => ({ ...prev, [tab]: false }));
     }
-  }, [getStatusFilter, CACHE_DURATION, userUid]);
+  }, [user?.uid, getStatusFilter, CACHE_DURATION]);
 
-  // Initial data loading with smart preloading
+
   useEffect(() => {
     const loadInitialData = async () => {
-      // Load active tab immediately
-      await fetchTabData('Open');
-      
-      // Preload other tabs with staggered timing
+      await fetchRequests('Open');
       const preloadTabs = async () => {
         await new Promise(resolve => setTimeout(resolve, 500));
-        await fetchTabData('Accepted');
-        
+        await fetchRequests('Accepted');
         await new Promise(resolve => setTimeout(resolve, 300));
-        await fetchTabData('Done');
+        await fetchRequests('Done');
       };
-      
       preloadTabs();
     };
-    
     loadInitialData();
-  }, [fetchTabData]);
+  }, [fetchRequests]);
 
-  // Optimized tab switching with haptic feedback
+
   const handleTabPress = useCallback(async (tab: TabKey) => {
     if (tab === activeTab) return;
-
-    // Haptic feedback for better UX
     try {
       await Haptics.selectionAsync();
     } catch {
-      // Haptics not available, continue without it
+      // Haptics not available
     }
-
-    // Immediate visual feedback
     setActiveTab(tab);
-    
-    // Animate tab indicator
-    const tabIndex = ['Open', 'Accepted', 'Done'].indexOf(tab);
-    tabIndicatorX.value = withSpring(tabIndex * (Dimensions.get('window').width / 3 - 32));
-    
-    // Load data if not cached or outdated
     const cached = dataCache.current.get(tab);
     const now = Date.now();
-    
     if (!cached || (now - cached.timestamp) > CACHE_DURATION) {
-      fetchTabData(tab);
+      fetchRequests(tab);
     }
-  }, [activeTab, fetchTabData, CACHE_DURATION, tabIndicatorX]);
+  }, [activeTab, fetchRequests, CACHE_DURATION]);
 
-  // Memoized filtered data
-  const filteredServiceRequests = useMemo(() => {
+  const filteredRequests = useMemo(() => {
     const currentData = cachedData[activeTab] || [];
-
-    const filteredData = currentData.filter(req => {
+    if (!searchQuery && !selectedPriority && !selectedType) {
+      return currentData;
+    }
+    return currentData.filter(req => {
       const matchesSearch = !searchQuery ||
         req.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        req.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (req.customerName && req.customerName.toLowerCase().includes(searchQuery.toLowerCase())) ||
         req.id.toLowerCase().includes(searchQuery.toLowerCase());
-
       const matchesPriority = !selectedPriority || req.priority === selectedPriority;
       const matchesType = !selectedType || req.type === selectedType;
-
       return matchesSearch && matchesPriority && matchesType;
     });
+  }, [cachedData, activeTab, searchQuery, selectedPriority, selectedType]);
 
-    return [...filteredData].sort((a, b) => {
-      const dateA = (a.createdAt as any)?.toMillis() || 0;
-      const dateB = (b.createdAt as any)?.toMillis() || 0;
-      if (sortOrder === 'asc') {
-        return dateA - dateB;
-      }
-      return dateB - dateA;
-    });
-  }, [cachedData, activeTab, searchQuery, selectedPriority, selectedType, sortOrder]);
+  const renderItem = useCallback(({ item }: { item: ServiceRequest }) => (
+    <InfoCard item={item} viewableItems={viewableItems} />
+  ), [viewableItems]);
 
-  // Optimized response handler
-  const handleResponse = useCallback(async (id: string, response: 'accepted' | 'rejected') => {
-    const newStatus = response === 'accepted' ? 'قيد المعالجة' : 'مرفوض';
+  const keyExtractor = (item: ServiceRequest) => item.id;
 
-    // Optimistic UI update
-    setCachedData(prevCached => {
-      const itemToMove = prevCached[activeTab]?.find(req => req.id === id);
-      if (!itemToMove) return prevCached;
+  const onRefresh = useCallback(() => {
+    fetchRequests(activeTab, true);
+  }, [activeTab, fetchRequests]);
 
-      const updatedCached = { ...prevCached };
-
-      // Remove from current tab
-      updatedCached[activeTab] = updatedCached[activeTab].filter(req => req.id !== id);
-
-      // Add to the 'Accepted' tab if the response is 'accepted'
-      if (response === 'accepted') {
-        updatedCached.Accepted = [
-          { ...itemToMove, status: newStatus },
-          ...(updatedCached.Accepted || [])
-        ];
-      }
-      
-      return updatedCached;
-    });
-
-    try {
-      // Update the document in Firestore
-      const requestRef = doc(db, 'serviceRequests', id);
-      await updateDoc(requestRef, {
-        status: newStatus,
-        lastUpdated: Timestamp.now(),
-      });
-
-      // Invalidate cache for the affected tabs
-      dataCache.current.delete(activeTab);
-      if (response === 'accepted') {
-        dataCache.current.delete('Accepted');
-      }
-    } catch (error) {
-      console.error("Error updating document: ", error);
-      // Revert the optimistic update by refetching data
-      fetchTabData(activeTab, true);
-      if (response === 'accepted') {
-        fetchTabData('Accepted', true);
-      }
-    }
-  }, [activeTab, fetchTabData]);
-
-  // Memoized callbacks for FlatList
-  const onViewableItemsChanged = useCallback(({ viewableItems: vItems }: { viewableItems: ViewToken[] }) => {
-    viewableItems.value = vItems;
-  }, [viewableItems]);
-
-  const renderItem = useCallback(({ item }: { item: ServiceRequest }) => {
-    return <InfoCard item={item} viewableItems={viewableItems} handleResponse={handleResponse} />;
-  }, [handleResponse, viewableItems]);
-
-  const keyExtractor = useCallback((item: ServiceRequest) => item.id, []);
-
-  // Filter popup animations
   const toggleFilterPopup = useCallback(() => {
    setIsFilterVisible(prev => !prev);
  }, []);
@@ -254,95 +171,6 @@ const TasksScreen: React.FC = () => {
     setSelectedType(null);
   }, []);
 
-  const toggleSortOrder = useCallback(() => {
-    setSortOrder(prev => (prev === 'desc' ? 'asc' : 'desc'));
-  }, []);
-
-  // Memoized components
-  const TabButton = React.memo(({ tabKey, label }: { tabKey: TabKey; label: string }) => {
-    const isActive = activeTab === tabKey;
-    const isLoading = loadingStates[tabKey];
-    
-    return (
-      <Pressable
-        style={[
-          styles.tab, 
-          isActive && styles.activeTab, 
-          isActive && { backgroundColor: theme.background }
-        ]}
-        onPressIn={() => handleTabPress(tabKey)}
-  
-      >
-        <View style={styles.tabContent}>
-          <Text style={[
-            styles.tabText, 
-            { color: isActive ? theme.tabActive : theme.tabInactive }
-          ]}>
-            {label}
-          </Text>
-          {isLoading && (
-            <ActivityIndicator 
-              size="small" 
-              color={theme.tabActive} 
-              style={styles.tabLoader} 
-            />
-          )}
-        </View>
-      </Pressable>
-    );
-  });
-
-  TabButton.displayName = 'TabButton';
-
-  const SearchInput = React.memo(() => (
-    <View style={[styles.searchContainer, { backgroundColor: theme.header }]}>
-      <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
-      <TextInput
-        style={[styles.searchInput, { color: theme.text }]}
-        placeholder="بحث عن تكت..."
-        placeholderTextColor="#888"
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        returnKeyType="search"
-      />
-    </View>
-  ));
-
-  SearchInput.displayName = 'SearchInput';
-
-  const FilterButton = React.memo(({ onPress }: { onPress: () => void }) => (
-    <TouchableOpacity 
-      style={[styles.iconButton, { backgroundColor: theme.header }]} 
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <Ionicons name="filter" size={22} color={theme.icon} />
-    </TouchableOpacity>
-  ));
-
-  FilterButton.displayName = 'FilterButton';
-
-  const SortButton = React.memo(({ onPress }: { onPress: () => void }) => (
-    <TouchableOpacity
-      style={[styles.iconButton, { backgroundColor: theme.header }]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <Ionicons
-        name={sortOrder === 'desc' ? 'arrow-down' : 'arrow-up'}
-        size={22}
-        color={theme.icon}
-      />
-    </TouchableOpacity>
-  ));
-
-  SortButton.displayName = 'SortButton';
-
-  // Pull to refresh
-  const onRefresh = useCallback(() => {
-    fetchTabData(activeTab, true);
-  }, [activeTab, fetchTabData]);
-
   const isCurrentTabLoading = loadingStates[activeTab];
   const hasActiveFilters = selectedPriority || selectedType;
 
@@ -350,18 +178,41 @@ const TasksScreen: React.FC = () => {
     <>
       <View style={styles.headerContainer}>
         <View style={styles.headerRow}>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>التذاكر المسندة إليك</Text>
-
+          <Text style={[styles.headerTitle, { color: theme.text }]}>التكتات التي أنشأتها</Text>
+          <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.tabActive }]} onPress={() => router.push('/create-request')}>
+            <Text style={styles.addButtonText}>اضافة تكت</Text>
+          </TouchableOpacity>
         </View>
         <Text style={[styles.headerSubtitle, { color: theme.text }]}>
-          قائمة التذاكر المسندة إليك من قبل المدير.
+          قائمة التذاكر التي قمت بإنشائها.
         </Text>
       </View>
 
       <View style={styles.controlsContainer}>
-        <SearchInput />
-        <FilterButton onPress={toggleFilterPopup} />
-        <SortButton onPress={toggleSortOrder} />
+        <View style={[styles.searchContainer, { backgroundColor: theme.header }]}>
+          <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchInput, { color: theme.text }]}
+            placeholder="ابحث عن تكت..."
+            placeholderTextColor="#888"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+        </View>
+        <TouchableOpacity
+          style={[styles.iconButton, { backgroundColor: theme.header }]}
+          onPress={toggleFilterPopup}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="filter" size={22} color={theme.icon} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.iconButton, { backgroundColor: theme.header }]}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="swap-vertical" size={22} color={theme.icon} />
+        </TouchableOpacity>
       </View>
 
       <View style={[styles.tabsContainer, { backgroundColor: theme.header }]}>
@@ -386,6 +237,27 @@ const TasksScreen: React.FC = () => {
   ));
   ListHeader.displayName = 'ListHeader';
 
+  const TabButton = React.memo(({ tabKey, label }: { tabKey: TabKey; label: string }) => {
+    const isActive = activeTab === tabKey;
+    const isLoading = loadingStates[tabKey];
+    return (
+      <Pressable
+        style={[styles.tab, isActive && styles.activeTab, isActive && { backgroundColor: theme.background }]}
+        onPressIn={() => handleTabPress(tabKey)}
+      >
+        <View style={styles.tabContent}>
+          <Text style={[styles.tabText, { color: isActive ? theme.tabActive : theme.tabInactive }]}>
+            {label}
+          </Text>
+          {isLoading && (
+            <ActivityIndicator size="small" color={theme.tabActive} style={styles.tabLoader} />
+          )}
+        </View>
+      </Pressable>
+    );
+  });
+  TabButton.displayName = 'TabButton';
+
   const renderListEmpty = useCallback(() => {
     if (isCurrentTabLoading) {
       return (
@@ -406,25 +278,17 @@ const TasksScreen: React.FC = () => {
   }, [isCurrentTabLoading, theme]);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background }]} >
       <FlatList
-        data={filteredServiceRequests}
+        data={filteredRequests}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         ListHeaderComponent={<ListHeader />}
         ListEmptyComponent={renderListEmpty}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
         contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        updateCellsBatchingPeriod={50}
-        windowSize={10}
-        refreshing={isCurrentTabLoading && cachedData[activeTab].length > 0}
         onRefresh={onRefresh}
+        refreshing={isCurrentTabLoading && cachedData[activeTab].length > 0}
       />
-
      <FilterDialog
        isVisible={isFilterVisible}
        onClose={toggleFilterPopup}
@@ -433,13 +297,11 @@ const TasksScreen: React.FC = () => {
        selectedType={selectedType}
        setSelectedType={setSelectedType}
        clearFilters={clearFilters}
-       availableTypes={['طلب', 'شكوى', 'اقتراح']}
+       availableTypes={['مشكلة', 'طلب جديد', 'طلب', 'شكوى', 'اقتراح']}
      />
     </View>
   );
 };
-
-export default TasksScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -595,5 +457,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Cairo',
     opacity: 0.6,
   },
-  // Filter Popup Styles
 });
+
+export default MyRequestsScreen;
