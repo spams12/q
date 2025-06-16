@@ -92,6 +92,8 @@ export interface User {
   createdAt?: any;
   phone?: string;
   stockItems?: UserStockItem[];
+  lastClearTimes: any[]
+  uid: string; // Assuming this is the Firebase UID
 }
 
 
@@ -148,6 +150,13 @@ export interface ServiceRequest {
   subscribers?: string[]; // IDs of users subscribed to this request
   subscriberId?: string | null;
   invoiceIds?: string[];
+  userResponses?: UserResponse[];
+}
+export interface UserResponse {
+  userId: string;
+  userName: string;
+  response: "accepted" | "rejected";
+  timestamp: string;
 }
 
 export interface UserStockItem {

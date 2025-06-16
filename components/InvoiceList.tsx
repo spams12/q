@@ -2123,7 +2123,7 @@ const COLORS = {
   secondary: "#6C757D",
   secondaryPressed: "#5A6268",
   white: "#FFFFFF",
-  background: "#F2F2F7",
+  background: "#FFFFFF",
   card: "#FFFFFF",
   textPrimary: "#1C1C1E",
   textSecondary: "#3A3A3C",

@@ -1,7 +1,7 @@
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect } from 'react';
-import { Dimensions, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 interface FilterDialogProps {
@@ -71,7 +71,12 @@ const FilterDialog: React.FC<FilterDialogProps> = ({
           </View>
 
           <Text style={[styles.filterSectionTitle, { color: theme.text }]}>الأولوية</Text>
-          <View style={styles.filterOptionsContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.horizontalScrollView}
+            contentContainerStyle={styles.filterOptionsContainer}
+          >
             {['High', 'Medium', 'Low'].map(priority => (
               <TouchableOpacity
                 key={priority}
@@ -97,10 +102,15 @@ const FilterDialog: React.FC<FilterDialogProps> = ({
                 </Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
 
           <Text style={[styles.filterSectionTitle, { color: theme.text }]}>النوع</Text>
-          <View style={styles.filterOptionsContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.horizontalScrollView}
+            contentContainerStyle={styles.filterOptionsContainer}
+          >
             {availableTypes.map(type => (
               <TouchableOpacity
                 key={type}
@@ -126,7 +136,7 @@ const FilterDialog: React.FC<FilterDialogProps> = ({
                 </Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
 
           <View style={styles.filterActions}>
             <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
@@ -188,11 +198,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: 'right',
   },
+  horizontalScrollView: {
+    marginBottom: 20,
+  },
   filterOptionsContainer: {
     flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 20,
   },
   filterButton: {
     paddingHorizontal: 16,

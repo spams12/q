@@ -5,9 +5,14 @@ import { StyleSheet, Text, TextInput, TextInputProps, useColorScheme, View } fro
 
 interface StyledTextInputProps extends TextInputProps {
   label: string;
+  error?: string;
 }
 
-const StyledTextInput: React.FC<StyledTextInputProps> = ({ label, ...props }) => {
+const StyledTextInput: React.FC<StyledTextInputProps> = ({
+  label,
+  error,
+  ...props
+}) => {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
 
@@ -27,9 +32,14 @@ const StyledTextInput: React.FC<StyledTextInputProps> = ({ label, ...props }) =>
       paddingVertical: 12,
       borderRadius: 8,
       borderWidth: 1,
-      borderColor: colors.icon,
+      borderColor: error ? 'red' : colors.icon,
       fontSize: 16,
       color: colors.text,
+    },
+    errorText: {
+      color: 'red',
+      marginTop: 4,
+      fontSize: 12,
     },
   });
 
@@ -41,6 +51,7 @@ const StyledTextInput: React.FC<StyledTextInputProps> = ({ label, ...props }) =>
         placeholderTextColor={colors.icon}
         {...props}
       />
+      {error && <Text style={styles.errorText}>{error}</Text>}
     </View>
   );
 };

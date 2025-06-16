@@ -2,30 +2,36 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import 'react-native-get-random-values';
 import 'react-native-reanimated';
 import { PermissionsProvider } from '../context/PermissionsContext';
-import { ThemeProvider } from '../context/ThemeContext';
-import { auth } from '../lib/firebase';
+import { ThemeProvider, useTheme } from '../context/ThemeContext';
+import { auth, db } from '../lib/firebase';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
+  const { theme } = useTheme();
+
   return (
-    <PermissionsProvider>
-      <ThemeProvider>
-        <View style={{ flex: 1 }}>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="+not-found" />
-          </Stack>
-        </View>
-      </ThemeProvider>
-    </PermissionsProvider>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <Stack
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: theme.background,
+          },
+          headerTintColor: theme.text,
+        }}
+      >
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="+not-found" />
+      </Stack>
+    </View>
   );
 }
 
@@ -35,6 +41,7 @@ export default function RootLayout() {
   });
 
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<any>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
   const segments = useSegments();
   const router = useRouter();
@@ -52,16 +59,30 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    if (user) {
+      const userDocRef = doc(db, 'users', user.uid);
+      const unsubscribe = onSnapshot(userDocRef, (doc) => {
+        setProfile(doc.data());
+      });
+      return () => unsubscribe();
+    }
+  }, [user]);
+
+  useEffect(() => {
     if (!authLoaded) return;
 
     const inAuthGroup = segments[0] === '(auth)';
 
-    if (!user && !inAuthGroup) {
+    if (user) {
+      if (profile && (!profile.phoneNumber || !profile.photoURL)) {
+        router.replace('/complete-profile');
+      } else if (inAuthGroup) {
+        router.replace('/(tabs)');
+      }
+    } else if (!inAuthGroup) {
       router.replace('/login');
-    } else if (user && inAuthGroup) {
-      router.replace('/(tabs)');
     }
-  }, [user, authLoaded, segments, router]);
+  }, [user, profile, authLoaded, segments, router]);
 
   useEffect(() => {
     if (loaded && authLoaded) {
@@ -73,5 +94,11 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
+  return (
+    <PermissionsProvider>
+      <ThemeProvider>
+        <RootLayoutNav />
+      </ThemeProvider>
+    </PermissionsProvider>
+  );
 }

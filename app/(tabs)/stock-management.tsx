@@ -25,7 +25,6 @@ type StockManagementListItem =
 const StockManagementScreen: React.FC = () => {
   const { userUid } = usePermissions();
   const { theme } = useTheme();
-  const [user, setUser] = useState<User | null>(null);
   const [stockItems, setStockItems] = useState<UserStockItem[]>([]);
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,8 +42,7 @@ const StockManagementScreen: React.FC = () => {
     const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
       if (doc.exists()) {
         const userData = { id: doc.id, ...doc.data() } as User;
-        setUser(userData);
-        setStockItems(userData.stockItems || []);
+        setStockItems((userData.stockItems || []));
       } else {
         console.error('User document does not exist');
         Alert.alert('خطأ', 'المستخدم غير موجود');
@@ -97,6 +95,26 @@ const StockManagementScreen: React.FC = () => {
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
 
+  const translateTypeToArabic = (type: string): string => {
+    const translations: { [key: string]: string } = {
+      // Stock Item Types
+      packageType: 'نوع الباقة',
+      cableLength: 'طول الكابل',
+      connectorType: 'نوع الموصل',
+      deviceModel: 'موديل الجهاز',
+      maintenanceType: 'نوع الصيانة',
+      // Transaction Types
+      addition: 'إضافة',
+      reduction: 'تقليل',
+      inventory: 'جرد',
+      invoice: 'فاتورة',
+      hook: 'خطاف',
+      cable: 'كابل',
+      bag: 'شنطات'
+    };
+    return translations[type] || type;
+  };
+
   const getItemTypeColor = (type: string) => {
     const colors = { packageType: '#FF6B6B', cableLength: '#4ECDC4', connectorType: '#45B7D1', deviceModel: '#96CEB4', maintenanceType: '#FFEAA7' };
     return colors[type as keyof typeof colors] || '#DDD';
@@ -117,7 +135,7 @@ const StockManagementScreen: React.FC = () => {
     <View style={[styles.stockCard, { backgroundColor: theme.card }]}>
       <View style={styles.stockHeader}>
         <View style={[styles.itemTypeBadge, { backgroundColor: getItemTypeColor(item.itemType) }]}>
-          <Text style={styles.itemTypeText}>{item.itemType}</Text>
+          <Text style={styles.itemTypeText}>{translateTypeToArabic(item.itemType)}</Text>
         </View>
         <Text style={[styles.quantityText, { color: theme.text }]}>{item.quantity}</Text>
       </View>
@@ -131,7 +149,7 @@ const StockManagementScreen: React.FC = () => {
     <View style={[styles.transactionCard, { backgroundColor: theme.card }]}>
       <View style={styles.transactionHeader}>
         <View style={[styles.transactionTypeBadge, { backgroundColor: getTransactionTypeColor(item.type) }]}>
-          <Text style={styles.transactionTypeText}>{item.type}</Text>
+          <Text style={styles.transactionTypeText}>{translateTypeToArabic(item.type)}</Text>
         </View>
         <Text style={[styles.quantityChange, { color: item.type === 'addition' ? '#00B894' : '#E17055' }]}>
           {item.type === 'addition' ? '+' : '-'}{item.quantity}
@@ -141,7 +159,7 @@ const StockManagementScreen: React.FC = () => {
       <View style={styles.transactionDetails}>
         <Text style={styles.transactionDate}>{formatDate(item.timestamp)}</Text>
         <View style={[styles.itemTypeBadge, { backgroundColor: getItemTypeColor(item.itemType) }]}>
-          <Text style={styles.itemTypeText}>{item.itemType}</Text>
+          <Text style={styles.itemTypeText}>{translateTypeToArabic(item.itemType)}</Text>
         </View>
       </View>
       {item.sourceName && <Text style={styles.source}>المصدر: {item.sourceName}</Text>}

@@ -1,0 +1,425 @@
+import { usePermissions } from '@/context/PermissionsContext';
+import { useTheme } from '@/context/ThemeContext';
+import { db } from '@/lib/firebase';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { collection, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  I18nManager,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+
+// This forces RTL for demonstration purposes.
+// In a real app, this is usually handled globally.
+if (I18nManager.isRTL === false) {
+    I18nManager.forceRTL(true);
+    I18nManager.allowRTL(true);
+    // You might need to reload the app for this to take effect in a real scenario
+}
+
+
+// InvoiceItem interface (as it's part of Invoice)
+interface InvoiceItem {
+  name: string;
+  price: number;
+  quantity: number;
+}
+
+// Your Invoice Interface
+export interface Invoice {
+  id: string;
+  linkedServiceRequestId: string;
+  createdBy: string;
+  createdAt: Timestamp;
+  lastUpdated: Timestamp;
+  items: InvoiceItem[];
+  totalAmount: number;
+  status: 'draft' | 'submitted' | 'approved' | 'paid';
+  notes?: string;
+  customerName?: string;
+  customerPhone?: string;
+  creatorName?: string;
+  customerEmail?: string;
+  type: string;
+  statusLastChangedBy?: string;
+  statusLastChangedAt?: Timestamp;
+  teamId: string | null;
+  teamCreatorId: string | null;
+  isSubscriptionInvoice?: boolean;
+  parentInvoiceName?: string;
+  subscriberId?: string;
+}
+
+
+// Helper to format date for display
+const formatDate = (date: Timestamp | Date | string) => {
+    const d = date instanceof Timestamp ? date.toDate() : new Date(date);
+    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear() } ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+};
+
+// Helper for status badge styling and text
+const getStatusDetails = (status: Invoice['status']) => {
+    switch (status) {
+        case 'paid':
+            return { text: 'مدفوعة', color: '#28a745', backgroundColor: '#e9f7eb' };
+        case 'approved':
+            return { text: 'مقبولة', color: '#007bff', backgroundColor: '#e6f2ff' };
+        case 'submitted':
+            return { text: 'قيد المراجعة', color: '#ffc107', backgroundColor: '#fff8e1' };
+        case 'draft':
+        default:
+            return { text: 'مسودة', color: '#6c757d', backgroundColor: '#f8f9fa' };
+    }
+};
+
+const InvoicesScreen = () => {
+  const { themeName } = useTheme();
+  const styles = getStyles(themeName);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const {userdoc} = usePermissions()
+  const [selectedTime, setSelectedTime] = useState<string>("all");
+
+  const sortedClearTimes = useMemo(() => {
+    if (!userdoc?.lastClearTimes) return [];
+    return  [...userdoc.lastClearTimes].sort((a, b) => a.toMillis() - b.toMillis());
+  }, [userdoc?.lastClearTimes]);
+
+useEffect(() => {
+  if (!userdoc?.uid) return
+
+  setInvoicesLoading(true)
+  let invoicesQuery = query(
+    collection(db, "invoices"),
+    where("createdBy", "==", userdoc.uid),
+    orderBy("createdAt", "desc") // Add ordering for better performance
+  );
+
+  if (selectedTime !== "all" && userdoc.lastClearTimes && userdoc.lastClearTimes.length > 0) {
+    console.log("Fetching invoices for selected clear time:", selectedTime);
+    const sortedTimestamps = [...userdoc.lastClearTimes].sort((a, b) => a.toMillis() - b.toMillis());
+    
+    const selectedIndex = sortedTimestamps.findIndex(t => t.toMillis().toString() === selectedTime);
+
+    if (selectedIndex !== -1) {
+      const selectedTimestamp = sortedTimestamps[selectedIndex];
+      
+      // Convert Timestamp to ISO string for comparison since createdAt is stored as ISO string
+      const selectedDateISO = selectedTimestamp.toDate().toISOString();
+      
+      // Fetch invoices created up to and including the selected clear date.
+      invoicesQuery = query(
+        collection(db, "invoices"),
+        where("createdBy", "==", userdoc.uid),
+        where("createdAt", "<=", selectedDateISO),
+        orderBy("createdAt", "desc")
+      );
+
+      // If there's a previous clear date, fetch invoices created after it.
+      if (selectedIndex > 0) {
+        const previousTimestamp = sortedTimestamps[selectedIndex - 1];
+        const previousDateISO = previousTimestamp.toDate().toISOString();
+        
+        invoicesQuery = query(
+          collection(db, "invoices"),
+          where("createdBy", "==", userdoc.uid),
+          where("createdAt", ">", previousDateISO),
+          where("createdAt", "<=", selectedDateISO),
+          orderBy("createdAt", "desc")
+        );
+      }
+    }
+  }
+
+  const unsubscribe = onSnapshot(
+    invoicesQuery,
+    (snapshot) => {
+      const fetchedInvoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice))
+      console.log("Fetched invoices:", fetchedInvoices.length);
+      setInvoices(fetchedInvoices)
+      setInvoicesLoading(false)
+    },
+    (error) => {
+      console.error("Error fetching invoices:", error)
+      setError("Failed to fetch invoices: " + error.message)
+      setInvoicesLoading(false)
+    }
+  )
+
+  return () => unsubscribe()
+}, [userdoc?.uid, selectedTime, userdoc?.lastClearTimes])
+
+  const invoiceStats = useMemo(() => {
+    return {
+        count: invoices.length,
+        total: invoices.reduce((acc, inv) => acc + inv.totalAmount, 0),
+    };
+  }, [invoices]);
+
+  const renderInvoiceItem = ({ item }: { item: Invoice }) => {
+    const status = getStatusDetails(item.status);
+    return (
+        <TouchableOpacity style={styles.card} activeOpacity={0.8 } onPress={() => item.linkedServiceRequestId ? router.push(`/tasks/${item.linkedServiceRequestId}`) : null}>
+            <View style={styles.cardTopRow}>
+                <View style={styles.customerInfo}>
+                    <Feather name="user" size={16} color="#555" />
+                    <Text style={styles.customerName}>{item.customerName || 'عميل غير محدد'}</Text>
+                </View>
+                <View style={[styles.statusBadge, { backgroundColor: status.backgroundColor }]}>
+                    <Text style={[styles.statusText, { color: status.color }]}>{status.text}</Text>
+                </View>
+            </View>
+
+            <View style={styles.cardBody}>
+                <View style={styles.detailItem}>
+                    <MaterialCommunityIcons name="cash" size={20} color="#16a085" />
+                    <Text style={styles.amountText}>{item.totalAmount.toFixed(2)} ر.س</Text>
+                </View>
+                <View style={styles.detailItem}>
+                    <Feather name="calendar" size={16} color="#888" />
+                    <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
+                </View>
+            </View>
+        </TouchableOpacity>
+    );
+  };
+  
+  const renderContent = () => {
+    if (invoicesLoading) {
+      return <ActivityIndicator size="large" color="#007bff" style={{ marginTop: 50 }} />;
+    }
+    if (error) {
+      return <Text style={styles.infoText}>{error}</Text>;
+    }
+    if (invoices.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+            <MaterialCommunityIcons name="file-document-outline" size={60} color="#ccc" />
+            <Text style={styles.infoText}>لا توجد فواتير لعرضها</Text>
+            <Text style={styles.infoSubText}>جرّب تغيير فلتر التاريخ أو قم بإنشاء فاتورة جديدة.</Text>
+        </View>
+      );
+    }
+    return (
+      <FlatList
+        data={invoices}
+        renderItem={renderInvoiceItem}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContainer}
+      />
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.headerTitle}>الفواتير</Text>
+
+      {/* Date Filter */}
+      <View>
+        <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterContainer}
+        >
+            <TouchableOpacity
+                style={[styles.filterButton, selectedTime === "all" && styles.filterButtonActive]}
+                onPress={() => setSelectedTime("all")}
+            >
+                <Text style={[styles.filterText, selectedTime === "all" && styles.filterTextActive]}>الكل</Text>
+            </TouchableOpacity>
+            {[...sortedClearTimes].reverse().map((time) => (
+                <TouchableOpacity
+                    key={time.toMillis()}
+                    style={[styles.filterButton, selectedTime === time.toMillis().toString() && styles.filterButtonActive]}
+                    onPress={() => setSelectedTime(time.toMillis().toString())}
+                >
+                    <Text style={[styles.filterText, selectedTime === time.toMillis().toString() && styles.filterTextActive]}>
+                        حتى {formatDate(time.toDate())}
+                    </Text>
+                </TouchableOpacity>
+            ))}
+        </ScrollView>
+      </View>
+
+      {/* Summary Section */}
+      {invoices.length > 0 && (
+        <View style={styles.summaryContainer}>
+            <View style={styles.summaryBox}>
+                <Text style={styles.summaryLabel}>إجمالي الفواتير</Text>
+                <Text style={styles.summaryValue}>{invoiceStats.count}</Text>
+            </View>
+            <View style={styles.summaryBox}>
+                <Text style={styles.summaryLabel}>المبلغ الإجمالي</Text>
+                <Text style={styles.summaryValue}>{invoiceStats.total.toFixed(2)} ر.س</Text>
+            </View>
+        </View>
+      )}
+
+      {renderContent()}
+    </SafeAreaView>
+  );
+};
+
+const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme === 'dark' ? '#1a202c' : '#f4f6f8',
+    writingDirection: 'rtl',
+  },
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: theme === 'dark' ? '#e2e8f0' : '#1a2533',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? 20 : 0,
+    paddingBottom: 10,
+    textAlign: 'right',
+  },
+  filterContainer: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    flexDirection: 'row-reverse',
+  },
+  filterButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: theme === 'dark' ? '#2d3748' : '#fff',
+    borderRadius: 20,
+    marginHorizontal: 5,
+    borderWidth: 1,
+    borderColor: theme === 'dark' ? '#4a5568' : '#e0e0e0',
+  },
+  filterButtonActive: {
+    backgroundColor: '#007bff',
+    borderColor: '#007bff',
+  },
+  filterText: {
+    fontSize: 14,
+    color: theme === 'dark' ? '#cbd5e0' : '#333',
+    fontWeight: '500',
+  },
+  filterTextActive: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  summaryContainer: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-around',
+    padding: 15,
+    marginHorizontal: 20,
+    marginBottom: 10,
+    backgroundColor: theme === 'dark' ? '#2d3748' : '#fff',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: theme === 'dark' ? 0.2 : 0.05,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  summaryBox: {
+    alignItems: 'center',
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: theme === 'dark' ? '#a0aec0' : '#6c757d',
+    marginBottom: 4,
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme === 'dark' ? '#e2e8f0' : '#1a2533',
+  },
+  listContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  card: {
+    backgroundColor: theme === 'dark' ? '#2d3748' : '#ffffff',
+    borderRadius: 12,
+    padding: 18,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme === 'dark' ? 0.25 : 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cardTopRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  customerInfo: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+  },
+  customerName: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: theme === 'dark' ? '#e2e8f0' : '#2c3e50',
+    marginRight: 8,
+  },
+  statusBadge: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  cardBody: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: theme === 'dark' ? '#4a5568' : '#f0f0f0',
+  },
+  detailItem: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+  },
+  amountText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#16a085',
+    marginRight: 8,
+  },
+  dateText: {
+    fontSize: 14,
+    color: theme === 'dark' ? '#a0aec0' : '#888',
+    marginRight: 8,
+  },
+  infoText: {
+    textAlign: 'center',
+    marginTop: 50,
+    fontSize: 18,
+    color: theme === 'dark' ? '#a0aec0' : '#6c757d',
+  },
+  infoSubText: {
+    textAlign: 'center',
+    marginTop: 8,
+    fontSize: 14,
+    color: theme === 'dark' ? '#718096' : '#aab5c0',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: -50,
+  },
+});
+
+export default InvoicesScreen;

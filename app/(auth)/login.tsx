@@ -172,7 +172,6 @@ const LoginScreen: React.FC = () => {
     
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      Alert.alert('نجاح', 'تم تسجيل الدخول بنجاح!');
     } catch (error: any) {
       Alert.alert('فشل تسجيل الدخول', error.message);
     } finally {

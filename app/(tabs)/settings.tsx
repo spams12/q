@@ -1,0 +1,523 @@
+import { usePermissions } from '@/context/PermissionsContext';
+import { Theme, useTheme } from '@/context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
+import { signOut } from 'firebase/auth';
+import { collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
+import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
+import React, { Children, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  I18nManager,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import UpdatePhoneModal from '../../components/UpdatePhoneModal';
+import { auth, db } from '../../lib/firebase';
+
+// --- Theming and Constants ---
+// No longer needed here, will be managed by getStyles
+
+const SPACING = {
+  s: 8,
+  m: 16,
+  l: 24,
+};
+
+// Enable RTL for Arabic
+I18nManager.allowRTL(true);
+I18nManager.forceRTL(true);
+
+// --- Type Definitions ---
+interface User {
+  id: string;
+  photoURL?: string;
+  name?: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+  teamId?: string;
+  lastClearTimes?: { seconds: number; toDate: () => Date }[];
+}
+
+interface ProfileHeaderProps {
+  user: Partial<User>;
+  onImagePick: () => void;
+  loading: boolean;
+}
+
+interface SettingsGroupProps {
+  title?: string;
+  children: React.ReactNode;
+}
+
+interface SettingRowProps {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  iconColor?: string;
+  value?: string;
+  onPress?: () => void;
+  rightComponent?: React.ReactNode;
+}
+
+// --- Reusable UI Components ---
+
+// A component for the Profile section at the top
+const ProfileHeader: React.FC<ProfileHeaderProps & { styles: any }> = ({ user, onImagePick, loading, styles }) => (
+  <View style={styles.profileSection}>
+    <TouchableOpacity onPress={onImagePick} disabled={loading} style={styles.avatarContainer}>
+      <Image
+        source={{ uri: user.photoURL || 'https://via.placeholder.com/150' }}
+        style={styles.avatar}
+      />
+      {loading ? (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="small" color="#FFF" />
+        </View>
+      ) : (
+        <View style={styles.editAvatarButton}>
+          <Ionicons name="camera-outline" size={18} color="#FFF" />
+        </View>
+      )}
+    </TouchableOpacity>
+    <Text style={styles.profileName}>{user.name || 'اسم المستخدم'}</Text>
+    <Text style={styles.profileRole}>{user.role || 'عضو'}</Text>
+  </View>
+);
+
+// A component to group settings into a card
+const SettingsGroup: React.FC<SettingsGroupProps & { styles: any }> = ({ title, children, styles }) => (
+  <View style={styles.groupContainer}>
+    {title && <Text style={styles.groupTitle}>{title}</Text>}
+    <View style={styles.groupCard}>
+      {Children.map(children, (child, index) => (
+        <>
+          {React.isValidElement(child) ? React.cloneElement(child as React.ReactElement<any>, { styles }) : child}
+          {index < Children.count(children) - 1 && <View style={styles.separator} />}
+        </>
+      ))}
+    </View>
+  </View>
+);
+
+// A component for a single setting row
+const SettingRow: React.FC<SettingRowProps & { styles: any }> = ({ icon, iconColor, title, value, onPress, rightComponent, styles }) => (
+  <TouchableOpacity onPress={onPress} disabled={!onPress} style={styles.settingRow}>
+    <View style={[styles.iconContainer, { backgroundColor: iconColor || styles.iconContainer.backgroundColor }]}>
+      <Ionicons name={icon} size={20} color={iconColor ? '#FFF' : styles.icon.color} />
+    </View>
+    <View style={styles.settingTextContainer}>
+      <Text style={styles.settingTitle}>{title}</Text>
+      {value && <Text style={styles.settingValue}>{value}</Text>}
+    </View>
+    {rightComponent ? rightComponent : (onPress && <Ionicons name="chevron-back" size={20} style={styles.chevron} />)}
+  </TouchableOpacity>
+);
+
+// The main page component
+const SettingsPage = () => {
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const { themeName, toggleTheme, theme } = useTheme();
+  const styles = getStyles(theme);
+  const [totalInvoices, setTotalInvoices] = useState(0);
+  const [numberOfInvoices, setNumberOfInvoices] = useState(0);
+  const { userdoc, setUserdoc, realuserUid } = usePermissions();
+  const [loading, setLoading] = useState(false);
+  const [isPhoneModalVisible, setPhoneModalVisible] = useState(false);
+  const router = useRouter();
+
+  const latestClearTime = (userdoc?.lastClearTimes && userdoc.lastClearTimes.length > 0)
+    ? userdoc.lastClearTimes.reduce((latest, current) => (current.seconds > latest.seconds ? current : latest))
+    : null;
+  
+  const latestClearTimeString = latestClearTime ? latestClearTime.toDate().toISOString() : new Date(0).toISOString();
+  
+  const formattedDate = latestClearTime ? new Intl.DateTimeFormat('ar-IQ', {
+      year: 'numeric', month: 'long', day: 'numeric',
+  }).format(latestClearTime.toDate()) : 'لا توجد تصفية سابقة';
+
+  // --- Logic and Handlers (kept the same) ---
+  useEffect(() => {
+    if (!realuserUid) {
+      setTotalInvoices(0);
+      setNumberOfInvoices(0);
+      return;
+    }
+
+    const q = query(collection(db, 'invoices'), where('createdBy', '==', realuserUid), where('createdAt', '>=', latestClearTimeString));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let total = 0;
+      snapshot.forEach((doc) => {
+        total += doc.data().totalAmount;
+      });
+      setTotalInvoices(total);
+      setNumberOfInvoices(snapshot.size);
+    }, (error) => {
+      console.error("Error fetching invoices: ", error);
+      Alert.alert('خطأ', 'فشل في جلب بيانات الفواتير.');
+    });
+
+    return () => unsubscribe();
+  }, [realuserUid, latestClearTimeString]);
+
+  const handleImagePick = async () => {
+    setLoading(true);
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('صلاحية مرفوضة', 'نحتاج إلى صلاحية الوصول إلى الصور لتحديث صورتك الشخصية.');
+      setLoading(false);
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled) {
+      setLoading(false);
+      return;
+    }
+    const imageUri = result.assets[0].uri;
+    try {
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+      const storage = getStorage();
+      const storageRef = ref(storage, `profile_pictures/${userdoc?.id}`);
+      await uploadBytes(storageRef, blob);
+      const downloadURL = await getDownloadURL(storageRef);
+      if (userdoc?.id) {
+        const userDocRef = doc(db, 'users', userdoc.id);
+        await updateDoc(userDocRef, { photoURL: downloadURL });
+        setUserdoc({ ...userdoc!, photoURL: downloadURL });
+        Alert.alert('نجاح', 'تم تحديث الصورة الشخصية بنجاح.');
+      }
+    } catch (error) {
+      console.error('Error uploading image: ', error);
+      Alert.alert('خطأ', 'فشل تحديث الصورة.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'تسجيل الخروج', 'هل أنت متأكد؟',
+      [{ text: 'إلغاء', style: 'cancel' }, { text: 'تسجيل الخروج', style: 'destructive', onPress: () => signOut(auth) }]
+    );
+  };
+  
+  const handlePhoneUpdate = async (newPhone: string) => {
+    if (!userdoc?.id || !newPhone) {
+      setPhoneModalVisible(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const userDocRef = doc(db, 'users', userdoc.id);
+      await updateDoc(userDocRef, { phone: newPhone });
+      Alert.alert('نجاح', 'تم تحديث رقم الهاتف بنجاح.');
+      setUserdoc({ ...userdoc!, phone: newPhone });
+    } catch (error) {
+      console.error('Error updating phone number: ', error);
+      Alert.alert('خطأ', 'فشل تحديث رقم الهاتف.');
+    } finally {
+      setLoading(false);
+      setPhoneModalVisible(false);
+    }
+  };
+
+
+  if (!userdoc) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={styles.loadingText.color} />
+        <Text style={styles.loadingText}>جاري تحميل البيانات...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+      
+      <ProfileHeader user={userdoc} onImagePick={handleImagePick} loading={loading} styles={styles} />
+
+      {/* Wallet Card */}
+      <SettingsGroup title="المحفظة" styles={styles}>
+        <TouchableOpacity style={styles.invoiceCard} onPress={() => router.push('/invoices')}>
+            <View style={styles.invoiceCardContent}>
+              <Ionicons name="receipt-outline" size={32} style={styles.invoiceIcon} />
+              <View style={styles.invoiceCardText}>
+                <Text style={styles.invoiceCardTitle}>فواتير الفترة الحالية</Text>
+                <Text style={styles.invoiceCardSubtitle}>{`${numberOfInvoices} فاتورة`} • آخر تصفية: {formattedDate}</Text>
+              </View>
+            </View>
+            <View style={styles.invoiceCardAmountContainer}>
+              <Text style={styles.invoiceCardAmount}>{`${totalInvoices.toLocaleString()} IQD`}</Text>
+              <Ionicons name="chevron-back" size={24} style={styles.chevron} />
+            </View>
+        </TouchableOpacity>
+      </SettingsGroup>
+      
+      {/* Personal Info Group */}
+      <SettingsGroup title="المعلومات الشخصية" styles={styles}>
+        <SettingRow styles={styles} icon="person-outline" title="الاسم الكامل" value={userdoc.name || ''} iconColor="#5856D6" />
+        <SettingRow styles={styles} icon="mail-outline" title="البريد الإلكتروني" value={userdoc.email || ''} iconColor="#007AFF" />
+        <SettingRow styles={styles} icon="call-outline" title="رقم الهاتف" value={userdoc.phone || 'غير محدد'} onPress={() => setPhoneModalVisible(true)} iconColor="#34C759" />
+        <SettingRow styles={styles} icon="people-outline" title="معرف الفريق" value={userdoc.teamId || 'غير محدد'} iconColor="#FF9500" />
+      </SettingsGroup>
+
+      {/* App Settings Group */}
+      <SettingsGroup title="إعدادات التطبيق" styles={styles}>
+        <SettingRow
+          styles={styles}
+          icon="notifications-outline"
+          title="الإشعارات"
+          iconColor="#FF3B30"
+          rightComponent={<Switch value={notificationsEnabled} onValueChange={setNotificationsEnabled} trackColor={{ false: '#E9E9EA', true: theme.success }} thumbColor="#FFF" />}
+        />
+        <SettingRow
+          styles={styles}
+          icon="moon-outline"
+          title="الوضع المظلم"
+          iconColor="#5856D6"
+          rightComponent={<Switch value={themeName === 'dark'} onValueChange={toggleTheme} trackColor={{ false: '#E9E9EA', true: theme.success }} thumbColor="#FFF" />}
+        />
+      </SettingsGroup>
+
+      {/* Other Group */}
+      <SettingsGroup styles={styles}>
+        <SettingRow styles={styles} icon="people-circle-outline" title="عائله القبس" onPress={() => router.push('/family')} iconColor="#FF69B4" />
+        <SettingRow styles={styles} icon="information-circle-outline" title="حول التطبيق" onPress={() => router.push('/about')} iconColor="#00BCD4" />
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutButtonRow}>
+          <View style={[styles.iconContainer, { backgroundColor: theme.destructive }]}>
+            <Ionicons name="log-out-outline" size={20} color="#FFF" />
+          </View>
+          <Text style={styles.logoutButtonText}>تسجيل الخروج</Text>
+        </TouchableOpacity>
+      </SettingsGroup>
+
+      <UpdatePhoneModal
+        visible={isPhoneModalVisible}
+        onClose={() => setPhoneModalVisible(false)}
+        onUpdate={handlePhoneUpdate}
+        currentPhone={userdoc.phone || ''}
+        loading={loading}
+      />
+    </ScrollView>
+  );
+};
+
+const getStyles = (theme: Theme) => StyleSheet.create({
+  // --- Global Styles ---
+  container: {
+    flex: 1,
+    backgroundColor: theme.background,
+  },
+  contentContainer: {
+    paddingVertical: SPACING.l,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.background,
+  },
+  loadingText: {
+    marginTop: SPACING.m,
+    fontSize: 16,
+    color: theme.textSecondary,
+    fontFamily: 'System', // Specify a font family
+  },
+  chevron: {
+    color: theme.textSecondary,
+  },
+  icon: {
+    color: theme.primary,
+  },
+
+  // --- Profile Header Styles ---
+  profileSection: {
+    alignItems: 'center',
+    paddingHorizontal: SPACING.l,
+    marginBottom: SPACING.l,
+  },
+  avatarContainer: {
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  avatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
+    borderColor: theme.card,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 60,
+  },
+  editAvatarButton: {
+    position: 'absolute',
+    bottom: 5,
+    right: 5,
+    backgroundColor: theme.primary,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.card,
+  },
+  profileName: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: theme.text,
+    marginTop: SPACING.m,
+    textAlign: 'center',
+  },
+  profileRole: {
+    fontSize: 16,
+    color: theme.textSecondary,
+    marginTop: SPACING.s / 2,
+    textAlign: 'center',
+  },
+
+  // --- Settings Group & Card Styles ---
+  groupContainer: {
+    marginHorizontal: SPACING.m,
+    marginBottom: SPACING.l,
+  },
+  groupTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.textSecondary,
+    marginBottom: SPACING.s,
+    textAlign: 'right',
+    paddingHorizontal: SPACING.m,
+    textTransform: 'uppercase',
+  },
+  groupCard: {
+    backgroundColor: theme.card,
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: theme.separator,
+    marginRight: 56, // Align with text, not icon
+  },
+
+  // --- Setting Row Styles ---
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.m,
+    paddingHorizontal: SPACING.m,
+    backgroundColor: 'transparent', // Handled by group card
+  },
+  iconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.iconBackground,
+  },
+  settingTextContainer: {
+    flex: 1,
+    marginHorizontal: SPACING.m,
+    alignItems: 'flex-end', // For RTL
+  },
+  settingTitle: {
+    fontSize: 17,
+    color: theme.text,
+    textAlign: 'right',
+  },
+  settingValue: {
+    fontSize: 15,
+    color: theme.textSecondary,
+    textAlign: 'right',
+    marginTop: 2,
+  },
+
+  // --- Specific Card/Row Styles ---
+  invoiceCard: {
+    padding: SPACING.m,
+    backgroundColor: 'transparent', // Handled by group card
+  },
+  invoiceCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  invoiceIcon: {
+    color: theme.primary,
+  },
+  invoiceCardText: {
+    marginHorizontal: SPACING.m,
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  invoiceCardTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: theme.text,
+    textAlign: 'right',
+  },
+  invoiceCardSubtitle: {
+    fontSize: 13,
+    color: theme.textSecondary,
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  invoiceCardAmountContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end', // For RTL layout
+    marginTop: SPACING.m,
+    paddingTop: SPACING.m,
+    borderTopWidth: 1,
+    borderTopColor: theme.separator,
+  },
+  invoiceCardAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme.primary,
+    marginLeft: SPACING.s, // Space between amount and arrow
+  },
+  logoutButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.m,
+  },
+  logoutButtonText: {
+    flex: 1,
+    textAlign: 'center',
+    color: theme.destructive,
+    fontSize: 17,
+    fontWeight: '600',
+  },
+});
+
+export default SettingsPage;

@@ -1,5 +1,6 @@
 "use client"
 
+import { User } from "@/lib/types";
 import { collection, doc, getDoc, getDocs, limit, query, where } from "firebase/firestore"; // Added doc and getDoc
 import { createContext, ReactNode, useContext, useEffect, useState } from "react";
 import useFirebaseAuth from "../hooks/use-firebase-auth";
@@ -144,7 +145,11 @@ interface PermissionsContextType {
   userName: string | null; // New field for user's name
   userUid: string | null;  // New field for user's UID
   currentUserTeamId: string | null; // New field for current user's team ID
-  isCurrentUserTeamLeader: boolean; // New field to check if current user is team leader
+  isCurrentUserTeamLeader: boolean;
+  userdoc: User | null;
+  refreshUser: () => Promise<void>;
+  setUserdoc: (user: User | null) => void;
+  realuserUid: string | null; // New field for real user UID
 }
 
 const PermissionsContext = createContext<PermissionsContextType>({
@@ -160,6 +165,10 @@ const PermissionsContext = createContext<PermissionsContextType>({
   userUid: null,  // Default value for userUid
   currentUserTeamId: null, // Default value for currentUserTeamId
   isCurrentUserTeamLeader: false, // Default value for isCurrentUserTeamLeader
+  userdoc: null, // Default value for userdoc
+  refreshUser: async () => {},
+  setUserdoc: () => {},
+  realuserUid: null, // Default value for real user UID
 });
 
 export const usePermissions = () => useContext(PermissionsContext);
@@ -174,6 +183,122 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   const [userUid, setUserUid] = useState<string | null>(null);   // State for user's UID
   const [currentUserTeamId, setCurrentUserTeamId] = useState<string | null>(null); // State for current user's team ID
   const [isCurrentUserTeamLeader, setIsCurrentUserTeamLeader] = useState<boolean>(false); // State for team leader status
+  const [userdoc, setUserDoc] = useState<User | null>(null); // State for user document
+  const [realuserUid, setrealuserUid] = useState<string | null>(null); // State for real user UID
+  const fetchUserPermissionsAndInfo = async () => {
+    // If auth is done loading and there's no user (logged out)
+    if (!user) {
+      setLoading(false);
+      setUserPermissions([]);
+      setCustomPermissions({});
+      setIsAdmin(false);
+      setUserName(null);
+      setUserUid(null);
+      setCurrentUserTeamId(null);
+      setIsCurrentUserTeamLeader(false);
+      return; // Exit if no user
+    }
+
+    // User is authenticated, start fetching their data
+    setLoading(true);
+
+    try {
+      // Query user document by email (as per original logic)
+      // Consider querying by UID if your Firestore 'users' collection uses UIDs as document IDs
+      // or if 'uid' is a reliably indexed field: e.g., where("uid", "==", user.uid)
+      const q = query(
+        collection(db, "users"),
+        where("email", "==", user.email),
+        limit(1)
+      );
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        const userDocSnapshot = querySnapshot.docs[0];
+        const userDocData = userDocSnapshot.data();
+        // Set user name: from 'name' field in Firestore, fallback to Firebase Auth display name
+        setUserName((userDocData.name as string) || user.displayName || null);
+        setUserDoc({ ...userDocData, id: userDocSnapshot.id } as User); // Set user document with ID
+        setUserUid(userDocSnapshot.id || user.uid);
+        setrealuserUid(user.uid); // Use Firestore document ID or Firebase Auth UID
+
+        // Fetch and set team information
+        const teamId = userDocData.teamId as string | null;
+        setCurrentUserTeamId(teamId);
+
+        if (teamId) {
+          try {
+            const teamDocRef = doc(db, "teams", teamId);
+            const teamDocSnap = await getDoc(teamDocRef);
+            if (teamDocSnap.exists()) {
+              const teamData = teamDocSnap.data();
+              setIsCurrentUserTeamLeader(teamData.leaderId === (userDocData.uid as string || user.uid));
+            } else {
+              console.warn(`Team document with ID ${teamId} not found.`);
+              setIsCurrentUserTeamLeader(false);
+            }
+          } catch (teamError) {
+            console.error("Error fetching team document:", teamError);
+            setIsCurrentUserTeamLeader(false);
+          }
+        } else {
+          setIsCurrentUserTeamLeader(false);
+        }
+
+        let permissions: string[] = [];
+        const userCustomPermissions: Record<string, boolean> = {};
+
+        const admin = userDocData.permissions?.isAdmin === true || userDocData.isAdmin === true || userDocData.role === "مدير";
+        setIsAdmin(admin);
+
+        if (admin) {
+          permissions = Object.values(PERMISSIONS);
+          Object.keys(PERMISSION_MAP).forEach(key => {
+            userCustomPermissions[key] = true;
+          });
+          userCustomPermissions.isAdmin = true; // Assuming 'isAdmin' might be a permission key
+        } else if (userDocData.permissions) {
+          for (const [key, value] of Object.entries(userDocData.permissions)) {
+            if (value === true) {
+              const permissionValue = PERMISSION_MAP[key];
+              if (permissionValue) {
+                permissions.push(permissionValue);
+                userCustomPermissions[key] = true; // Store Firestore key (camelCase)
+              } else {
+                console.warn(`Unknown permission key from Firestore: ${key}`);
+              }
+            }
+          }
+        }
+
+        setUserPermissions(permissions);
+        setCustomPermissions(userCustomPermissions);
+      } else {
+        // No user document found in Firestore
+        console.warn(`No user document found in Firestore for email: ${user.email}`);
+        setUserPermissions([]);
+        setCustomPermissions({});
+        setIsAdmin(false);
+        setCurrentUserTeamId(null);
+        setIsCurrentUserTeamLeader(false);
+        // Fallback to Firebase Auth info if Firestore document is missing
+        setUserName(user.displayName || null);
+        setUserUid(user.uid); // Use canonical UID from Firebase Auth
+      }
+    } catch (error) {
+      console.error("Error fetching user permissions and info:", error);
+      setUserPermissions([]);
+      setCustomPermissions({});
+      setIsAdmin(false);
+      setCurrentUserTeamId(null);
+      setIsCurrentUserTeamLeader(false);
+      // Attempt to set name/UID from auth user even on error, if user object is available
+      setUserName(user?.displayName || null);
+      setUserUid(user?.uid || null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (authLoading) {
@@ -185,125 +310,14 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
       setUserUid(null);
       setCurrentUserTeamId(null);
       setIsCurrentUserTeamLeader(false);
-      return; 
+      return;
     }
-
-    const fetchUserPermissionsAndInfo = async () => {
-      // If auth is done loading and there's no user (logged out)
-      if (!user) {
-        setLoading(false);
-        setUserPermissions([]);
-        setCustomPermissions({});
-        setIsAdmin(false);
-        setUserName(null);
-        setUserUid(null);
-        setCurrentUserTeamId(null);
-        setIsCurrentUserTeamLeader(false);
-        return; // Exit if no user
-      }
-
-      // User is authenticated, start fetching their data
-      setLoading(true);
-      
-      try {
-        // Query user document by email (as per original logic)
-        // Consider querying by UID if your Firestore 'users' collection uses UIDs as document IDs
-        // or if 'uid' is a reliably indexed field: e.g., where("uid", "==", user.uid)
-        const q = query(
-          collection(db, "users"),
-          where("email", "==", user.email),
-          limit(1)
-        );
-        const querySnapshot = await getDocs(q);
-        
-        if (!querySnapshot.empty) {
-          const userDocSnapshot = querySnapshot.docs[0];
-          const userDocData = userDocSnapshot.data();
-          // Set user name: from 'name' field in Firestore, fallback to Firebase Auth display name
-          setUserName((userDocData.name as string) || user.displayName || null);
-          
-          setUserUid(userDocSnapshot.id || user.uid);
-          
-          // Fetch and set team information
-          const teamId = userDocData.teamId as string | null;
-          setCurrentUserTeamId(teamId);
-
-          if (teamId) {
-            try {
-              const teamDocRef = doc(db, "teams", teamId);
-              const teamDocSnap = await getDoc(teamDocRef);
-              if (teamDocSnap.exists()) {
-                const teamData = teamDocSnap.data();
-                setIsCurrentUserTeamLeader(teamData.leaderId === (userDocData.uid as string || user.uid));
-              } else {
-                console.warn(`Team document with ID ${teamId} not found.`);
-                setIsCurrentUserTeamLeader(false);
-              }
-            } catch (teamError) {
-              console.error("Error fetching team document:", teamError);
-              setIsCurrentUserTeamLeader(false);
-            }
-          } else {
-            setIsCurrentUserTeamLeader(false);
-          }
-
-          let permissions: string[] = [];
-          const userCustomPermissions: Record<string, boolean> = {};
-          
-          const admin = userDocData.permissions?.isAdmin === true || userDocData.isAdmin === true || userDocData.role === "مدير";
-          setIsAdmin(admin);
-          
-          if (admin) {
-            permissions = Object.values(PERMISSIONS);
-            Object.keys(PERMISSION_MAP).forEach(key => {
-              userCustomPermissions[key] = true;
-            });
-            userCustomPermissions.isAdmin = true; // Assuming 'isAdmin' might be a permission key
-          } else if (userDocData.permissions) {
-            for (const [key, value] of Object.entries(userDocData.permissions)) {
-              if (value === true) {
-                const permissionValue = PERMISSION_MAP[key];
-                if (permissionValue) {
-                  permissions.push(permissionValue);
-                  userCustomPermissions[key] = true; // Store Firestore key (camelCase)
-                } else {
-                  console.warn(`Unknown permission key from Firestore: ${key}`);
-                }
-              }
-            }
-          }
-          
-          setUserPermissions(permissions);
-          setCustomPermissions(userCustomPermissions);
-        } else {
-          // No user document found in Firestore
-          console.warn(`No user document found in Firestore for email: ${user.email}`);
-          setUserPermissions([]);
-          setCustomPermissions({});
-          setIsAdmin(false);
-          setCurrentUserTeamId(null);
-          setIsCurrentUserTeamLeader(false);
-          // Fallback to Firebase Auth info if Firestore document is missing
-          setUserName(user.displayName || null);
-          setUserUid(user.uid); // Use canonical UID from Firebase Auth
-        }
-      } catch (error) {
-        console.error("Error fetching user permissions and info:", error);
-        setUserPermissions([]);
-        setCustomPermissions({});
-        setIsAdmin(false);
-        setCurrentUserTeamId(null);
-        setIsCurrentUserTeamLeader(false);
-        // Attempt to set name/UID from auth user even on error, if user object is available
-        setUserName(user?.displayName || null);
-        setUserUid(user?.uid || null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchUserPermissionsAndInfo();
   }, [user, authLoading]); // Dependencies: re-run if user object or authLoading state changes
+
+  const refreshUser = async () => {
+    await fetchUserPermissionsAndInfo();
+  };
 
   const hasPermission = (permission: string) => {
     if (loading || authLoading) return false; // Wait for loading to complete
@@ -352,10 +366,14 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
         canAccessRoute,
         loading,
         customPermissions,
-        userName, // Provide userName
+        userName, 
         userUid,
-        currentUserTeamId, // Provide currentUserTeamId
-        isCurrentUserTeamLeader, // Provide isCurrentUserTeamLeader
+        currentUserTeamId, 
+        isCurrentUserTeamLeader,
+        userdoc,
+        refreshUser,
+        setUserdoc: setUserDoc,
+        realuserUid, // Expose real user UID
       }}
     >
       {children}

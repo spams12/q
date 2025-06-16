@@ -297,7 +297,7 @@ const MyRequestsScreen: React.FC = () => {
        selectedType={selectedType}
        setSelectedType={setSelectedType}
        clearFilters={clearFilters}
-       availableTypes={['مشكلة', 'طلب جديد', 'طلب', 'شكوى', 'اقتراح']}
+       availableTypes={['مشكلة', 'طلب جديد', 'طلب', 'شكوى', ]}
      />
     </View>
   );

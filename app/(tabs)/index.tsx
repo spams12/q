@@ -3,14 +3,15 @@ import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { collection, doc, getDocs, limit, orderBy, query, Timestamp, updateDoc, where } from 'firebase/firestore';
+import { arrayUnion, collection, doc, getDocs, limit, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ViewToken } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, FlatList, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ViewToken } from 'react-native';
 import { useSharedValue, withSpring } from 'react-native-reanimated';
 import FilterDialog from '../../components/FilterDialog';
 import InfoCard from '../../components/InfoCard';
+import useFirebaseAuth from '../../hooks/use-firebase-auth';
 import { db } from '../../lib/firebase';
-import { ServiceRequest } from '../../lib/types';
+import { Comment, ServiceRequest, UserResponse } from '../../lib/types';
 
 type TabKey = 'Open' | 'Accepted' | 'Done';
 
@@ -49,6 +50,7 @@ const TasksScreen: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
   const { userUid } = usePermissions();
+  const { user } = useFirebaseAuth();
   const router = useRouter();
   // Animation values
   const viewableItems = useSharedValue<ViewToken[]>([]);
@@ -185,53 +187,83 @@ const TasksScreen: React.FC = () => {
     });
   }, [cachedData, activeTab, searchQuery, selectedPriority, selectedType, sortOrder]);
 
-  // Optimized response handler
-  const handleResponse = useCallback(async (id: string, response: 'accepted' | 'rejected') => {
-    const newStatus = response === 'accepted' ? 'قيد المعالجة' : 'مرفوض';
-
-    // Optimistic UI update
-    setCachedData(prevCached => {
-      const itemToMove = prevCached[activeTab]?.find(req => req.id === id);
-      if (!itemToMove) return prevCached;
-
-      const updatedCached = { ...prevCached };
-
-      // Remove from current tab
-      updatedCached[activeTab] = updatedCached[activeTab].filter(req => req.id !== id);
-
-      // Add to the 'Accepted' tab if the response is 'accepted'
-      if (response === 'accepted') {
-        updatedCached.Accepted = [
-          { ...itemToMove, status: newStatus },
-          ...(updatedCached.Accepted || [])
-        ];
-      }
-      
-      return updatedCached;
-    });
-
+  const handleAcceptTask = async (ticketId: string) => {
+    if (!userUid) return;
     try {
-      // Update the document in Firestore
-      const requestRef = doc(db, 'serviceRequests', id);
-      await updateDoc(requestRef, {
-        status: newStatus,
-        lastUpdated: Timestamp.now(),
-      });
+      const requestRef = doc(db, "serviceRequests", ticketId);
+      // Find the ticket in the 'notAccepted' tab specifically
+      const currentTicket = cachedData.Open.find(t => t.id === ticketId);
+      if (!currentTicket) return;
 
-      // Invalidate cache for the affected tabs
-      dataCache.current.delete(activeTab);
-      if (response === 'accepted') {
-        dataCache.current.delete('Accepted');
-      }
+      const userResponse: UserResponse = {
+        userId: userUid,
+        userName: user?.displayName || user?.email?.split("@")[0] || "مستخدم",
+        response: "accepted",
+        timestamp: new Date().toISOString()
+      };
+      
+      // Update Firestore document
+      await updateDoc(requestRef, {
+        userResponses: arrayUnion(userResponse),
+        lastUpdated: new Date().toISOString(),
+        status :"قيد المعالجة"
+      });
+      
+      const acceptanceComment: Comment = {
+        id: `comment_${Date.now()}`,
+        userId: userUid,
+        userName: user?.displayName || user?.email?.split("@")[0] || "مستخدم",
+        content: "قبلت المهمة وسأعمل عليها.",
+        timestamp: new Date().toISOString()
+      };
+      await updateDoc(requestRef, { comments: arrayUnion(acceptanceComment) });
+      
+      fetchTabData('Open', true);
+      fetchTabData('Accepted', true);
+
+      router.push(`/tasks/${ticketId}`);
     } catch (error) {
-      console.error("Error updating document: ", error);
-      // Revert the optimistic update by refetching data
-      fetchTabData(activeTab, true);
-      if (response === 'accepted') {
-        fetchTabData('Accepted', true);
-      }
+      console.error("Error accepting task:", error);
+      Alert.alert("حدث خطأ أثناء قبول المهمة");
     }
-  }, [activeTab, fetchTabData]);
+  }
+
+  const handleRejectTask = async (ticketId: string) => {
+    if (!userUid) return;
+    try {
+      const requestRef = doc(db, "serviceRequests", ticketId);
+      // Find the ticket in its current tab
+      const currentTicket = cachedData[activeTab].find(t => t.id === ticketId);
+      if (!currentTicket) return;
+
+      const userResponse: UserResponse = {
+        userId: userUid,
+        userName: user?.displayName || user?.email?.split("@")[0] || "مستخدم",
+        response: "rejected",
+        timestamp: new Date().toISOString()
+      };
+
+      await updateDoc(requestRef, {
+        userResponses: arrayUnion(userResponse),
+        lastUpdated: new Date().toISOString(),
+      });
+      
+      const rejectionComment: Comment = {
+        id: `comment_${Date.now()}`,
+        userId: userUid,
+        userName: user?.displayName || user?.email?.split("@")[0] || "مستخدم",
+        content: "رفضت المهمة. يرجى مراجعة التفاصيل معي.",
+        timestamp: new Date().toISOString()
+      };
+      await updateDoc(requestRef, { comments: arrayUnion(rejectionComment) });
+
+      fetchTabData(activeTab, true);
+      Alert.alert("تم رفض المهمة بنجاح");
+    } catch (error) {
+      console.error("Error rejecting task:", error);
+      Alert.alert("حدث خطأ أثناء رفض المهمة");
+    }
+  }
 
   // Memoized callbacks for FlatList
   const onViewableItemsChanged = useCallback(({ viewableItems: vItems }: { viewableItems: ViewToken[] }) => {
@@ -239,8 +271,9 @@ const TasksScreen: React.FC = () => {
   }, [viewableItems]);
 
   const renderItem = useCallback(({ item }: { item: ServiceRequest }) => {
-    return <InfoCard item={item} viewableItems={viewableItems} handleResponse={handleResponse} />;
-  }, [handleResponse, viewableItems]);
+    const hasResponded = item.userResponses?.some(res => res.userId === userUid);
+    return <InfoCard item={item} viewableItems={viewableItems} handleAcceptTask={handleAcceptTask} handleRejectTask={handleRejectTask} hasResponded={!!hasResponded} />;
+  }, [handleAcceptTask, handleRejectTask, viewableItems, userUid]);
 
   const keyExtractor = useCallback((item: ServiceRequest) => item.id, []);
 
