@@ -1,40 +1,48 @@
 // src/components/CustomHeader.js
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { usePermissions } from '../context/PermissionsContext';
 import { useTheme } from '../context/ThemeContext'; // Adjust path if needed
 
-// The header receives props from React Navigation
-const CustomHeader = (props) => {
-  const { theme, themeName, toggleTheme } = useTheme();
-  
-  // Get the title from navigation options
-  const title = props.options.title || props.route.name;
+interface CustomHeaderProps {
+  title?: string;
+  options?: {
+    title?: string;
+  };
+  route?: {
+    name: string;
+  };
+}
+
+const CustomHeader = (props: CustomHeaderProps) => {
+  const { theme } = useTheme();
+  const { userdoc } = usePermissions();
+
+  // The new title prop takes precedence. Fallback to navigation props.
+  const displayTitle = props.title || props.options?.title || props.route?.name || 'Screen';
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.header }]}>
-      {/* Avatar */}
-      <Image
-        source={{ uri: 'https://i.pravatar.cc/40' }} // Placeholder avatar
-        style={styles.avatar}
-      />
+    <View style={[styles.container, { backgroundColor: theme.header, borderBottomColor: theme.border }]}>
+      {/* Left side: Avatar */}
+      <View style={styles.leftContainer}>
+        <Image
+          source={{ uri: userdoc?.photoURL || 'https://i.pravatar.cc/40' }}
+          style={styles.avatar}
+        />
+      </View>
 
-      {/* Title */}
-      <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
+      {/* Center: Title */}
+      <View style={styles.centerContainer}>
+        <Text style={[styles.title, { color: theme.text }]}>{displayTitle}</Text>
+      </View>
 
-      {/* Right side icons */}
+      {/* Right side: Icons */}
       <View style={styles.rightContainer}>
-        {/* Theme Toggle Button */}
-        <TouchableOpacity onPress={toggleTheme} style={styles.iconButton}>
-          {themeName === 'light' ? (
-            <Feather name="moon" size={24} color={theme.icon} />
-          ) : (
-            <Feather name="sun" size={24} color={theme.icon} />
-          )}
-        </TouchableOpacity>
 
-        {/* Bell Icon */}
-        <TouchableOpacity onPress={() => console.log('Bell pressed!')} style={styles.iconButton}>
+
+        <TouchableOpacity onPress={() => router.push('/notifications')} style={styles.iconButton}>
           <Ionicons name="notifications-outline" size={24} color={theme.icon} />
         </TouchableOpacity>
       </View>
@@ -43,34 +51,41 @@ const CustomHeader = (props) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    height: 100, // Adjust as needed
-    paddingTop: 40, // For status bar
-    paddingHorizontal: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    left: 25,
-    right: 0,
-    textAlign: 'center',
-  },
-  rightContainer: {
-    flexDirection: 'row',
-  },
-  iconButton: {
-    marginLeft: 15,
-  },
+    container: {
+        height: 100,
+        paddingTop: 40,
+        paddingHorizontal: 15,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderBottomWidth: 1,
+      },
+      leftContainer: {
+        flex: 1,
+        justifyContent: 'flex-start',
+        flexDirection: 'row',
+      },
+      centerContainer: {
+        flex: 2,
+        alignItems: 'center',
+      },
+      rightContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+      },
+      avatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+      },
+      title: {
+        fontSize: 20,
+        fontWeight: 'bold',
+      },
+      iconButton: {
+        marginLeft: 15,
+      },
 });
 
 export default CustomHeader;

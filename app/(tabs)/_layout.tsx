@@ -1,3 +1,4 @@
+import CustomHeader from '@/components/CustomHeader';
 import { FontAwesome, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
@@ -29,15 +30,12 @@ export default function TabLayout() {
             />
           );
         },
+        header: (props) => <CustomHeader {...props} />,
         tabBarActiveTintColor: theme.tabActive,
         tabBarInactiveTintColor: theme.tabInactive,
         tabBarStyle: {
           backgroundColor: theme.background,
         },
-        headerStyle: {
-          backgroundColor: theme.header,
-        },
-        headerTintColor: theme.text,
       }}>
       <Tabs.Screen
         name="index"
@@ -46,7 +44,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <FontAwesome name="home" size={size} color={color} />
           ),
-          // header: () => <CustomHeader title="Home" />,
         }}
       />
       <Tabs.Screen
