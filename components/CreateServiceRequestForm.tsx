@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
+import { useTheme } from "../context/ThemeContext";
 import { db } from "../lib/firebase"; // Make sure your firebase config path is correct
 import { User } from "../lib/types"; // Make sure your types path is correct
 
@@ -91,90 +92,6 @@ interface CreateServiceRequestFormProps {
 
 // --- REUSABLE FORM & UI COMPONENTS ---
 
-const FormItem = ({ children, style }: { children: React.ReactNode, style?: object }) => <View style={[styles.formItem, style]}>{children}</View>;
-const FormLabel = ({ children }: { children: string }) => <Text style={styles.label}>{children}</Text>;
-const FormMessage = ({ message }: { message?: string }) => message ? <Text style={styles.errorMessage}>{message}</Text> : null;
-
-// A Custom Select Component for a better mobile experience
-const Select = ({ label, options, selectedValue, onValueChange, placeholder, disabled, isLoading }: {
-    label?: string;
-    options: { label: string; value: string }[];
-    selectedValue?: string;
-    onValueChange: (value: string) => void;
-    placeholder: string;
-    disabled?: boolean;
-    isLoading?: boolean;
-}) => {
-    const [modalVisible, setModalVisible] = useState(false);
-    const [searchQuery, setSearchQuery] = useState(""); // State for search query
-    const selectedLabel = options.find(opt => opt.value === selectedValue)?.label || placeholder;
-
-    // Filter options based on search query
-    const filteredOptions = options.filter(option =>
-        option.label.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const handleOpen = () => {
-        if (!disabled && !isLoading) {
-            setSearchQuery(""); // Reset search on open
-            setModalVisible(true);
-        }
-    };
-
-    const handleClose = () => {
-        setModalVisible(false);
-        setSearchQuery(""); // Reset search on close
-    };
-
-    const handleSelect = (value: string) => {
-        onValueChange(value);
-        handleClose();
-    };
-
-
-    return (
-        <View>
-            {label && <FormLabel>{label}</FormLabel>}
-            <TouchableOpacity
-                style={[styles.selectTrigger, disabled && styles.disabledInput]}
-                onPress={handleOpen}
-                disabled={disabled || isLoading}
-            >
-                <Text style={styles.selectValueText}>{selectedLabel}</Text>
-                {isLoading ? <ActivityIndicator size="small" color={styles.icon.color} /> : <ChevronDown color={styles.icon.color} size={20} />}
-            </TouchableOpacity>
-            <Modal
-                transparent={true}
-                visible={modalVisible}
-                onRequestClose={handleClose}
-                animationType="fade"
-            >
-                <Pressable style={styles.modalOverlay} onPress={handleClose}>
-                    <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
-                         <TextInput
-                            style={styles.searchInput}
-                            placeholder="بحث..."
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            placeholderTextColor={COLORS.placeholder}
-                        />
-                        <ScrollView keyboardShouldPersistTaps="handled">
-                            {filteredOptions.map(option => (
-                                <TouchableOpacity
-                                    key={option.value}
-                                    style={styles.selectItem}
-                                    onPress={() => handleSelect(option.value)}
-                                >
-                                    <Text style={styles.selectItemText}>{option.label}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
-                </Pressable>
-            </Modal>
-        </View>
-    );
-};
 
 
 
@@ -186,6 +103,92 @@ export default function CreateServiceRequestForm({
 }: CreateServiceRequestFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { userName, userUid, currentUserTeamId } = usePermissions()
+  const { theme: colors } = useTheme();
+  const styles = getStyles(colors);
+
+  const FormItem = ({ children, style }: { children: React.ReactNode, style?: object }) => <View style={[styles.formItem, style]}>{children}</View>;
+  const FormLabel = ({ children }: { children: string }) => <Text style={styles.label}>{children}</Text>;
+  const FormMessage = ({ message }: { message?: string }) => message ? <Text style={styles.errorMessage}>{message}</Text> : null;
+
+  const Select = ({ label, options, selectedValue, onValueChange, placeholder, disabled, isLoading }: {
+      label?: string;
+      options: { label: string; value: string }[];
+      selectedValue?: string;
+      onValueChange: (value: string) => void;
+      placeholder: string;
+      disabled?: boolean;
+      isLoading?: boolean;
+  }) => {
+      const [modalVisible, setModalVisible] = useState(false);
+      const [searchQuery, setSearchQuery] = useState(""); // State for search query
+      const selectedLabel = options.find(opt => opt.value === selectedValue)?.label || placeholder;
+
+      // Filter options based on search query
+      const filteredOptions = options.filter(option =>
+          option.label.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+
+      const handleOpen = () => {
+          if (!disabled && !isLoading) {
+              setSearchQuery(""); // Reset search on open
+              setModalVisible(true);
+          }
+      };
+
+      const handleClose = () => {
+          setModalVisible(false);
+          setSearchQuery(""); // Reset search on close
+      };
+
+      const handleSelect = (value: string) => {
+          onValueChange(value);
+          handleClose();
+      };
+
+
+      return (
+          <View>
+              {label && <FormLabel>{label}</FormLabel>}
+              <TouchableOpacity
+                  style={[styles.selectTrigger, disabled && styles.disabledInput]}
+                  onPress={handleOpen}
+                  disabled={disabled || isLoading}
+              >
+                  <Text style={[styles.selectValueText, !selectedValue && { color: colors.placeholder }]}>{selectedLabel}</Text>
+                  {isLoading ? <ActivityIndicator size="small" color={styles.icon.color} /> : <ChevronDown color={styles.icon.color} size={20} />}
+              </TouchableOpacity>
+              <Modal
+                  transparent={true}
+                  visible={modalVisible}
+                  onRequestClose={handleClose}
+                  animationType="fade"
+              >
+                  <Pressable style={styles.modalOverlay} onPress={handleClose}>
+                      <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+                           <TextInput
+                              style={styles.searchInput}
+                              placeholder="بحث..."
+                              value={searchQuery}
+                              onChangeText={setSearchQuery}
+                              placeholderTextColor={colors.placeholder}
+                          />
+                          <ScrollView keyboardShouldPersistTaps="handled">
+                              {filteredOptions.map(option => (
+                                  <TouchableOpacity
+                                      key={option.value}
+                                      style={styles.selectItem}
+                                      onPress={() => handleSelect(option.value)}
+                                  >
+                                      <Text style={styles.selectItemText}>{option.label}</Text>
+                                  </TouchableOpacity>
+                              ))}
+                          </ScrollView>
+                      </View>
+                  </Pressable>
+              </Modal>
+          </View>
+      );
+  };
   
   const [subscribers, setSubscribers] = useState<Subscriber[]>([
     { id: uuidv4(), name: "", phone: "", zoneNumber: "", packageType: "", price: "", serviceType: "" }
@@ -308,7 +311,12 @@ export default function CreateServiceRequestForm({
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
+    <ScrollView 
+      style={styles.container} 
+      contentContainerStyle={styles.contentContainer} 
+      keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled={true}
+    >
         <Controller
             control={control}
             name="type"
@@ -331,21 +339,47 @@ export default function CreateServiceRequestForm({
                 <Controller control={control} name="customerName" render={({ field }) => (
                     <FormItem>
                         <FormLabel>اسم العميل</FormLabel>
-                        <TextInput style={styles.input} placeholder="أدخل اسم العميل" value={field.value || ''} onChangeText={field.onChange} onBlur={field.onBlur} />
+                        <TextInput 
+                          style={styles.input} 
+                          placeholder="أدخل اسم العميل" 
+                          value={field.value || ''} 
+                          onChangeText={field.onChange} 
+                          onBlur={field.onBlur} 
+                          placeholderTextColor={colors.placeholder}
+                          keyboardType="default"
+                          returnKeyType="next"
+                        />
                         <FormMessage message={errors.customerName?.message} />
                     </FormItem>
                 )} />
                 <Controller control={control} name="customerPhone" render={({ field }) => (
                     <FormItem>
                         <FormLabel>رقم الهاتف</FormLabel>
-                        <TextInput style={styles.input} placeholder="رقم الهاتف" value={field.value || ''} onChangeText={field.onChange} onBlur={field.onBlur} keyboardType="phone-pad" />
+                        <TextInput 
+                          style={styles.input} 
+                          placeholder="رقم الهاتف" 
+                          value={field.value || ''} 
+                          onChangeText={field.onChange} 
+                          onBlur={field.onBlur} 
+                          keyboardType="phone-pad" 
+                          placeholderTextColor={colors.placeholder}
+                          returnKeyType="next"
+                        />
                         <FormMessage message={errors.customerPhone?.message} />
                     </FormItem>
                 )} />
                 <Controller control={control} name="customerEmail" render={({ field }) => (
                     <FormItem style={{ marginBottom: 0 }}>
                         <FormLabel>العنوان التفصيلي (اختياري)</FormLabel>
-                        <TextInput style={styles.input} placeholder="أدخل العنوان التفصيلي" value={field.value || ''} onChangeText={field.onChange} onBlur={field.onBlur} />
+                        <TextInput 
+                          style={styles.input} 
+                          placeholder="أدخل العنوان التفصيلي" 
+                          value={field.value || ''} 
+                          onChangeText={field.onChange} 
+                          onBlur={field.onBlur} 
+                          placeholderTextColor={colors.placeholder}
+                          returnKeyType="next"
+                        />
                         <FormMessage message={errors.customerEmail?.message} />
                     </FormItem>
                 )} />
@@ -356,14 +390,31 @@ export default function CreateServiceRequestForm({
             <Controller control={control} name="title" render={({ field }) => (
                 <FormItem>
                     <FormLabel>عنوان التكت</FormLabel>
-                    <TextInput style={styles.input} placeholder="أدخل عنوان التكت" value={field.value || ''} onChangeText={field.onChange} onBlur={field.onBlur} />
+                    <TextInput 
+                      style={styles.input} 
+                      placeholder="أدخل عنوان التكت" 
+                      value={field.value || ''} 
+                      onChangeText={field.onChange} 
+                      onBlur={field.onBlur} 
+                      placeholderTextColor={colors.placeholder}
+                      returnKeyType="next"
+                    />
                     <FormMessage message={errors.title?.message} />
                 </FormItem>
             )} />
             <Controller control={control} name="description" render={({ field }) => (
                 <FormItem style={{ marginBottom: 0 }}>
                     <FormLabel>وصف التكت</FormLabel>
-                    <TextInput style={[styles.input, styles.textArea]} placeholder="أدخل تفاصيل التكت" value={field.value || ''} onChangeText={field.onChange} onBlur={field.onBlur} multiline />
+                    <TextInput 
+                      style={[styles.input, styles.textArea]} 
+                      placeholder="أدخل تفاصيل التكت" 
+                      value={field.value || ''} 
+                      onChangeText={field.onChange} 
+                      onBlur={field.onBlur} 
+                      multiline 
+                      placeholderTextColor={colors.placeholder}
+                      returnKeyType="default"
+                    />
                     <FormMessage message={errors.description?.message} />
                 </FormItem>
             )} />
@@ -432,11 +483,29 @@ export default function CreateServiceRequestForm({
                         </View>
                         <FormItem>
                             <FormLabel>اسم المشترك</FormLabel>
-                            <TextInput style={styles.input} placeholder="أدخل اسم المشترك" value={subscriber.name} onChangeText={(val) => updateSubscriber(subscriber.id, 'name', val)} />
+                            <TextInput 
+                              style={styles.input} 
+                              placeholder="أدخل اسم المشترك" 
+                              value={subscriber.name} 
+                              onChangeText={(val) => updateSubscriber(subscriber.id, 'name', val)} 
+                              placeholderTextColor={colors.placeholder}
+                              keyboardType="default"
+                              returnKeyType="next"
+                              blurOnSubmit={false}
+                            />
                         </FormItem>
                         <FormItem>
                             <FormLabel>رقم هاتف المشترك</FormLabel>
-                            <TextInput style={styles.input} placeholder="أدخل رقم الهاتف" value={subscriber.phone} onChangeText={(val) => updateSubscriber(subscriber.id, 'phone', val)} keyboardType="phone-pad" />
+                            <TextInput 
+                              style={styles.input} 
+                              placeholder="أدخل رقم الهاتف" 
+                              value={subscriber.phone} 
+                              onChangeText={(val) => updateSubscriber(subscriber.id, 'phone', val)} 
+                              keyboardType="phone-pad" 
+                              placeholderTextColor={colors.placeholder}
+                              returnKeyType="next"
+                              blurOnSubmit={false}
+                            />
                         </FormItem>
                         <FormItem>
                             <Select
@@ -469,7 +538,16 @@ export default function CreateServiceRequestForm({
                         </FormItem>
                         <FormItem style={{ marginBottom: 0 }}>
                             <FormLabel>السعر (IQD)</FormLabel>
-                            <TextInput style={styles.input} placeholder="السعر" value={subscriber.price} onChangeText={(val) => updateSubscriber(subscriber.id, 'price', val)} keyboardType="numeric" />
+                            <TextInput 
+                              style={styles.input} 
+                              placeholder="السعر" 
+                              value={subscriber.price} 
+                              onChangeText={(val) => updateSubscriber(subscriber.id, 'price', val)} 
+                              keyboardType="numeric" 
+                              placeholderTextColor={colors.placeholder}
+                              returnKeyType="done"
+                              blurOnSubmit={false}
+                            />
                         </FormItem>
                     </View>
                  ))}
@@ -492,42 +570,23 @@ export default function CreateServiceRequestForm({
     </ScrollView>
   );
 }
-
-
-const COLORS = {
-    primary: '#007AFF',
-    background: '#F0F0F7',
-    card: '#FFFFFF',
-    text: '#1C1C1E',
-    subtleText: '#6D6D72',
-    placeholder: '#C7C7CD',
-    border: '#DCDCE0',
-    inputBackground: '#FDFDFD',
-    error: '#FF3B30',
-    white: '#FFFFFF',
-    black: '#000000',
-    lightGray: '#E5E5EA',
-    redTint: '#FFF1F1',
-    blueTint: '#F0F5FF',
-};
-
 const FONT_FAMILY = 'Cairo';
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   contentContainer: {
     padding: 16,
     paddingBottom: 48,
   },
   card: {
-    backgroundColor: COLORS.card,
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
-    shadowColor: COLORS.black,
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
@@ -540,26 +599,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: FONT_FAMILY,
     fontWeight: '600',
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: 8,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
   input: {
-    backgroundColor: COLORS.inputBackground,
+    backgroundColor: colors.inputBackground,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
     fontFamily: FONT_FAMILY,
-    color: COLORS.text,
+    color: colors.text,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
   disabledInput: {
-      backgroundColor: COLORS.background,
+      backgroundColor: colors.background,
       opacity: 0.7,
   },
   textArea: {
@@ -568,7 +627,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   errorMessage: {
-    color: COLORS.error,
+    color: colors.error,
     fontSize: 14,
     fontFamily: FONT_FAMILY,
     marginTop: 6,
@@ -580,9 +639,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.inputBackground,
+    backgroundColor: colors.inputBackground,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 14,
@@ -590,10 +649,10 @@ const styles = StyleSheet.create({
   selectValueText: {
       fontSize: 16,
       fontFamily: FONT_FAMILY,
-      color: COLORS.text,
+      color: colors.text,
   },
   icon: {
-      color: COLORS.subtleText,
+      color: colors.subtleText,
   },
   modalOverlay: {
     flex: 1,
@@ -603,13 +662,13 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: COLORS.card,
+    backgroundColor: colors.card,
     borderRadius: 14,
     width: '95%',
     maxHeight: '70%',
     padding: 10,
     elevation: 10,
-    shadowColor: COLORS.black,
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
@@ -618,23 +677,23 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.background,
+    borderBottomColor: colors.background,
   },
   selectItemText: {
     fontSize: 17,
     fontFamily: FONT_FAMILY,
     textAlign: 'right',
-    color: COLORS.text,
+    color: colors.text,
   },
   searchInput: {
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
     fontSize: 16,
     fontFamily: FONT_FAMILY,
-    color: COLORS.text,
-    backgroundColor: COLORS.background,
+    color: colors.text,
+    backgroundColor: colors.background,
     textAlign: 'right',
   },
   // --- Badge Styles ---
@@ -649,7 +708,7 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.lightGray,
+    backgroundColor: colors.border,
     borderRadius: 16,
     paddingVertical: 6,
     paddingHorizontal: 12,
@@ -658,28 +717,28 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 14,
     fontFamily: FONT_FAMILY,
-    color: COLORS.subtleText,
+    color: colors.text,
     marginEnd: 8, // RTL support
   },
   badgeIcon: {
-      color: COLORS.subtleText,
+      color: colors.white,
   },
   // --- Subscriber Styles ---
   sectionTitle: {
       fontSize: 20,
       fontFamily: FONT_FAMILY,
       fontWeight: '700',
-      color: COLORS.text,
+      color: colors.text,
       marginBottom: 12,
       textAlign: 'right',
       writingDirection: 'rtl',
   },
   subscriberCard: {
-      borderColor: COLORS.primary,
+      borderColor: colors.primary,
       borderWidth: 1,
       padding: 16,
       marginBottom: 16,
-      backgroundColor: COLORS.blueTint,
+      backgroundColor: colors.blueTint,
   },
   subscriberHeader: {
       flexDirection: 'row',
@@ -691,30 +750,30 @@ const styles = StyleSheet.create({
       fontSize: 18,
       fontFamily: FONT_FAMILY,
       fontWeight: '600',
-      color: COLORS.text,
+      color: colors.text,
   },
   removeButton: {
       padding: 6,
       borderRadius: 20,
-      backgroundColor: COLORS.redTint,
+      backgroundColor: colors.redTint,
   },
   removeButtonIcon: {
-      color: COLORS.error,
+      color: colors.error,
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.card,
+    backgroundColor: colors.card,
     paddingVertical: 12,
     borderRadius: 10,
     marginTop: 8,
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     borderStyle: 'dashed',
   },
   addButtonText: {
-    color: COLORS.primary,
+    color: colors.primary,
     fontSize: 16,
     fontFamily: FONT_FAMILY,
     fontWeight: '600',
@@ -728,35 +787,35 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     flex: 1,
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: COLORS.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
     elevation: 5,
   },
   primaryButtonText: {
-    color: COLORS.white,
+    color: colors.text,
     fontSize: 16,
     fontFamily: FONT_FAMILY,
     fontWeight: '700',
   },
   secondaryButton: {
     flex: 1,
-    backgroundColor: COLORS.card,
+    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   secondaryButtonText: {
-    color: COLORS.text,
+    color: colors.text,
     fontSize: 16,
     fontFamily: FONT_FAMILY,
     fontWeight: '700',

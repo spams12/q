@@ -24,6 +24,14 @@ export interface Theme {
   primary: string;
   success: string;
   destructive: string;
+  placeholder: string;
+  inputBackground: string;
+  subtleText: string;
+  lightGray: string;
+  redTint: string;
+  blueTint: string;
+  white: string;
+  black: string;
 }
 
 // Define the shape of the themes object
@@ -49,6 +57,14 @@ export const themes: Themes = {
     primary: '#007AFF',
     success: '#34C759',
     destructive: '#FF3B30',
+    subtleText: '#6D6D72',
+    placeholder: '#C7C7CD',
+    inputBackground: '#FDFDFD',
+    lightGray: '#E5E5EA',
+    redTint: '#FFF1F1',
+    blueTint: '#F0F5FF',
+    white: '#FFFFFF',
+    black: '#000000',
   },
   dark: {
     background: '#000000',
@@ -65,6 +81,14 @@ export const themes: Themes = {
     primary: '#0A84FF',
     success: '#30D158',
     destructive: '#FF453A',
+    subtleText: '#999999',
+    placeholder: '#8E8E93',
+    inputBackground: '#2C2C2E',
+    lightGray: '#3A3A3C',
+    redTint: '#5c1f1f',
+    blueTint: '#1f2a5c',
+    white: '#FFFFFF',
+    black: '#000000',
   },
 };
 
