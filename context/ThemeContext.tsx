@@ -32,6 +32,20 @@ export interface Theme {
   blueTint: string;
   white: string;
   black: string;
+  statusOpen: string;
+  statusInProgress: string;
+  statusCompleted: string;
+  statusPending: string;
+  statusCancelled: string;
+  statusDefault: string;
+  priorityUrgent: string;
+  priorityHigh: string;
+  priorityMedium: string;
+  priorityLow: string;
+  priorityDefault: string;
+  gradientStart: string;
+  gradientEnd: string;
+  actionsContainerBackground: string;
 }
 
 // Define the shape of the themes object
@@ -65,6 +79,20 @@ export const themes: Themes = {
     blueTint: '#F0F5FF',
     white: '#FFFFFF',
     black: '#000000',
+    statusOpen: '#4CAF50',
+    statusInProgress: '#FFC107',
+    statusCompleted: '#2196F3',
+    statusPending: '#9E9E9E',
+    statusCancelled: '#F44336',
+    statusDefault: '#E0E0E0',
+    priorityUrgent: '#F44336',
+    priorityHigh: '#FF9800',
+    priorityMedium: '#FFC107',
+    priorityLow: '#4CAF50',
+    priorityDefault: '#E0E0E0',
+    gradientStart: '#667eea',
+    gradientEnd: '#764ba2',
+    actionsContainerBackground: 'rgba(255,255,255,0.95)',
   },
   dark: {
     background: '#000000',
@@ -89,6 +117,20 @@ export const themes: Themes = {
     blueTint: '#1f2a5c',
     white: '#FFFFFF',
     black: '#000000',
+    statusOpen: '#5cb85c',
+    statusInProgress: '#f0ad4e',
+    statusCompleted: '#5bc0de',
+    statusPending: '#777777',
+    statusCancelled: '#d9534f',
+    statusDefault: '#333333',
+    priorityUrgent: '#d9534f',
+    priorityHigh: '#e48900',
+    priorityMedium: '#f0ad4e',
+    priorityLow: '#5cb85c',
+    priorityDefault: '#333333',
+    gradientStart: '#4c5a99',
+    gradientEnd: '#593a78',
+    actionsContainerBackground: 'rgba(28, 28, 30, 0.95)',
   },
 };
 

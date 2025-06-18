@@ -1,10 +1,14 @@
 "use client"
 
 import { User } from "@/lib/types";
-import { collection, doc, getDoc, getDocs, limit, query, where } from "firebase/firestore"; // Added doc and getDoc
-import { createContext, ReactNode, useContext, useEffect, useState } from "react";
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
+import { collection, doc, getDoc, getDocs, limit, query, updateDoc, where } from "firebase/firestore"; // Added doc and getDoc
+import {
+  createContext, ReactNode, useContext, useEffect, useRef, useState,
+} from "react";
 import useFirebaseAuth from "../hooks/use-firebase-auth";
-import { db } from "../lib/firebase";
+import { auth, db } from "../lib/firebase";
 
 // Define all possible permissions as constants
 export const PERMISSIONS = {
@@ -133,6 +137,21 @@ const PERMISSION_MAP: Record<string, string> = {
   "manageTeams": PERMISSIONS.MANAGE_TEAMS, // Mapping for Firestore
 };
 
+// --- Push Notifications Setup ---
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
+
+// --------------------------------
+
 interface PermissionsContextType {
   userPermissions: string[];
   isAdmin: boolean;
@@ -150,6 +169,7 @@ interface PermissionsContextType {
   refreshUser: () => Promise<void>;
   setUserdoc: (user: User | null) => void;
   realuserUid: string | null; // New field for real user UID
+  notificationPermissionStatus: string | null;
 }
 
 const PermissionsContext = createContext<PermissionsContextType>({
@@ -169,6 +189,7 @@ const PermissionsContext = createContext<PermissionsContextType>({
   refreshUser: async () => {},
   setUserdoc: () => {},
   realuserUid: null, // Default value for real user UID
+  notificationPermissionStatus: null,
 });
 
 export const usePermissions = () => useContext(PermissionsContext);
@@ -185,6 +206,80 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   const [isCurrentUserTeamLeader, setIsCurrentUserTeamLeader] = useState<boolean>(false); // State for team leader status
   const [userdoc, setUserDoc] = useState<User | null>(null); // State for user document
   const [realuserUid, setrealuserUid] = useState<string | null>(null); // State for real user UID
+  const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<string | null>(null);
+
+  const notificationListener = useRef<Notifications.Subscription | null>(null);
+  const responseListener = useRef<Notifications.Subscription | null>(null);
+
+  useEffect(() => {
+    // Set up notification listeners
+    notificationListener.current =
+      Notifications.addNotificationReceivedListener((notification) => {
+        console.log("Notification received: ", notification);
+      });
+
+    responseListener.current =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        console.log("Notification response received: ", response);
+      });
+
+    return () => {
+      if (notificationListener.current) {
+        Notifications.removeNotificationSubscription(
+          notificationListener.current
+        );
+      }
+      if (responseListener.current) {
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const registerForPushNotificationsAsync = async () => {
+      if (!Device.isDevice) {
+        setNotificationPermissionStatus("simulator");
+        console.log("Must use physical device for Push Notifications");
+        return;
+      }
+      try {
+        const { status } = await Notifications.requestPermissionsAsync();
+        setNotificationPermissionStatus(status);
+        if (status !== "granted") {
+          console.error("Permission to receive notifications was denied.");
+          return;
+        }
+        const token = (await Notifications.getExpoPushTokenAsync()).data;
+        console.log("Expo Push Token:", token);
+        const uid = auth.currentUser?.uid;
+        if (uid && token) {
+          const usersRef = collection(db, "users");
+          const q = query(usersRef, where("uid", "==", uid), limit(1));
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            const userDocId = querySnapshot.docs[0].id;
+            const userDocRef = doc(db, "users", userDocId);
+            await updateDoc(userDocRef, {
+              expoPushToken: token,
+            });
+            console.log("Successfully updated push token for user:", uid);
+          } else {
+            console.warn(
+              `Could not find user document for uid: ${uid} to save push token.`
+            );
+          }
+        }
+      } catch (error) {
+        setNotificationPermissionStatus("error");
+        console.error("Error registering for push notifications:", error);
+      }
+    };
+
+    if (user) {
+      registerForPushNotificationsAsync();
+    }
+  }, [user]);
+
   const fetchUserPermissionsAndInfo = async () => {
     // If auth is done loading and there's no user (logged out)
     if (!user) {
@@ -216,10 +311,11 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
       if (!querySnapshot.empty) {
         const userDocSnapshot = querySnapshot.docs[0];
         const userDocData = userDocSnapshot.data();
+        const docId = userDocSnapshot.id;
         // Set user name: from 'name' field in Firestore, fallback to Firebase Auth display name
         setUserName((userDocData.name as string) || user.displayName || null);
-        setUserDoc({ ...userDocData, id: userDocSnapshot.id } as User); // Set user document with ID
-        setUserUid(userDocSnapshot.id || user.uid);
+        setUserDoc({ ...userDocData, id: docId } as User); // Set user document with ID
+        setUserUid(docId || user.uid);
         setrealuserUid(user.uid); // Use Firestore document ID or Firebase Auth UID
 
         // Fetch and set team information
@@ -374,6 +470,7 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
         refreshUser,
         setUserdoc: setUserDoc,
         realuserUid, // Expose real user UID
+        notificationPermissionStatus,
       }}
     >
       {children}

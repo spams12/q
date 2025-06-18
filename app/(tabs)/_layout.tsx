@@ -1,5 +1,5 @@
 import CustomHeader from '@/components/CustomHeader';
-import { FontAwesome, Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { FontAwesome, FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { LayoutAnimation, Platform, UIManager } from 'react-native';
@@ -62,6 +62,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="store" size={size} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="TechnicianDashboardScreen"
+        options={{
+          title: 'الاحصائيات',
+          tabBarIcon: ({ color, size }) => <FontAwesome5 name="clipboard-list" size={24} color={color} />,
         }}
       />
       <Tabs.Screen

@@ -107,18 +107,20 @@ const MyRequestsScreen: React.FC = () => {
 
 
   useEffect(() => {
-    const loadInitialData = async () => {
-      await fetchRequests('Open');
-      const preloadTabs = async () => {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        await fetchRequests('Accepted');
-        await new Promise(resolve => setTimeout(resolve, 300));
-        await fetchRequests('Done');
+    if (user?.uid) {
+      const loadInitialData = async () => {
+        await fetchRequests('Open');
+        const preloadTabs = async () => {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await fetchRequests('Accepted');
+          await new Promise(resolve => setTimeout(resolve, 300));
+          await fetchRequests('Done');
+        };
+        preloadTabs();
       };
-      preloadTabs();
-    };
-    loadInitialData();
-  }, [fetchRequests]);
+      loadInitialData();
+    }
+  }, [user?.uid, fetchRequests]);
 
 
   const handleTabPress = useCallback(async (tab: TabKey) => {
@@ -153,7 +155,13 @@ const MyRequestsScreen: React.FC = () => {
   }, [cachedData, activeTab, searchQuery, selectedPriority, selectedType]);
 
   const renderItem = useCallback(({ item }: { item: ServiceRequest }) => (
-    <InfoCard item={item} viewableItems={viewableItems} />
+    <InfoCard
+      item={item}
+      viewableItems={viewableItems}
+      handleAcceptTask={() => {}}
+      handleRejectTask={() => {}}
+      hasResponded={false}
+    />
   ), [viewableItems]);
 
   const keyExtractor = (item: ServiceRequest) => item.id;

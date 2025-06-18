@@ -1,0 +1,788 @@
+// screens/TechnicianDashboardScreen.tsx
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from "react-native";
+
+
+// NAVIGATION
+import { useRouter } from "expo-router";
+
+// FIREBASE
+import {
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  where,
+  type DocumentSnapshot,
+  type QueryConstraint
+} from "firebase/firestore";
+import { db } from "../../lib/firebase";
+
+// ICONS
+import { AlertCircle, CheckCircle, Clock, Inbox, ListChecks, Search } from "lucide-react-native";
+
+// CONTEXT & TYPES
+import { useTheme } from "../../context/ThemeContext";
+import useAuth from "../../hooks/use-firebase-auth";
+import { ServiceRequest } from "../../lib/types";
+
+// Cache for technician's tasks to prevent re-fetching on tab switch
+let tasksCache: ServiceRequest[] | null = null;
+let userDocIdCache: string | null = null;
+let cacheTimestamp: number | null = null;
+ 
+const { width } = Dimensions.get('window');
+ 
+ // --- HELPER FUNCTIONS ---
+
+const formatTimestamp = (date: any): string => {
+  if (!date) return "N/A";
+  try {
+    const d = date.toDate ? date.toDate() : new Date(date);
+    return d.toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' });
+  } catch {
+    return "تاريخ غير صالح";
+  }
+};
+
+// --- SUB-COMPONENTS ---
+
+const StatCard = ({ title, value, icon, color, styles }: { title: string; value: string | number; icon: React.ReactNode; color: string, styles: any }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const animatePress = () => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 0.96, duration: 100, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+    ]).start();
+  };
+
+  return (
+    <TouchableOpacity onPress={animatePress} activeOpacity={0.7}>
+      <Animated.View style={[styles.statCardContainer, { transform: [{ scale: scaleAnim }] }]}>
+        <View style={[styles.iconContainer, { backgroundColor: color }]}>
+          {icon}
+        </View>
+        <View style={styles.statCardContent}>
+          <Text style={styles.statCardValue}>{value}</Text>
+          <Text style={styles.statCardTitle}>{title}</Text>
+        </View>
+        <View style={[styles.cardGradientOverlay, { backgroundColor: color }]} />
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
+
+const TechnicianStatCards = React.memo(({ tickets, styles }: { tickets: ServiceRequest[], styles: any }) => {
+  const stats = useMemo(() => {
+    const pending = tickets.filter(t => ["مفتوح", "قيد المعالجة"].includes(t.status)).length;
+    const completed = tickets.filter(t => ["مكتمل", "مغلق"].includes(t.status)).length;
+    return { pending, completed, total: tickets.length };
+  }, [tickets]);
+
+  return (
+    <View style={styles.technicianStatsContainer}>
+      <StatCard
+        title="مهام قيد التنفيذ"
+        value={stats.pending}
+        icon={<Clock color="#3B82F6" size={28} />}
+        color="rgba(59, 130, 246, 0.1)"
+        styles={styles}
+      />
+      <StatCard
+        title="مهام مكتملة"
+        value={stats.completed}
+        icon={<ListChecks color="#10B981" size={28} />}
+        color="rgba(16, 185, 129, 0.1)"
+        styles={styles}
+      />
+      <StatCard
+        title="إجمالي المهام"
+        value={stats.total}
+        icon={<Inbox color="#6B7280" size={28} />}
+        color="rgba(107, 114, 128, 0.1)"
+        styles={styles}
+      />
+    </View>
+  );
+});
+TechnicianStatCards.displayName = 'TechnicianStatCards';
+
+
+interface TicketItemProps {
+  ticket: ServiceRequest;
+  currentUserDocId: string | null;
+  router: any;
+  styles: any;
+  theme: any;
+}
+
+const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserDocId, router, styles, theme }) => {
+  const userResponse = ticket.userResponses?.find((r) => r.userId === currentUserDocId);
+  const hasAccepted = userResponse?.response === "accepted";
+  const hasRejected = userResponse?.response === "rejected";
+  const isCompleted = ticket.status === "مكتمل" || ticket.status === "مغلق";
+
+  const itemAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(itemAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const getStatusBadgeStyle = (status: string) => {
+    const statusStyles: { [key: string]: object } = {
+      "مفتوح": styles.badgeBlue,
+      "قيد المعالجة": styles.badgeYellow,
+      "مكتمل": styles.badgeGreen,
+      "مغلق": styles.badgeRed,
+      "معلق": styles.badgePurple
+    };
+    return [styles.badge, statusStyles[status] || styles.badgeGray];
+  };
+
+  return (
+    <Animated.View
+      style={[
+        styles.ticketItemContainer,
+        {
+          opacity: itemAnim,
+          transform: [{
+            translateY: itemAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [20, 0],
+            })
+          }]
+        }
+      ]}
+    >
+      <TouchableOpacity
+        onPress={() => router.push(`/tasks/${ticket.id}`)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.ticketContent}>
+          <View style={styles.ticketHeader}>
+            <View style={styles.ticketTitleContainer}>
+              <Text style={styles.ticketTitle} numberOfLines={1}>{ticket.title}</Text>
+              <View style={getStatusBadgeStyle(ticket.status)}>
+                <Text style={styles.badgeText}>{ticket.status}</Text>
+              </View>
+            </View>
+            <Text style={styles.ticketCustomer}>العميل: {ticket.customerName}</Text>
+            <Text style={styles.ticketDate}>تاريخ الإنشاء: {formatTimestamp(ticket.date)}</Text>
+          </View>
+
+          <View style={styles.ticketActions}>
+            {isCompleted ? (
+              <View style={[styles.actionBadge, styles.actionBadgeGreen]}>
+                <CheckCircle style={styles.actionBadgeIcon} color={theme.success} size={16} />
+                <Text style={styles.actionBadgeTextGreen}>مكتملة</Text>
+              </View>
+            ) : hasRejected ? (
+              <View style={[styles.actionBadge, styles.actionBadgeRed]}>
+                <AlertCircle style={styles.actionBadgeIcon} color={theme.destructive} size={16} />
+                <Text style={styles.actionBadgeTextRed}>مرفوضة</Text>
+              </View>
+            ) : hasAccepted ? (
+              <View style={[styles.actionBadge, styles.actionBadgeBlue]}>
+                <Clock style={styles.actionBadgeIcon} color={theme.primary} size={16} />
+                <Text style={styles.actionBadgeTextBlue}>قيد التنفيذ</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
+TicketItem.displayName = 'TicketItem';
+
+
+// --- MAIN PAGE COMPONENT ---
+
+const TabsTrigger = ({ title, isActive, onPress, styles }: { title: string, isActive: boolean, onPress: () => void, styles: any }) => (
+  <TouchableOpacity onPress={onPress} style={styles.tabButton} activeOpacity={0.7}>
+      <View style={[styles.tab, isActive && styles.activeTab]}>
+          <Text style={[styles.tabText, isActive && styles.activeTabText]}>{title}</Text>
+      </View>
+  </TouchableOpacity>
+);
+
+export default function TechnicianDashboardScreen() {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
+  const [tasks, setTasks] = useState<ServiceRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const [currentUserDocId, setCurrentUserDocId] = useState<string | null>(null);
+  const router = useRouter();
+
+
+  const [selectedTab, setSelectedTab] = useState<"all" | "pending" | "completed">("all");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const mapDocToServiceRequest = (docSnap: DocumentSnapshot): ServiceRequest => {
+    const data = docSnap.data() as any;
+    return { id: docSnap.id, ...data } as ServiceRequest;
+  };
+
+  const fetchUserDocId = useCallback(async () => {
+    if (!user?.email) return null;
+    const usersQuery = query(collection(db, "users"), where("email", "==", user.email));
+    const usersSnapshot = await getDocs(usersQuery);
+    if (usersSnapshot.empty) return null;
+    return usersSnapshot.docs[0].id;
+  }, [user]);
+
+const fetchTasks = useCallback(async (userDocId: string) => {
+  setLoading(true);
+
+  try {
+      const constraints: QueryConstraint[] = [
+          where("assignedUsers", "array-contains", userDocId),
+          orderBy("date", "desc"),
+      ];
+      
+      const q = query(collection(db, "serviceRequests"), ...constraints);
+      const snap = await getDocs(q);
+    
+      if (!snap.empty) {
+          const newTasks = snap.docs.map(mapDocToServiceRequest);
+          setTasks(newTasks);
+          tasksCache = newTasks;
+          cacheTimestamp = Date.now();
+      } else {
+          setTasks([]);
+          tasksCache = [];
+          cacheTimestamp = Date.now();
+      }
+  } catch (error) {
+      console.error("Error fetching tasks:", error);
+      Alert.alert("خطأ", "لم نتمكن من تحميل المهام.");
+      tasksCache = null;
+      cacheTimestamp = null;
+  } finally {
+      setLoading(false);
+  }
+}, []);
+
+  useEffect(() => {
+    const now = Date.now();
+    // Use cache if it's less than 1 minute old to prevent re-fetch on rapid tab switching
+    if (tasksCache && userDocIdCache && cacheTimestamp && (now - cacheTimestamp < 60000)) {
+      setTasks(tasksCache);
+      setCurrentUserDocId(userDocIdCache);
+      setLoading(false);
+      return;
+    }
+
+    if (user) {
+      fetchUserDocId().then(docId => {
+        if (docId) {
+          setCurrentUserDocId(docId);
+          userDocIdCache = docId; // Cache userDocId
+          fetchTasks(docId);
+        } else {
+          setLoading(false);
+          setTasks([]);
+        }
+      });
+    } else {
+      // Clear cache on logout
+      tasksCache = null;
+      userDocIdCache = null;
+      cacheTimestamp = null;
+      setLoading(false);
+      setTasks([]);
+    }
+  }, [user, fetchUserDocId, fetchTasks]);
+
+
+  const handleTabChange = useCallback((tab: "all" | "pending" | "completed") => {
+    if (tab === selectedTab) return;
+    setSelectedTab(tab);
+  }, [selectedTab]);
+
+
+  const filteredTasks = useMemo(() => {
+    let baseTickets = tasks;
+    
+    if (selectedTab === "pending") {
+      baseTickets = tasks.filter(ticket => ["مفتوح", "قيد المعالجة"].includes(ticket.status));
+    } else if (selectedTab === "completed") {
+      baseTickets = tasks.filter(ticket => ["مكتمل", "مغلق"].includes(ticket.status));
+    }
+  
+    if (searchTerm) {
+      const lowercasedSearch = searchTerm.toLowerCase();
+      return baseTickets.filter(ticket =>
+        ticket.title.toLowerCase().includes(lowercasedSearch) ||
+        ticket.customerName.toLowerCase().includes(lowercasedSearch) ||
+        ticket.id.toLowerCase().includes(lowercasedSearch)
+      );
+    }
+  
+    return baseTickets;
+  }, [tasks, selectedTab, searchTerm]);
+
+  const renderItem = useCallback(({ item }: { item: ServiceRequest }) => (
+    <TicketItem
+      ticket={item}
+      currentUserDocId={currentUserDocId}
+      router={router}
+      styles={styles}
+      theme={theme}
+    />
+  ), [currentUserDocId, router, styles, theme]);
+
+  const renderListHeader = useCallback(() => (
+    <View style={styles.dashboardContainer}>
+      <View style={styles.welcomeHeader}>
+        <Text style={styles.dashboardTitle}>لوحة التحكم</Text>
+        <Text style={styles.dashboardSubtitle}>مرحباً بك، تتبع مهامك وأدائك</Text>
+      </View>
+      <TechnicianStatCards tickets={tasks} styles={styles} />
+      
+      <View style={styles.taskListContainer}>
+        <View style={styles.taskListHeader}>
+          <View style={styles.headerTop}>
+            <View>
+              <Text style={styles.taskListTitle}>قائمة المهام</Text>
+              <Text style={styles.taskListSubtitle}>جميع المهام المسندة إليك</Text>
+            </View>
+          </View>
+          
+          <View style={styles.searchContainer}>
+            <Search size={20} color="#9CA3AF" style={styles.searchIcon} />
+            <TextInput
+              placeholder="بحث بالاسم، العنوان، أو رقم الطلب..."
+              style={styles.searchInput}
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+          
+          <View style={styles.tabsContainer}>
+              <TabsTrigger title="الكل" isActive={selectedTab === 'all'} onPress={() => handleTabChange('all')} styles={styles} />
+              <TabsTrigger title="قيد التنفيذ" isActive={selectedTab === 'pending'} onPress={() => handleTabChange('pending')} styles={styles} />
+              <TabsTrigger title="مكتملة" isActive={selectedTab === 'completed'} onPress={() => handleTabChange('completed')} styles={styles} />
+          </View>
+        </View>
+      </View>
+    </View>
+  ), [tasks, currentUserDocId, searchTerm, selectedTab, handleTabChange, styles, theme]);
+
+
+  const renderEmptyList = () => {
+    if (loading) return null;
+    return (
+      <View style={styles.centeredMessage}>
+        <View style={styles.emptyStateContainer}>
+          <Inbox size={48} color="#D1D5DB" />
+          <Text style={styles.emptyStateText}>
+            {searchTerm ? "لا توجد مهام تطابق الفلترة الحالية" : "ليس لديك مهام مسندة حالياً"}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+
+  if (loading && tasks.length === 0) {
+    return (
+      <View style={styles.fullScreenLoader}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+        <Text style={styles.loadingTextScreen}>جاري التحميل...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.screenContainer}>
+      <FlatList
+        data={filteredTasks}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        ListHeaderComponent={renderListHeader}
+        ListEmptyComponent={renderEmptyList}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContentContainer}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={21}
+        updateCellsBatchingPeriod={50}
+      />
+    </View>
+  );
+}
+
+const getStyles = (theme: any) => StyleSheet.create({
+  screenContainer: {
+    flex: 1,
+    backgroundColor: theme.background,
+  },
+  scrollContentContainer: {
+    paddingBottom: 40,
+  },
+  dashboardContainer: {
+    padding: 16,
+  },
+  welcomeHeader: {
+    marginBottom: 24,
+    alignItems: 'flex-end',
+  },
+  dashboardTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: theme.text,
+    fontFamily: 'Cairo',
+    textAlign: 'right',
+  },
+  dashboardSubtitle: {
+    fontSize: 16,
+    color: theme.textSecondary,
+    fontFamily: 'Cairo',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  fullScreenLoader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.background,
+  },
+  loadingTextScreen: {
+    marginTop: 12,
+    fontSize: 16,
+    color: theme.textSecondary,
+    fontFamily: 'Cairo',
+  },
+  // StatCard styles
+  technicianStatsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+    gap: 12,
+  },
+  statCardContainer: {
+    flex: 1,
+    backgroundColor: theme.card,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    shadowColor: theme.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  statCardContent: {
+    alignItems: 'center',
+  },
+  statCardValue: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: theme.text,
+    fontFamily: 'Cairo',
+  },
+  statCardTitle: {
+    fontSize: 14,
+    color: theme.textSecondary,
+    fontFamily: 'Cairo',
+    marginTop: 2,
+  },
+  cardGradientOverlay: {
+    position: 'absolute',
+    right: -40,
+    top: -20,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    opacity: 0.08,
+  },
+  // PerformanceSummaryCard styles
+  card: {
+    backgroundColor: theme.card,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    shadowColor: theme.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  performanceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    justifyContent: 'flex-start',
+  },
+  performanceIconContainer: {
+    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  performanceTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme.text,
+    fontFamily: 'Cairo',
+  },
+  progressBarsContainer: {
+    gap: 18,
+  },
+  progressBarContainer: {
+    width: '100%',
+  },
+  progressBarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  progressBarTitle: {
+    fontSize: 14,
+    color: theme.textSecondary,
+    fontFamily: 'Cairo',
+  },
+  progressBarCount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.text,
+    fontFamily: 'Cairo',
+  },
+  progressBarTrack: {
+    height: 8,
+    backgroundColor: theme.border,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  // TaskList styles
+  taskListContainer: {
+    backgroundColor: theme.card,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: theme.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  taskListHeader: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+    backgroundColor: theme.card,
+  },
+  headerTop: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  taskListTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: theme.text,
+    fontFamily: 'Cairo',
+    textAlign: 'right',
+  },
+  taskListSubtitle: {
+    fontSize: 14,
+    color: theme.textSecondary,
+    fontFamily: 'Cairo',
+    textAlign: 'right',
+    marginTop: 2,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.inputBackground,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: 44,
+    fontSize: 15,
+    color: theme.text,
+    fontFamily: 'Cairo',
+    textAlign: 'right',
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: theme.inputBackground,
+    borderRadius: 12,
+    padding: 4,
+  },
+  tabButton: {
+    flex: 1,
+  },
+  tab: {
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  activeTab: {
+    backgroundColor: theme.card,
+    shadowColor: theme.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.textSecondary,
+    fontFamily: 'Cairo',
+  },
+  activeTabText: {
+    color: theme.primary,
+  },
+  taskListContent: {
+    minHeight: 200,
+  },
+  centeredMessage: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    minHeight: 200,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 15,
+    color: theme.textSecondary,
+    fontFamily: 'Cairo',
+  },
+  emptyStateContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyStateText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: theme.textSecondary,
+    fontFamily: 'Cairo',
+    textAlign: 'center',
+  },
+  // TicketItem styles
+  ticketItemContainer: {
+    backgroundColor: theme.card,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  ticketContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  ticketHeader: {
+    marginBottom: 12,
+    alignItems: 'flex-start',
+  },
+  ticketTitleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 8,
+  },
+  ticketTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: theme.text,
+    fontFamily: 'Cairo',
+    flex: 1,
+    textAlign: 'right',
+    marginRight: 8,
+  },
+  ticketCustomer: {
+    fontSize: 14,
+    color: theme.textSecondary,
+    fontFamily: 'Cairo',
+    marginBottom: 4,
+  },
+  ticketDate: {
+    fontSize: 12,
+    color: theme.subtleText,
+    fontFamily: 'Cairo',
+  },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    fontFamily: 'Cairo',
+  },
+  badgeBlue: { backgroundColor: '#3B82F6' },
+  badgeYellow: { backgroundColor: '#F59E0B' },
+  badgeGreen: { backgroundColor: '#10B981' },
+  badgeRed: { backgroundColor: '#EF4444' },
+  badgePurple: { backgroundColor: '#8B5CF6' },
+  badgeGray: { backgroundColor: '#6B7280' },
+  ticketActions: {
+    marginTop: 8,
+    alignItems: 'flex-end',
+  },
+  actionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+  },
+  actionBadgeIcon: {
+    marginRight: 6,
+  },
+  actionBadgeGreen: { backgroundColor: theme.success + '20' },
+  actionBadgeTextGreen: { color: theme.success, fontWeight: '600', fontFamily: 'Cairo' },
+  actionBadgeRed: { backgroundColor: theme.destructive + '20' },
+  actionBadgeTextRed: { color: theme.destructive, fontWeight: '600', fontFamily: 'Cairo' },
+  actionBadgeBlue: { backgroundColor: theme.primary + '20' },
+  actionBadgeTextBlue: { color: theme.primary, fontWeight: '600', fontFamily: 'Cairo' },
+});

@@ -155,7 +155,7 @@ export interface ServiceRequest {
 export interface UserResponse {
   userId: string;
   userName: string;
-  response: "accepted" | "rejected";
+  response: "accepted" | "rejected" | "completed";
   timestamp: string;
 }
 

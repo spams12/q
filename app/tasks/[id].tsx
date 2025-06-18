@@ -1,5 +1,6 @@
 import CommentSection from '@/components/CommentSection';
 import { usePermissions } from '@/context/PermissionsContext';
+import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams } from 'expo-router';
@@ -11,13 +12,27 @@ import { ThemedText } from '../../components/ThemedText';
 import { ThemedView } from '../../components/ThemedView';
 import useFirebaseAuth from '../../hooks/use-firebase-auth';
 import { db, uploadCommentAttachment } from '../../lib/firebase';
-import { Comment, Invoice, InvoiceItem, MaintenanceItem, NewCustomerInstallationItem, ServiceRequest, StockTransaction, User, UserStockItem } from '../../lib/types';
+import { Comment, Invoice, InvoiceItem, ServiceRequest, StockTransaction, User, UserStockItem } from '../../lib/types';
 
 const { width } = Dimensions.get('window');
+
+type NewCustomerInstallationItem = InvoiceItem & {
+  type: 'newCustomerInstallation';
+  deviceModel: string;
+  connectorType: string[];
+  numHooks: number;
+  numBags: number;
+};
+
+type MaintenanceItem = InvoiceItem & {
+    type: 'maintenance';
+    cableLength?: number;
+};
 
 const TicketDetailPage = () => {
   const { id } = useLocalSearchParams();
   const { user } = useFirebaseAuth();
+  const { theme, themeName } = useTheme();
   const [serviceRequest, setServiceRequest] = useState<ServiceRequest | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,7 +116,7 @@ const TicketDetailPage = () => {
         if (userResponseIndex > -1) {
           newUserResponses[userResponseIndex].response = 'accepted';
         } else {
-          newUserResponses.push({ userId: user.uid, response: 'accepted', timestamp: Timestamp.now() });
+          newUserResponses.push({ userId: user.uid, userName: user.displayName || 'Unknown', response: 'accepted', timestamp: Timestamp.now().toDate().toISOString() });
         }
 
         const newComment: Comment = {
@@ -110,6 +125,7 @@ const TicketDetailPage = () => {
           userId: user.uid,
           userName: user.displayName || 'النظام',
           createdAt: Timestamp.now(),
+          timestamp: Timestamp.now(),
           isStatusChange: true,
         };
 
@@ -145,7 +161,7 @@ const TicketDetailPage = () => {
         if (userResponseIndex > -1) {
           newUserResponses[userResponseIndex].response = 'rejected';
         } else {
-          newUserResponses.push({ userId: user.uid, response: 'rejected', timestamp: Timestamp.now() });
+          newUserResponses.push({ userId: user.uid, userName: user.displayName || 'Unknown', response: 'rejected', timestamp: Timestamp.now().toDate().toISOString() });
         }
 
         const newComment: Comment = {
@@ -154,6 +170,7 @@ const TicketDetailPage = () => {
           userId: user.uid,
           userName: user.displayName || 'النظام',
           createdAt: Timestamp.now(),
+          timestamp: Timestamp.now(),
           isStatusChange: true,
         };
 
@@ -193,6 +210,7 @@ const TicketDetailPage = () => {
           userId: user.uid,
           userName: user.displayName || 'النظام',
           createdAt: Timestamp.now(),
+          timestamp: Timestamp.now(),
           isStatusChange: true,
         };
 
@@ -256,7 +274,7 @@ const TicketDetailPage = () => {
         case 'newCustomerInstallation':
           const installItem = item as NewCustomerInstallationItem;
           if (installItem.deviceModel) requiredStock[installItem.deviceModel] = (requiredStock[installItem.deviceModel] || 0) + 1;
-          installItem.connectorType?.forEach(c => requiredStock[c] = (requiredStock[c] || 0) + 1);
+          installItem.connectorType?.forEach((c: string) => requiredStock[c] = (requiredStock[c] || 0) + 1);
           if (installItem.numHooks > 0) requiredStock['hook'] = (requiredStock['hook'] || 0) + installItem.numHooks;
           if (installItem.numBags > 0) requiredStock['bag'] = (requiredStock['bag'] || 0) + installItem.numBags;
           break;
@@ -298,7 +316,7 @@ const TicketDetailPage = () => {
 
         const insufficientStock: string[] = [];
         for (const itemName in requiredStock) {
-          const stockItem = stockToUpdate.find(s => s.name === itemName);
+          const stockItem = stockToUpdate.find(s => s.itemName === itemName);
           if (!stockItem || stockItem.quantity < requiredStock[itemName]) {
             insufficientStock.push(`${itemName} (مطلوب: ${requiredStock[itemName]}, متوفر: ${stockItem?.quantity || 0})`);
           }
@@ -316,37 +334,37 @@ const TicketDetailPage = () => {
         const newInvoiceRef = doc(collection(db, 'invoices'));
         const newInvoice: Invoice = {
           id: newInvoiceRef.id,
-          serviceRequestId: serviceRequest.id,
-          customerId: currentServiceRequest.customerId,
+          linkedServiceRequestId: serviceRequest.id,
           customerName: currentServiceRequest.customerName,
-          issueDate: Timestamp.now(),
-          dueDate: Timestamp.now(),
           totalAmount,
           status: 'draft',
           items,
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
+          createdAt: Timestamp.now().toDate().toISOString(),
+          lastUpdated: Timestamp.now().toDate().toISOString(),
+          createdBy: user.uid,
+          creatorName: user.displayName || 'Unknown',
+          type: 'invoice',
         };
         transaction.set(newInvoiceRef, newInvoice);
 
         for (const itemName in requiredStock) {
           const requiredQty = requiredStock[itemName];
-          const stockItemIndex = stockToUpdate.findIndex(s => s.name === itemName);
+          const stockItemIndex = stockToUpdate.findIndex(s => s.itemName === itemName);
 
           if (stockItemIndex > -1) {
             const originalQty = stockToUpdate[stockItemIndex].quantity;
             stockToUpdate[stockItemIndex].quantity -= requiredQty;
             
             const newTransaction: Omit<StockTransaction, 'id'> = {
-              stockItemId: stockToUpdate[stockItemIndex].stockItemId,
-              stockItemName: itemName,
+              itemId: stockToUpdate[stockItemIndex].itemId,
+              itemName: itemName,
               userId: user.uid,
               userName: user.displayName || 'غير محدد',
-              type: 'out',
-              quantityChange: -requiredQty,
-              newQuantity: stockToUpdate[stockItemIndex].quantity,
-              date: Timestamp.now(),
-              serviceRequestId: serviceRequest.id,
+              type: 'reduction',
+              quantity: -requiredQty,
+              timestamp: Timestamp.now(),
+              itemType: stockToUpdate[stockItemIndex].itemType,
+              sourceId: serviceRequest.id,
             };
             stockTransactions.push(newTransaction);
           }
@@ -365,6 +383,7 @@ const TicketDetailPage = () => {
           userId: user.uid,
           userName: user.displayName || 'النظام',
           createdAt: Timestamp.now(),
+          timestamp: Timestamp.now(),
           isStatusChange: true,
         };
 
@@ -381,6 +400,7 @@ const TicketDetailPage = () => {
     }
   };
 
+ const styles = getStyles(theme, themeName);
   if (loading) {
     return (
       <ThemedView style={styles.container}>
@@ -395,7 +415,7 @@ const TicketDetailPage = () => {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle-outline" size={48} color="#F44336" />
+          <Ionicons name="alert-circle-outline" size={48} color={theme.destructive} />
           <ThemedText style={styles.errorText}>خطأ: {error}</ThemedText>
         </View>
       </ThemedView>
@@ -406,7 +426,7 @@ const TicketDetailPage = () => {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.errorContainer}>
-          <Ionicons name="document-outline" size={48} color="#666" />
+          <Ionicons name="document-outline" size={48} color={theme.textSecondary} />
           <ThemedText style={styles.errorText}>لم يتم العثور على التذكرة.</ThemedText>
         </View>
       </ThemedView>
@@ -416,6 +436,7 @@ const TicketDetailPage = () => {
   
 
   const renderTabContent = () => {
+    const styles = getStyles(theme, themeName);
     switch (activeTab) {
       case 0:
         return (
@@ -423,15 +444,15 @@ const TicketDetailPage = () => {
             <View style={styles.detailsContainer}>
               <ThemedText style={styles.detailsTitle}>تفاصيل العميل</ThemedText>
               <View style={styles.detailItem}>
-                <Ionicons name="person-outline" size={20} color="#666" style={styles.detailIcon} />
+                <Ionicons name="person-outline" size={20} color={theme.textSecondary} style={styles.detailIcon} />
                 <ThemedText style={styles.detailText}>{serviceRequest.customerName}</ThemedText>
               </View>
               <View style={styles.detailItem}>
-                <Ionicons name="location-outline" size={20} color="#666" style={styles.detailIcon} />
+                <Ionicons name="location-outline" size={20} color={theme.textSecondary} style={styles.detailIcon} />
                 <ThemedText style={styles.detailText}>{serviceRequest.customerEmail}</ThemedText>
               </View>
               <View style={styles.detailItem}>
-                <Ionicons name="call-outline" size={20} color="#666" style={styles.detailIcon} />
+                <Ionicons name="call-outline" size={20} color={theme.textSecondary} style={styles.detailIcon} />
                 <ThemedText style={styles.detailText}>{serviceRequest.customerPhone}</ThemedText>
               </View>
             </View>
@@ -441,7 +462,7 @@ const TicketDetailPage = () => {
                   <CommentSection
               comments={serviceRequest.comments || []}
               users={users}
-              currentUserId={userUid}
+              currentUserId={user?.uid || ''}
               ticketStatus={serviceRequest.status}
               userHasAccepted={currentUserResponse === 'accepted'}
               onAddComment={handleAddComment}
@@ -473,7 +494,7 @@ const TicketDetailPage = () => {
     <ThemedView style={styles.container}>
       {/* Header with gradient */}
       <LinearGradient
-        colors={['#667eea', '#764ba2']}
+        colors={[theme.gradientStart, theme.gradientEnd]}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -484,10 +505,10 @@ const TicketDetailPage = () => {
             <ThemedText style={styles.headerSubtitle}>تذكرة #{id}</ThemedText>
           </View>
           <View style={styles.badgeContainer}>
-            <View style={[styles.badge, getStatusStyle(serviceRequest.status)]}>
+            <View style={[styles.badge, getStatusStyle(serviceRequest.status, theme)]}>
               <ThemedText style={styles.badgeText}>{serviceRequest.status}</ThemedText>
             </View>
-            <View style={[styles.badge, getPriorityStyle(serviceRequest.priority)]}>
+            <View style={[styles.badge, getPriorityStyle(serviceRequest.priority, theme)]}>
               <ThemedText style={styles.badgeText}>{serviceRequest.priority}</ThemedText>
             </View>
           </View>
@@ -523,12 +544,12 @@ const TicketDetailPage = () => {
               console.log(`Tab ${index} pressed: ${tab.title}`);
               switchTab(index);
             }}
-            hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }} 
+            hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
           >
             <Ionicons
               name={tab.icon as any}
               size={20}
-              color={activeTab === index ? '#667eea' : '#666'}
+              color={activeTab === index ? theme.primary : theme.textSecondary}
             />
             <ThemedText
               style={[
@@ -553,7 +574,7 @@ const TicketDetailPage = () => {
       {/* Action Buttons */}
       {(currentUserResponse === 'pending' || currentUserResponse === 'accepted') && (
         <LinearGradient
-          colors={['rgba(255,255,255,0.95)', '#ffffff']}
+          colors={[theme.actionsContainerBackground, theme.card]}
           style={styles.actionsContainer}
         >
           {/* {currentUserResponse === 'pending' && (
@@ -592,242 +613,247 @@ const TicketDetailPage = () => {
   );
 };
 
-const getStatusStyle = (status: string) => {
+const getStatusStyle = (status: string, theme: any) => {
   switch (status) {
-    case 'مفتوح': return { backgroundColor: '#4CAF50' };
-    case 'قيد المعالجة': return { backgroundColor: '#FFC107' };
-    case 'مكتمل': return { backgroundColor: '#2196F3' };
-    case 'معلق': return { backgroundColor: '#9E9E9E' };
-    case 'ملغي': return { backgroundColor: '#F44336' };
-    default: return { backgroundColor: '#E0E0E0' };
+    case 'مفتوح': return { backgroundColor: theme.statusOpen };
+    case 'قيد المعالجة': return { backgroundColor: theme.statusInProgress };
+    case 'مكتمل': return { backgroundColor: theme.statusCompleted };
+    case 'معلق': return { backgroundColor: theme.statusPending };
+    case 'ملغي': return { backgroundColor: theme.statusCancelled };
+    default: return { backgroundColor: theme.statusDefault };
   }
 };
 
-const getPriorityStyle = (priority: string) => {
+const getPriorityStyle = (priority: string, theme: any) => {
   switch (priority) {
-    case 'عاجل': return { backgroundColor: '#F44336' };
-    case 'مرتفع': return { backgroundColor: '#FF9800' };
-    case 'متوسط': return { backgroundColor: '#FFC107' };
-    case 'منخفض': return { backgroundColor: '#4CAF50' };
-    default: return { backgroundColor: '#E0E0E0' };
+    case 'عاجل': return { backgroundColor: theme.priorityUrgent };
+    case 'مرتفع': return { backgroundColor: theme.priorityHigh };
+    case 'متوسط': return { backgroundColor: theme.priorityMedium };
+    case 'منخفض': return { backgroundColor: theme.priorityLow };
+    default: return { backgroundColor: theme.priorityDefault };
   }
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 18,
-    color: '#666',
-    fontFamily: 'System',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 16,
-    fontFamily: 'System',
-  },
-  headerGradient: {
-    paddingTop: 60,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-  },
-  headerContent: {
-    alignItems: 'flex-end',
-  },
-  headerTop: {
-    alignItems: 'flex-end',
-    marginBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    textAlign: 'right',
-    fontFamily: 'System',
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 4,
-    fontFamily: 'System',
-  },
-  badgeContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-end',
-  },
-  badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginLeft: 8,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  badgeText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 12,
-    fontFamily: 'System',
-  },
-  tabBarContainer: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  tabBar: {
-    flexDirection: 'row',
-    position: 'relative',
-    paddingVertical: 8,
-  },
-  tabIndicator: {
-    position: 'absolute',
-    bottom: 0,
-    height: 3,
-    backgroundColor: '#667eea',
-    borderRadius: 2,
-    marginHorizontal: 10,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-  },
-  tabText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#666',
-    marginTop: 4,
-    textAlign: 'center',
-    fontFamily: 'System',
-  },
-  activeTabText: {
-    color: '#667eea',
-  },
-  contentScrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingBottom: 0,
-  },
-  detailsContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  detailsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    textAlign: 'right',
-    color: '#333',
-  },
-  detailItem: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  detailIcon: {
-    marginLeft: 10,
-  },
-  detailText: {
-    fontSize: 16,
-    color: '#555',
-    textAlign: 'right',
-    flex: 1,
-  },
-  loadingUserText: {
-    textAlign: 'center',
-    color: '#666',
-    fontSize: 16,
-    marginTop: 20,
-    fontFamily: 'System',
-  },
-  subscribersText: {
-    textAlign: 'center',
-    color: '#666',
-    fontSize: 16,
-    marginTop: 20,
-    fontFamily: 'System',
-  },
-  actionsContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.1)',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    minWidth: 120,
-  },
-  fullWidthButton: {
-    width: '100%',
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginLeft: 8,
-    fontFamily: 'System',
-  },
-  acceptButton: {
-    backgroundColor: '#4CAF50',
-  },
-  rejectButton: {
-    backgroundColor: '#F44336',
-  },
-  doneButton: {
-    backgroundColor: '#2196F3',
-  },
-});
+const getStyles = (theme: any, themeName: 'light' | 'dark') => {
+  const shadowColor = theme.shadow || (themeName === 'dark' ? '#FFFFFF' : '#000000');
+
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    loadingText: {
+      fontSize: 18,
+      color: theme.textSecondary,
+      fontFamily: 'System',
+    },
+    errorContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    errorText: {
+      fontSize: 16,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      marginTop: 16,
+      fontFamily: 'System',
+    },
+    headerGradient: {
+      paddingTop: 60,
+      paddingBottom: 24,
+      paddingHorizontal: 20,
+    },
+    headerContent: {
+      alignItems: 'flex-end',
+    },
+    headerTop: {
+      alignItems: 'flex-end',
+      marginBottom: 16,
+    },
+    headerTitle: {
+      fontSize: 28,
+      fontWeight: 'bold',
+      color: theme.white,
+      textAlign: 'right',
+      fontFamily: 'System',
+    },
+    headerSubtitle: {
+      fontSize: 16,
+      color: theme.white,
+      opacity: 0.8,
+      marginTop: 4,
+      fontFamily: 'System',
+    },
+    badgeContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'flex-end',
+    },
+    badge: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+      marginLeft: 8,
+      marginBottom: 8,
+      shadowColor: shadowColor,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    badgeText: {
+      color: theme.white,
+      fontWeight: '600',
+      fontSize: 12,
+      fontFamily: 'System',
+    },
+    tabBarContainer: {
+      backgroundColor: theme.card,
+      shadowColor: shadowColor,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 5,
+    },
+    tabBar: {
+      flexDirection: 'row',
+      position: 'relative',
+      paddingVertical: 8,
+    },
+    tabIndicator: {
+      position: 'absolute',
+      bottom: 0,
+      height: 3,
+      backgroundColor: theme.primary,
+      borderRadius: 2,
+      marginHorizontal: 10,
+    },
+    tab: {
+      flex: 1,
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 8,
+    },
+    tabText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.textSecondary,
+      marginTop: 4,
+      textAlign: 'center',
+      fontFamily: 'System',
+    },
+    activeTabText: {
+      color: theme.primary,
+    },
+    contentScrollView: {
+      flex: 1,
+    },
+    contentContainer: {
+      paddingBottom: 0,
+    },
+    detailsContainer: {
+      backgroundColor: theme.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+      shadowColor: shadowColor,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    detailsTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      marginBottom: 12,
+      textAlign: 'right',
+      color: theme.text,
+    },
+    detailItem: {
+      flexDirection: 'row-reverse',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    detailIcon: {
+      marginLeft: 10,
+    },
+    detailText: {
+      fontSize: 16,
+      color: theme.textSecondary,
+      textAlign: 'right',
+      flex: 1,
+    },
+    loadingUserText: {
+      textAlign: 'center',
+      color: theme.textSecondary,
+      fontSize: 16,
+      marginTop: 20,
+      fontFamily: 'System',
+    },
+    subscribersText: {
+      textAlign: 'center',
+      color: theme.textSecondary,
+      fontSize: 16,
+      marginTop: 20,
+      fontFamily: 'System',
+    },
+    actionsContainer: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    buttonRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
+    button: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 14,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      shadowColor: shadowColor,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+      minWidth: 120,
+    },
+    fullWidthButton: {
+      width: '100%',
+    },
+    buttonText: {
+      color: theme.white,
+      fontWeight: 'bold',
+      fontSize: 16,
+      marginLeft: 8,
+      fontFamily: 'System',
+    },
+    acceptButton: {
+      backgroundColor: theme.success,
+    },
+    rejectButton: {
+      backgroundColor: theme.destructive,
+    },
+    doneButton: {
+      backgroundColor: theme.primary,
+    },
+  });
+};
 
 export default TicketDetailPage;

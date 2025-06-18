@@ -18,6 +18,7 @@ import Toast from "react-native-toast-message";
 import { v4 as uuidv4 } from "uuid";
 
 import { usePermissions } from "@/context/PermissionsContext";
+import { Theme, useTheme } from "@/context/ThemeContext";
 import useFirebaseAuth from "@/hooks/use-firebase-auth";
 import { db } from "@/lib/firebase";
 import {
@@ -218,6 +219,8 @@ function InvoiceForm({
   onCancel,
   onSuccess,
 }: InvoiceFormProps) {
+  const { theme, themeName } = useTheme();
+  const styles = getStyles(theme, themeName);
   const { user } = useFirebaseAuth();
   const { userName: currentUserDisplayName, currentUserTeamId } =
     usePermissions();
@@ -1412,8 +1415,8 @@ function InvoiceForm({
     handleCableLengthChange: (value: string) => void;
     handleDeviceModelChange: (value: string) => void;
     handleMaintenanceTypeChange: (value: string) => void;
-    styles: typeof styles;
-    COLORS: typeof COLORS;
+    styles: ReturnType<typeof getStyles>;
+    theme: Theme;
   }
 
   const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> = ({
@@ -1427,7 +1430,7 @@ function InvoiceForm({
     handleDeviceModelChange,
     handleMaintenanceTypeChange,
     styles, // Pass styles down to use the new design system
-    COLORS, // Pass colors down for consistency
+    theme, // Pass colors down for consistency
   }) => {
     if (!invoiceSettings) return null;
 
@@ -1448,14 +1451,14 @@ function InvoiceForm({
           <Picker.Item
             label={placeholder}
             value={undefined}
-            color={COLORS.muted}
+            color={theme.placeholder}
           />
           {children}
         </Picker>
         <Feather
           name="chevron-down"
           size={20}
-          color={COLORS.muted}
+          color={theme.placeholder}
           style={styles.pickerIcon}
         />
       </View>
@@ -1510,7 +1513,7 @@ function InvoiceForm({
                 placeholder="أدخل الطول بالمتر"
                 value={customCableLength}
                 onChangeText={handleCustomCableLengthInputChange}
-                placeholderTextColor={COLORS.muted}
+                placeholderTextColor={theme.placeholder}
               />
             )}
 
@@ -1548,7 +1551,7 @@ function InvoiceForm({
                               ),
                         }));
                       }}
-                      color={COLORS.primary}
+                      color={theme.primary}
                       style={styles.checkboxBase}
                     />
                     <Text style={styles.checkboxLabel}>{ct.name}</Text>
@@ -1566,7 +1569,7 @@ function InvoiceForm({
                   onChangeText={(val) =>
                     setCurrentItem({ ...currentItem, numHooks: parseInt(val) || 0 })
                   }
-                  placeholderTextColor={COLORS.muted}
+                  placeholderTextColor={theme.placeholder}
                 />
               </View>
               <View style={styles.inlineInput}>
@@ -1578,7 +1581,7 @@ function InvoiceForm({
                   onChangeText={(val) =>
                     setCurrentItem({ ...currentItem, numBags: parseInt(val) || 0 })
                   }
-                  placeholderTextColor={COLORS.muted}
+                  placeholderTextColor={theme.placeholder}
                 />
               </View>
             </View>
@@ -1628,7 +1631,7 @@ function InvoiceForm({
                     placeholder="أدخل الطول بالمتر"
                     value={customCableLength}
                     onChangeText={handleCustomCableLengthInputChange}
-                    placeholderTextColor={COLORS.muted}
+                    placeholderTextColor={theme.placeholder}
                   />
                 )}
               </>
@@ -1657,7 +1660,7 @@ function InvoiceForm({
                                   ),
                             }));
                           }}
-                          color={COLORS.primary}
+                          color={theme.primary}
                           style={styles.checkboxBase}
                         />
                         <Text style={styles.checkboxLabel}>{`${
@@ -1702,7 +1705,7 @@ function InvoiceForm({
                     setCurrentItem({ ...currentItem, description: text })
                   }
                   placeholder="أدخل وصف الصيانة..."
-                  placeholderTextColor={COLORS.muted}
+                  placeholderTextColor={theme.placeholder}
                 />
                 <Text style={styles.label}>السعر (د.ع)</Text>
                 <TextInput
@@ -1718,7 +1721,7 @@ function InvoiceForm({
                     });
                   }}
                   placeholder="0"
-                  placeholderTextColor={COLORS.muted}
+                  placeholderTextColor={theme.placeholder}
                 />
               </>
             )}
@@ -1760,7 +1763,7 @@ function InvoiceForm({
                 setCurrentItem({ ...currentItem, description: text })
               }
               placeholder="أدخل وصف العنصر..."
-              placeholderTextColor={COLORS.muted}
+              placeholderTextColor={theme.placeholder}
             />
             <Text style={styles.label}>السعر (د.ع)</Text>
             <TextInput
@@ -1776,7 +1779,7 @@ function InvoiceForm({
                 });
               }}
               placeholder="0"
-              placeholderTextColor={COLORS.muted}
+              placeholderTextColor={theme.placeholder}
             />
           </>
         );
@@ -1795,7 +1798,7 @@ function InvoiceForm({
   if (loadingSettings || loadingServiceRequest || loadingUserStock) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+        <ActivityIndicator size="large" color={theme.primary} />
         <Text style={styles.loadingText}>جاري تحميل البيانات...</Text>
       </View>
     );
@@ -1803,7 +1806,7 @@ function InvoiceForm({
   if (!invoiceSettings) {
     return (
       <View style={styles.centered}>
-        <Feather name="alert-triangle" size={48} color={COLORS.danger} />
+        <Feather name="alert-triangle" size={48} color={theme.destructive} />
         <Text style={styles.errorText}>لم نتمكن من تحميل إعدادات الفاتورة.</Text>
         <Text style={styles.errorSubText}>الرجاء المحاولة مرة أخرى.</Text>
         <Pressable
@@ -1814,7 +1817,7 @@ function InvoiceForm({
           ]}
           onPressIn={onCancel}
         >
-          <Feather name="arrow-right" size={18} color={COLORS.white} />
+          <Feather name="arrow-right" size={18} color={theme.white} />
           <Text style={styles.buttonText}>العودة</Text>
         </Pressable>
       </View>
@@ -1862,7 +1865,7 @@ function InvoiceForm({
                   pressed && styles.buttonPrimaryPressed,
                 ]}
               >
-                <Feather name="plus" size={18} color={COLORS.white} />
+                <Feather name="plus" size={18} color={theme.white} />
                 <Text style={styles.buttonText}>إضافة عنصر</Text>
               </Pressable>
             )}
@@ -1895,7 +1898,7 @@ function InvoiceForm({
                     onPressIn={() => removeItem(item.id)}
                     style={styles.deleteButton}
                   >
-                    <Feather name="x" size={20} color={COLORS.muted} />
+                    <Feather name="x" size={20} color={theme.placeholder} />
                   </Pressable>
                 </View>
               ))}
@@ -1903,7 +1906,7 @@ function InvoiceForm({
           ) : (
             !showItemForm && (
               <View style={styles.emptyStateContainer}>
-                <Feather name="file-text" size={48} color={COLORS.border} />
+                <Feather name="file-text" size={48} color={theme.border} />
                 <Text style={styles.emptyStateText}>لا توجد عناصر بعد</Text>
                 <Text style={styles.emptyStateSubText}>
                   إضغط على &apos;إضافة عنصر&apos; للبدء
@@ -1928,7 +1931,7 @@ function InvoiceForm({
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>إضافة عنصر جديد</Text>
               <Pressable onPressIn={cancelItemForm} style={styles.cancelButton}>
-                <Feather name="x" size={22} color={COLORS.muted} />
+                <Feather name="x" size={22} color={theme.placeholder} />
               </Pressable>
             </View>
             <Text style={styles.label}>نوع العنصر</Text>
@@ -1942,7 +1945,7 @@ function InvoiceForm({
                 <Picker.Item
                   label="اختر نوع العنصر..."
                   value={undefined}
-                  color={COLORS.muted}
+                  color={theme.placeholder}
                 />
                 <Picker.Item
                   label="تنصيب مشترك جديد"
@@ -1957,7 +1960,7 @@ function InvoiceForm({
               <Feather
                 name="chevron-down"
                 size={20}
-                color={COLORS.muted}
+                color={theme.placeholder}
                 style={styles.pickerIcon}
               />
             </View>
@@ -1975,7 +1978,7 @@ function InvoiceForm({
               handleDeviceModelChange={handleDeviceModelChange}
               handleMaintenanceTypeChange={handleMaintenanceTypeChange}
               styles={styles}
-              COLORS={COLORS}
+              theme={theme}
             />
 
             <View style={styles.formActions}>
@@ -1995,7 +1998,7 @@ function InvoiceForm({
                 <Feather
                   name="plus-circle"
                   size={20}
-                  color={COLORS.white}
+                  color={theme.white}
                 />
                 <Text style={styles.buttonText}>إضافة العنصر للفاتورة</Text>
               </Pressable>
@@ -2011,7 +2014,7 @@ function InvoiceForm({
             value={notes}
             onChangeText={setNotes}
             placeholder="أدخل أي تفاصيل إضافية هنا..."
-            placeholderTextColor={COLORS.muted}
+            placeholderTextColor={theme.placeholder}
             multiline
           />
         </View>
@@ -2043,10 +2046,10 @@ function InvoiceForm({
           ]}
         >
           {submitting ? (
-            <ActivityIndicator color={COLORS.white} />
+            <ActivityIndicator color={theme.white} />
           ) : (
             <>
-              <Feather name="save" size={20} color={COLORS.white} />
+              <Feather name="save" size={20} color={theme.white} />
               <Text style={styles.buttonText}>حفظ الفاتورة</Text>
             </>
           )}
@@ -2063,7 +2066,7 @@ function InvoiceForm({
         <View style={styles.modalBackdrop}>
           <View style={styles.modalView}>
             <View style={styles.modalHeader}>
-              <Feather name="alert-triangle" size={28} color={COLORS.danger} />
+              <Feather name="alert-triangle" size={28} color={theme.destructive} />
               <Text style={styles.modalTitle}>نقص في المخزون</Text>
             </View>
             <Text style={styles.modalText}>
@@ -2116,383 +2119,374 @@ function InvoiceForm({
 }
 
 // --- NEW DESIGN SYSTEM STYLES ---
+const getStyles = (theme: Theme, themeName: "light" | "dark") =>
+  StyleSheet.create({
+    // --- Layout & Structure ---
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    contentContainer: {
+      padding: 16,
+      paddingBottom: 100, // Space for floating footer
+    },
+    centered: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      padding: 20,
+      backgroundColor: theme.background,
+    },
+    footer: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      flexDirection: "row-reverse",
+      justifyContent: "space-between",
+      alignItems: "center",
+      padding: 16,
+      paddingBottom: Platform.OS === "ios" ? 32 : 16,
+      backgroundColor: theme.card,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
 
-const COLORS = {
-  primary: "#007AFF",
-  primaryPressed: "#0056B3",
-  secondary: "#6C757D",
-  secondaryPressed: "#5A6268",
-  white: "#FFFFFF",
-  background: "#FFFFFF",
-  card: "#FFFFFF",
-  textPrimary: "#1C1C1E",
-  textSecondary: "#3A3A3C",
-  muted: "#8E8E93",
-  border: "#E5E5EA",
-  danger: "#FF3B30",
-  success: "#34C759",
-};
+    // --- Header ---
+    header: {
+      marginBottom: 24,
+      paddingHorizontal: 8,
+    },
+    headerTitle: {
+      fontSize: 32,
+      fontWeight: "bold",
+      color: theme.text,
+      textAlign: "right",
+    },
+    headerSubtitle: {
+      fontSize: 17,
+      color: theme.textSecondary,
+      textAlign: "right",
+      marginTop: 4,
+    },
 
-const styles = StyleSheet.create({
-  // --- Layout & Structure ---
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  contentContainer: {
-    padding: 16,
-    paddingBottom: 100, // Space for floating footer
-  },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: COLORS.background,
-  },
-  footer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row-reverse",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    paddingBottom: Platform.OS === "ios" ? 32 : 16,
-    backgroundColor: COLORS.card,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
+    // --- Card ---
+    card: {
+      backgroundColor: theme.card,
+      borderRadius: 14,
+      padding: 16,
+      marginBottom: 20,
+      ...(themeName === "dark"
+        ? {
+            borderWidth: 1,
+            borderColor: theme.border,
+          }
+        : {
+            shadowColor: theme.black,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.05,
+            shadowRadius: 12,
+            elevation: 3,
+          }),
+    },
+    itemFormCard: {
+      borderColor: theme.primary,
+      borderWidth: 1.5,
+    },
+    cardHeader: {
+      flexDirection: "row-reverse",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    cardTitle: {
+      fontSize: 20,
+      fontWeight: "600",
+      color: theme.text,
+      textAlign: "right",
+    },
 
-  // --- Header ---
-  header: {
-    marginBottom: 24,
-    paddingHorizontal: 8,
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: COLORS.textPrimary,
-    textAlign: "right",
-  },
-  headerSubtitle: {
-    fontSize: 17,
-    color: COLORS.muted,
-    textAlign: "right",
-    marginTop: 4,
-  },
+    // --- Buttons ---
+    button: {
+      flexDirection: "row-reverse",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 10,
+      gap: 8,
+    },
+    buttonLarge: {
+      flex: 1,
+      paddingVertical: 14,
+    },
+    buttonFullWidth: {
+      width: "100%",
+    },
+    buttonText: {
+      color: theme.white,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    buttonPrimary: { backgroundColor: theme.primary },
+    buttonPrimaryPressed: { opacity: 0.8 },
+    buttonSecondary: { backgroundColor: theme.textSecondary },
+    buttonSecondaryPressed: { opacity: 0.8 },
+    buttonDisabled: { backgroundColor: theme.placeholder, opacity: 0.7 },
+    cancelButton: { padding: 4 },
+    deleteButton: { padding: 8 },
 
-  // --- Card ---
-  card: {
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 20,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  itemFormCard: {
-    borderColor: COLORS.primary,
-    borderWidth: 1.5,
-  },
-  cardHeader: {
-    flexDirection: "row-reverse",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: COLORS.textPrimary,
-    textAlign: "right",
-  },
+    // --- Forms & Inputs ---
+    label: {
+      fontSize: 15,
+      fontWeight: "500",
+      color: theme.textSecondary,
+      marginBottom: 8,
+      marginTop: 12,
+      textAlign: "right",
+    },
+    input: {
+      backgroundColor: theme.inputBackground,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: Platform.OS === "android" ? 12 : 14,
+      fontSize: 16,
+      color: theme.text,
+      textAlign: "right",
+    },
+    textArea: {
+      minHeight: 100,
+      textAlignVertical: "top",
+    },
+    pickerContainer: {
+      flexDirection: "row-reverse",
+      alignItems: "center",
+      backgroundColor: theme.inputBackground,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 10,
+    },
+    picker: {
+      flex: 1,
+      color: theme.text,
+      borderWidth: 0, // Hide default borders
+      backgroundColor: "transparent",
+      height: 50,
+    },
+    pickerItem: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    pickerIcon: {
+      paddingHorizontal: 14,
+    },
+    inlineInputContainer: {
+      flexDirection: "row-reverse",
+      gap: 16,
+      marginTop: 12,
+    },
+    inlineInput: {
+      flex: 1,
+    },
 
-  // --- Buttons ---
-  button: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    gap: 8,
-  },
-  buttonLarge: {
-    flex: 1,
-    paddingVertical: 14,
-  },
-  buttonFullWidth: {
-    width: "100%",
-  },
-  buttonText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  buttonPrimary: { backgroundColor: COLORS.primary },
-  buttonPrimaryPressed: { backgroundColor: COLORS.primaryPressed },
-  buttonSecondary: { backgroundColor: COLORS.secondary },
-  buttonSecondaryPressed: { backgroundColor: COLORS.secondaryPressed },
-  buttonDisabled: { backgroundColor: COLORS.muted, opacity: 0.7 },
-  cancelButton: { padding: 4 },
-  deleteButton: { padding: 8 },
+    // --- Checkbox ---
+    checkboxGroupContainer: {
+      flexDirection: "row-reverse",
+      flexWrap: "wrap",
+      gap: 20,
+      marginTop: 8,
+    },
+    checkboxWrapper: {
+      flexDirection: "row-reverse",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 4,
+    },
+    checkboxBase: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+    },
+    checkboxLabel: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    formActions: {
+      marginTop: 24,
+    },
 
-  // --- Forms & Inputs ---
-  label: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: COLORS.textSecondary,
-    marginBottom: 8,
-    marginTop: 12,
-    textAlign: "right",
-  },
-  input: {
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === "android" ? 12 : 14,
-    fontSize: 16,
-    color: COLORS.textPrimary,
-    textAlign: "right",
-  },
-  textArea: {
-    minHeight: 100,
-    textAlignVertical: "top",
-  },
-  pickerContainer: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-  },
-  picker: {
-    flex: 1,
-    color: COLORS.textPrimary,
-    borderWidth: 0, // Hide default borders
-    backgroundColor: "transparent",
-    height: 50,
-  },
-  pickerItem: {
-    fontSize: 16,
-    color: COLORS.textPrimary,
-  },
-  pickerIcon: {
-    paddingHorizontal: 14,
-  },
-  inlineInputContainer: {
-    flexDirection: "row-reverse",
-    gap: 16,
-    marginTop: 12,
-  },
-  inlineInput: {
-    flex: 1,
-  },
+    // --- Item List ---
+    itemListContainer: {
+      marginTop: 8,
+    },
+    itemRow: {
+      flexDirection: "row-reverse",
+      alignItems: "center",
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    itemRowLast: {
+      borderBottomWidth: 0,
+    },
+    itemRowDetails: {
+      flex: 1,
+      marginRight: 12,
+    },
+    itemDescription: {
+      fontSize: 16,
+      fontWeight: "500",
+      color: theme.text,
+      textAlign: "right",
+    },
+    itemMeta: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      textAlign: "right",
+      marginTop: 4,
+    },
+    itemDetail: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      textAlign: "right",
+      marginBottom: 4,
+    },
+    itemTotal: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: theme.text,
+      minWidth: 90,
+      textAlign: "left",
+    },
+    itemContainer: {
+      backgroundColor: theme.inputBackground,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    totalContainer: {
+      flexDirection: "row-reverse",
+      justifyContent: "space-between",
+      alignItems: "center",
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+      paddingTop: 16,
+      marginTop: 16,
+    },
+    totalLabel: {
+      fontSize: 17,
+      fontWeight: "bold",
+      color: theme.text,
+    },
+    totalValue: {
+      fontSize: 20,
+      fontWeight: "bold",
+      color: theme.primary,
+    },
 
-  // --- Checkbox ---
-  checkboxGroupContainer: {
-    flexDirection: "row-reverse",
-    flexWrap: "wrap",
-    gap: 20,
-    marginTop: 8,
-  },
-  checkboxWrapper: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 4,
-  },
-  checkboxBase: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-  },
-  checkboxLabel: {
-    fontSize: 16,
-    color: COLORS.textPrimary,
-  },
-  formActions: {
-    marginTop: 24,
-  },
+    // --- Empty State & Loaders ---
+    emptyStateContainer: {
+      alignItems: "center",
+      paddingVertical: 40,
+    },
+    emptyStateText: {
+      fontSize: 17,
+      color: theme.textSecondary,
+      marginTop: 16,
+      fontWeight: "500",
+    },
+    emptyStateSubText: {
+      fontSize: 14,
+      color: theme.placeholder,
+      marginTop: 6,
+    },
+    loadingText: {
+      marginTop: 12,
+      fontSize: 16,
+      color: theme.textSecondary,
+    },
+    errorText: {
+      fontSize: 20,
+      fontWeight: "600",
+      color: theme.text,
+      textAlign: "center",
+      marginTop: 16,
+    },
+    errorSubText: {
+      fontSize: 16,
+      color: theme.placeholder,
+      textAlign: "center",
+      marginTop: 8,
+      marginBottom: 24,
+    },
 
-  // --- Item List ---
-  itemListContainer: {
-    marginTop: 8,
-  },
-  itemRow: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  itemRowLast: {
-    borderBottomWidth: 0,
-  },
-  itemRowDetails: {
-    flex: 1,
-    marginRight: 12,
-  },
-  itemDescription: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: COLORS.textPrimary,
-    textAlign: "right",
-  },
-  itemMeta: {
-    fontSize: 13,
-    color: COLORS.muted,
-    textAlign: "right",
-    marginTop: 4,
-  },
-  itemDetail: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: "right",
-    marginBottom: 4,
-  },
-  itemTotal: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: COLORS.textPrimary,
-    minWidth: 90,
-    textAlign: "left",
-  },
-  itemContainer: {
-    backgroundColor: "#F8F9FA",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  totalContainer: {
-    flexDirection: "row-reverse",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: 16,
-    marginTop: 16,
-  },
-  totalLabel: {
-    fontSize: 17,
-    fontWeight: "bold",
-    color: COLORS.textPrimary,
-  },
-  totalValue: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: COLORS.primary,
-  },
-
-  // --- Empty State & Loaders ---
-  emptyStateContainer: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  emptyStateText: {
-    fontSize: 17,
-    color: COLORS.textSecondary,
-    marginTop: 16,
-    fontWeight: "500",
-  },
-  emptyStateSubText: {
-    fontSize: 14,
-    color: COLORS.muted,
-    marginTop: 6,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: COLORS.textSecondary,
-  },
-  errorText: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: COLORS.textPrimary,
-    textAlign: "center",
-    marginTop: 16,
-  },
-  errorSubText: {
-    fontSize: 16,
-    color: COLORS.muted,
-    textAlign: "center",
-    marginTop: 8,
-    marginBottom: 24,
-  },
-
-  // --- Modal ---
-  modalBackdrop: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-  modalView: {
-    width: "90%",
-    maxWidth: 400,
-    maxHeight: "85%",
-    backgroundColor: COLORS.card,
-    borderRadius: 20,
-    padding: 24,
-    alignItems: "center",
-  },
-  modalHeader: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    width: "100%",
-    marginBottom: 16,
-    gap: 12,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: COLORS.textPrimary,
-  },
-  modalText: {
-    textAlign: "right",
-    fontSize: 16,
-    color: COLORS.textSecondary,
-    lineHeight: 24,
-    width: "100%",
-    marginBottom: 20,
-  },
-  missingItemsScroll: {
-    width: "100%",
-    maxHeight: 250,
-    marginBottom: 20,
-  },
-  missingItemCard: {
-    backgroundColor: COLORS.background,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
-  },
-  missingItemName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.textPrimary,
-    textAlign: "right",
-    marginBottom: 6,
-  },
-  missingItemDetails: {
-    flexDirection: "row-reverse",
-    justifyContent: "space-between",
-  },
-  missingItemDetail: {
-    fontSize: 14,
-    color: COLORS.muted,
-  },
-});
+    // --- Modal ---
+    modalBackdrop: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+    },
+    modalView: {
+      width: "90%",
+      maxWidth: 400,
+      maxHeight: "85%",
+      backgroundColor: theme.card,
+      borderRadius: 20,
+      padding: 24,
+      alignItems: "center",
+    },
+    modalHeader: {
+      flexDirection: "row-reverse",
+      alignItems: "center",
+      width: "100%",
+      marginBottom: 16,
+      gap: 12,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: "bold",
+      color: theme.text,
+    },
+    modalText: {
+      textAlign: "right",
+      fontSize: 16,
+      color: theme.textSecondary,
+      lineHeight: 24,
+      width: "100%",
+      marginBottom: 20,
+    },
+    missingItemsScroll: {
+      width: "100%",
+      maxHeight: 250,
+      marginBottom: 20,
+    },
+    missingItemCard: {
+      backgroundColor: theme.background,
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 10,
+    },
+    missingItemName: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.text,
+      textAlign: "right",
+      marginBottom: 6,
+    },
+    missingItemDetails: {
+      flexDirection: "row-reverse",
+      justifyContent: "space-between",
+    },
+    missingItemDetail: {
+      fontSize: 14,
+      color: theme.placeholder,
+    },
+  });
 
 interface InvoiceListProps {
   invoiceIds: string[];
@@ -2501,17 +2495,51 @@ interface InvoiceListProps {
   onInvoiceAdded: () => void;
 }
 
+const getStatusStyle = (
+  status: string,
+  theme: Theme,
+  themeName: "light" | "dark"
+) => {
+  switch (status) {
+    case "paid":
+      return {
+        color: theme.success,
+        backgroundColor:
+          themeName === "dark"
+            ? "rgba(48, 209, 88, 0.2)"
+            : "rgba(48, 209, 88, 0.1)",
+        borderColor: theme.success,
+      };
+    case "pending":
+      return {
+        color: theme.statusInProgress,
+        backgroundColor:
+          themeName === "dark"
+            ? "rgba(255, 204, 0, 0.2)"
+            : "rgba(255, 204, 0, 0.1)",
+        borderColor: theme.statusInProgress,
+      };
+    default:
+      return {
+        color: theme.textSecondary,
+        backgroundColor: theme.inputBackground,
+        borderColor: theme.border,
+      };
+  }
+};
+
 const InvoiceList: React.FC<InvoiceListProps> = ({
   invoiceIds,
   ticketId,
   subscriberId,
   onInvoiceAdded,
 }) => {
+  const { theme, themeName } = useTheme();
+  const styles = getStyles(theme, themeName);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
-
 
   useEffect(() => {
     const fetchInvoices = async () => {
@@ -2563,7 +2591,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+        <ActivityIndicator size="large" color={theme.primary} />
         <Text style={styles.loadingText}>جاري تحميل الفواتير...</Text>
       </View>
     );
@@ -2575,7 +2603,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
         <Feather
           name="alert-triangle"
           size={48}
-          color={COLORS.danger}
+          color={theme.destructive}
           style={{ marginBottom: 16 }}
         />
         <Text style={styles.errorText}>{error}</Text>
@@ -2596,7 +2624,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
       <Feather
         name="plus-circle"
         size={20}
-        color="white"
+        color={theme.white}
         style={{ marginRight: 10 }}
       />
       <Text style={styles.buttonText}>إضافة فاتورة جديدة</Text>
@@ -2609,7 +2637,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
         <Feather
           name="file-plus"
           size={64}
-          color={COLORS.muted}
+          color={theme.placeholder}
           style={{ marginBottom: 20 }}
         />
         <Text style={styles.emptyStateText}>لا توجد فواتير لهذه التذكرة.</Text>
@@ -2622,7 +2650,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: styles.container.backgroundColor }}>
+    <View style={styles.container}>
       <View style={{ paddingHorizontal: styles.contentContainer.padding }}>
         <AddInvoiceButton />
       </View>
@@ -2633,125 +2661,112 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
           paddingHorizontal: styles.contentContainer.padding,
         }}
       >
-        {invoices.map((invoice) => (
-          <View key={invoice.id} style={styles.card}>
-            <View
-              style={{
-                flexDirection: "row-reverse",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 12,
-              }}
-            >
-              <Text style={[styles.cardTitle, { marginBottom: 0, fontSize: 18 }]}>
-                فاتورة رقم: {invoice.id.substring(0, 8)}
+        {invoices.map((invoice) => {
+          const statusStyle = getStatusStyle(invoice.status, theme, themeName);
+          return (
+            <View key={invoice.id} style={styles.card}>
+              <View
+                style={{
+                  flexDirection: "row-reverse",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 12,
+                }}
+              >
+                <Text style={[styles.cardTitle, { marginBottom: 0, fontSize: 18 }]}>
+                  فاتورة رقم: {invoice.id.substring(0, 8)}
+                </Text>
+                <Text
+                  style={{
+                    fontWeight: "bold",
+                    fontSize: 14,
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: 6,
+                    overflow: "hidden",
+                    borderWidth: 1,
+                    ...statusStyle,
+                  }}
+                >
+                  {invoice.status.toUpperCase()}
+                </Text>
+              </View>
+              <Text style={styles.itemDetail}>
+                العميل: {invoice.customerName || "N/A"}
+              </Text>
+              <Text style={styles.itemDetail}>
+                تاريخ الإنشاء:{" "}
+                {new Date(invoice.createdAt).toLocaleDateString("ar-IQ")}
+              </Text>
+              <Text style={styles.itemDetail}>
+                بواسطة: {invoice.creatorName || "N/A"}
               </Text>
               <Text
                 style={{
                   ...styles.itemDetail,
-                  color:
-                    invoice.status === "paid"
-                      ? "#28A745"
-                      : invoice.status === "pending"
-                      ? "#FFC107"
-                      : COLORS.muted,
                   fontWeight: "bold",
-                  fontSize: 14,
-                  paddingHorizontal: 8,
-                  paddingVertical: 4,
-                  borderRadius: 6,
-                  backgroundColor:
-                    invoice.status === "paid"
-                      ? "rgba(40, 167, 69, 0.1)"
-                      : invoice.status === "pending"
-                      ? "rgba(255, 193, 7, 0.1)"
-                      : "rgba(108, 117, 125, 0.1)",
-                  overflow: "hidden", // For borderRadius on text background on Android
-                  borderColor:
-                    invoice.status === "paid"
-                      ? "#28A745"
-                      : invoice.status === "pending"
-                      ? "#FFC107"
-                      : COLORS.muted,
-                  borderWidth: 1,
+                  fontSize: 18,
+                  color: theme.primary,
+                  marginTop: 10,
+                  marginBottom: 8,
                 }}
               >
-                {invoice.status.toUpperCase()}
+                الإجمالي: {invoice.totalAmount.toLocaleString()} د.ع
               </Text>
-            </View>
-            <Text style={styles.itemDetail}>
-              العميل: {invoice.customerName || "N/A"}
-            </Text>
-            <Text style={styles.itemDetail}>
-              تاريخ الإنشاء:{" "}
-              {new Date(invoice.createdAt).toLocaleDateString("ar-IQ")}
-            </Text>
-            <Text style={styles.itemDetail}>
-              بواسطة: {invoice.creatorName || "N/A"}
-            </Text>
-            <Text
-              style={{
-                ...styles.itemDetail,
-                fontWeight: "bold",
-                fontSize: 18,
-                color: COLORS.primary,
-                marginTop: 10,
-                marginBottom: 8,
-              }}
-            >
-              الإجمالي: {invoice.totalAmount.toLocaleString()} د.ع
-            </Text>
 
-            <Text
-              style={[styles.label, { marginTop: 16, marginBottom: 8, fontSize: 16 }]}
-            >
-              العناصر:
-            </Text>
-            {invoice.items.map((item, index) => (
-              <View key={item.id || index} style={styles.itemContainer}>
-                <Text style={styles.itemDescription}>{item.description}</Text>
-                <View
-                  style={{
-                    flexDirection: "row-reverse",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <Text style={styles.itemDetail}>الكمية: {item.quantity}</Text>
-                  <Text style={styles.itemDetail}>
-                    سعر الوحدة: {item.unitPrice.toLocaleString()} د.ع
+              <Text
+                style={[styles.label, { marginTop: 16, marginBottom: 8, fontSize: 16 }]}
+              >
+                العناصر:
+              </Text>
+              {invoice.items.map((item, index) => (
+                <View key={item.id || index} style={styles.itemContainer}>
+                  <Text style={styles.itemDescription}>{item.description}</Text>
+                  <View
+                    style={{
+                      flexDirection: "row-reverse",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <Text style={styles.itemDetail}>الكمية: {item.quantity}</Text>
+                    <Text style={styles.itemDetail}>
+                      سعر الوحدة: {item.unitPrice.toLocaleString()} د.ع
+                    </Text>
+                  </View>
+                  <Text
+                    style={[styles.itemDetail, { fontWeight: "bold", textAlign: "left" }]}
+                  >
+                    إجمالي العنصر: {item.totalPrice.toLocaleString()} د.ع
                   </Text>
                 </View>
-                <Text
-                  style={[styles.itemDetail, { fontWeight: "bold", textAlign: "left" }]}
-                >
-                  إجمالي العنصر: {item.totalPrice.toLocaleString()} د.ع
-                </Text>
-              </View>
-            ))}
-            {invoice.notes && (
-              <>
-                <Text
-                  style={[
-                    styles.label,
-                    { marginTop: 16, marginBottom: 4, fontSize: 16 },
-                  ]}
-                >
-                  ملاحظات:
-                </Text>
-                <Text
-                  style={[
-                    styles.itemDetail,
-                    { backgroundColor: "#F8F9FA", padding: 10, borderRadius: 6 },
-                  ]}
-                >
-                  {invoice.notes}
-                </Text>
-              </>
-            )}
-
-
-          </View>
-        ))}
+              ))}
+              {invoice.notes && (
+                <>
+                  <Text
+                    style={[
+                      styles.label,
+                      { marginTop: 16, marginBottom: 4, fontSize: 16 },
+                    ]}
+                  >
+                    ملاحظات:
+                  </Text>
+                  <Text
+                    style={[
+                      styles.itemDetail,
+                      {
+                        backgroundColor: theme.inputBackground,
+                        padding: 10,
+                        borderRadius: 6,
+                      },
+                    ]}
+                  >
+                    {invoice.notes}
+                  </Text>
+                </>
+              )}
+            </View>
+          );
+        })}
       </ScrollView>
     </View>
   );

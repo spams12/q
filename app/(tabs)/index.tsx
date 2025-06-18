@@ -74,6 +74,10 @@ const TasksScreen: React.FC = () => {
 
   // Optimized data fetching with caching
   const fetchTabData = useCallback(async (tab: TabKey, forceRefresh = false) => {
+    if (!userUid) {
+      return; // Don't fetch if user is not identified
+    }
+
     // Check cache first
     const cached = dataCache.current.get(tab);
     const now = Date.now();
@@ -115,6 +119,8 @@ const TasksScreen: React.FC = () => {
 
   // Initial data loading with smart preloading
   useEffect(() => {
+    if (!userUid) return; // Wait for userUid to be available
+
     const loadInitialData = async () => {
       // Load active tab immediately
       await fetchTabData('Open');
@@ -132,7 +138,7 @@ const TasksScreen: React.FC = () => {
     };
     
     loadInitialData();
-  }, [fetchTabData]);
+  }, [userUid, fetchTabData]);
 
   // Optimized tab switching with haptic feedback
   const handleTabPress = useCallback(async (tab: TabKey) => {

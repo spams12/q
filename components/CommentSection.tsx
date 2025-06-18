@@ -20,6 +20,8 @@ import {
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
+
+import { useTheme } from '../context/ThemeContext';
 import { storage } from '../lib/firebase';
 import { Comment, User } from '../lib/types';
 
@@ -82,6 +84,8 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [allImages, setAllImages] = useState<string[]>([]);
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
 
   const getUser = (userId: string) => users.find(u => u.id === userId);
 
@@ -255,7 +259,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
       <View style={styles.commentsList}>
         {filteredAndSortedComments.map(comment => {
           const user = getUser(comment.userId);
-          const userName = user?.displayName || comment.userName || 'مستخدم غير معروف';
+          const userName = user?.name || comment.userName || 'مستخدم غير معروف';
           const isCurrentUser = comment.userId === currentUserId;
           const commentDate = getCommentDate(comment.createdAt);
 
@@ -345,7 +349,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                           ) : (
                             <View style={styles.fileAttachment}>
                               <View style={styles.fileIcon}>
-                                <Ionicons name="document-text-outline" size={24} color="#4A90E2" />
+                                <Ionicons name="document-text-outline" size={24} color={theme.primary} />
                               </View>
                               <View style={styles.fileInfo}>
                                 <Text style={styles.fileName} numberOfLines={1}>
@@ -357,7 +361,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                                   </Text>
                                 )}
                               </View>
-                              <Ionicons name="download-outline" size={20} color="#4A90E2" />
+                              <Ionicons name="download-outline" size={20} color={theme.primary} />
                             </View>
                           )}
                         </TouchableOpacity>
@@ -421,7 +425,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             value={newComment}
             onChangeText={setNewComment}
             placeholder="اكتب رسالتك هنا..."
-            placeholderTextColor="#999"
+            placeholderTextColor={theme.placeholder}
             multiline
             textAlignVertical="center"
           />
@@ -434,7 +438,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             <Ionicons 
               name="attach" 
               size={24} 
-              color={isDisabled ? '#ccc' : '#4A90E2'} 
+              color={isDisabled ? theme.placeholder : theme.primary}
             />
           </TouchableOpacity>
           
@@ -449,7 +453,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             <Ionicons 
               name="send" 
               size={20} 
-              color={isDisabled ? '#ccc' : '#fff'} 
+              color={isDisabled ? theme.placeholder : theme.white}
             />
           </TouchableOpacity>
         </View>
@@ -458,9 +462,9 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
   container: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.background,
   },
   commentsList: {
     padding: 16,
@@ -491,10 +495,10 @@ const styles = StyleSheet.create({
   avatarFallback: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#4A90E2',
+    backgroundColor: theme.primary,
   },
   avatarFallbackText: {
-    color: '#fff',
+    color: theme.white,
     fontWeight: '600',
     fontSize: 12,
   },
@@ -509,38 +513,38 @@ const styles = StyleSheet.create({
     left: 8,
     borderRightWidth: 8,
     borderBottomWidth: 8,
-    borderRightColor: '#ffffff',
+    borderRightColor: theme.card,
     borderBottomColor: 'transparent',
   },
   avatarTailRight: {
     right: 8,
     borderLeftWidth: 8,
     borderBottomWidth: 8,
-    borderLeftColor: '#E3F2FD',
+    borderLeftColor: theme.blueTint,
     borderBottomColor: 'transparent',
   },
   commentBubble: {
     padding: 12,
     borderRadius: 18,
     maxWidth: '100%',
-    shadowColor: '#000',
+    shadowColor: theme.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
   },
   currentUserBubble: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: theme.blueTint,
     borderBottomRightRadius: 4,
   },
   otherUserBubble: {
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.card,
     borderBottomLeftRadius: 4,
   },
   userName: {
     fontWeight: '600',
     fontSize: 12,
-    color: '#4A90E2',
+    color: theme.primary,
     marginBottom: 4,
   },
   messageText: {
@@ -548,10 +552,10 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   currentUserText: {
-    color: '#1565C0',
+    color: theme.primary,
   },
   otherUserText: {
-    color: '#212121',
+    color: theme.text,
   },
   attachmentsContainer: {
     marginTop: 8,
@@ -568,7 +572,7 @@ const styles = StyleSheet.create({
     width: screenWidth * 0.6,
     height: 180,
     borderRadius: 12,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.inputBackground,
   },
   imageOverlay: {
     position: 'absolute',
@@ -581,11 +585,11 @@ const styles = StyleSheet.create({
   fileAttachment: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.inputBackground,
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: theme.border,
   },
   fileIcon: {
     marginRight: 12,
@@ -596,12 +600,12 @@ const styles = StyleSheet.create({
   fileName: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#212121',
+    color: theme.text,
     marginBottom: 2,
   },
   fileSize: {
     fontSize: 12,
-    color: '#757575',
+    color: theme.textSecondary,
   },
   timestamp: {
     fontSize: 11,
@@ -609,15 +613,15 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   currentUserTimestamp: {
-    color: '#1565C0',
+    color: theme.primary,
   },
   otherUserTimestamp: {
-    color: '#757575',
+    color: theme.textSecondary,
   },
   inputSection: {
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.card,
     borderTopWidth: 1,
-    borderTopColor: '#e9ecef',
+    borderTopColor: theme.border,
   },
   attachmentPreviewContainer: {
     paddingHorizontal: 16,
@@ -626,7 +630,7 @@ const styles = StyleSheet.create({
   attachmentPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4A90E2',
+    backgroundColor: theme.primary,
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -634,7 +638,7 @@ const styles = StyleSheet.create({
     maxWidth: 200,
   },
   attachmentText: {
-    color: '#fff',
+    color: theme.white,
     fontSize: 12,
     marginHorizontal: 6,
     flex: 1,
@@ -650,22 +654,22 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.inputBackground,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
-    color: '#212121',
+    color: theme.text,
     maxHeight: 100,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: theme.border,
   },
   iconButton: {
     padding: 8,
     borderRadius: 20,
   },
   sendButton: {
-    backgroundColor: '#4A90E2',
+    backgroundColor: theme.primary,
     borderRadius: 20,
     width: 40,
     height: 40,
@@ -673,13 +677,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   activeSendButton: {
-    backgroundColor: '#1565C0',
+    backgroundColor: theme.primary,
   },
   disabledButton: {
     opacity: 0.5,
   },
   disabledSendButton: {
-    backgroundColor: '#e9ecef',
+    backgroundColor: theme.border,
   },
   // Modal styles
   modalOverlay: {
