@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { useTheme } from "../context/ThemeContext";
@@ -105,6 +106,7 @@ export default function CreateServiceRequestForm({
   const { userName, userUid, currentUserTeamId } = usePermissions()
   const { theme: colors } = useTheme();
   const styles = getStyles(colors);
+
 
   const FormItem = ({ children, style }: { children: React.ReactNode, style?: object }) => <View style={[styles.formItem, style]}>{children}</View>;
   const FormLabel = ({ children }: { children: string }) => <Text style={styles.label}>{children}</Text>;
@@ -311,11 +313,13 @@ export default function CreateServiceRequestForm({
   };
 
   return (
-    <ScrollView 
-      style={styles.container} 
-      contentContainerStyle={styles.contentContainer} 
+    <KeyboardAwareScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
       keyboardShouldPersistTaps="handled"
       nestedScrollEnabled={true}
+      extraScrollHeight={50}
+      enableOnAndroid={true}
     >
         <Controller
             control={control}
@@ -344,7 +348,7 @@ export default function CreateServiceRequestForm({
                           placeholder="أدخل اسم العميل" 
                           value={field.value || ''} 
                           onChangeText={field.onChange} 
-                          onBlur={field.onBlur} 
+                          onBlur={field.onBlur}
                           placeholderTextColor={colors.placeholder}
                           keyboardType="default"
                           returnKeyType="next"
@@ -360,8 +364,8 @@ export default function CreateServiceRequestForm({
                           placeholder="رقم الهاتف" 
                           value={field.value || ''} 
                           onChangeText={field.onChange} 
-                          onBlur={field.onBlur} 
-                          keyboardType="phone-pad" 
+                          onBlur={field.onBlur}
+                          keyboardType="phone-pad"
                           placeholderTextColor={colors.placeholder}
                           returnKeyType="next"
                         />
@@ -376,7 +380,7 @@ export default function CreateServiceRequestForm({
                           placeholder="أدخل العنوان التفصيلي" 
                           value={field.value || ''} 
                           onChangeText={field.onChange} 
-                          onBlur={field.onBlur} 
+                          onBlur={field.onBlur}
                           placeholderTextColor={colors.placeholder}
                           returnKeyType="next"
                         />
@@ -395,7 +399,7 @@ export default function CreateServiceRequestForm({
                       placeholder="أدخل عنوان التكت" 
                       value={field.value || ''} 
                       onChangeText={field.onChange} 
-                      onBlur={field.onBlur} 
+                      onBlur={field.onBlur}
                       placeholderTextColor={colors.placeholder}
                       returnKeyType="next"
                     />
@@ -410,11 +414,11 @@ export default function CreateServiceRequestForm({
                       placeholder="أدخل تفاصيل التكت" 
                       value={field.value || ''} 
                       onChangeText={field.onChange} 
-                      onBlur={field.onBlur} 
-                      multiline 
+                      onBlur={field.onBlur}
+                      multiline
                       placeholderTextColor={colors.placeholder}
                       returnKeyType="default"
-                    />
+                     />
                     <FormMessage message={errors.description?.message} />
                 </FormItem>
             )} />
@@ -487,7 +491,7 @@ export default function CreateServiceRequestForm({
                               style={styles.input} 
                               placeholder="أدخل اسم المشترك" 
                               value={subscriber.name} 
-                              onChangeText={(val) => updateSubscriber(subscriber.id, 'name', val)} 
+                              onChangeText={(val) => updateSubscriber(subscriber.id, 'name', val)}
                               placeholderTextColor={colors.placeholder}
                               keyboardType="default"
                               returnKeyType="next"
@@ -500,8 +504,8 @@ export default function CreateServiceRequestForm({
                               style={styles.input} 
                               placeholder="أدخل رقم الهاتف" 
                               value={subscriber.phone} 
-                              onChangeText={(val) => updateSubscriber(subscriber.id, 'phone', val)} 
-                              keyboardType="phone-pad" 
+                              onChangeText={(val) => updateSubscriber(subscriber.id, 'phone', val)}
+                              keyboardType="phone-pad"
                               placeholderTextColor={colors.placeholder}
                               returnKeyType="next"
                               blurOnSubmit={false}
@@ -542,8 +546,8 @@ export default function CreateServiceRequestForm({
                               style={styles.input} 
                               placeholder="السعر" 
                               value={subscriber.price} 
-                              onChangeText={(val) => updateSubscriber(subscriber.id, 'price', val)} 
-                              keyboardType="numeric" 
+                              onChangeText={(val) => updateSubscriber(subscriber.id, 'price', val)}
+                              keyboardType="numeric"
                               placeholderTextColor={colors.placeholder}
                               returnKeyType="done"
                               blurOnSubmit={false}
@@ -567,7 +571,7 @@ export default function CreateServiceRequestForm({
             </TouchableOpacity>
         </View>
 
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 const FONT_FAMILY = 'Cairo';

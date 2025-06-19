@@ -39,7 +39,15 @@ function RootLayoutNav() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="notifications" />
+        <Stack.Screen name="tasks/[id]" options={{ headerShown: false }}/>
+        <Stack.Screen name="create-request"  options={{
+            title: 'إنشاء تكت',
+            headerTitleAlign: 'center',
+          }} />
+        <Stack.Screen name="notifications" options={{
+            title: 'الاشعارات',
+            headerTitleAlign: 'center',
+          }}/>
         <Stack.Screen name="+not-found" />
       </Stack>
     </View>

@@ -257,7 +257,16 @@ const CommentSection: React.FC<CommentSectionProps> = ({
       </Modal>
 
       <View style={styles.commentsList}>
-        {filteredAndSortedComments.map(comment => {
+        {filteredAndSortedComments.length === 0 ? (
+          <View style={styles.emptyCommentsContainer}>
+            <Ionicons name="chatbubbles-outline" size={48} color={theme.textSecondary} style={{ opacity: 0.5 }} />
+            <Text style={styles.emptyCommentsText}>لا توجد تعليقات بعد</Text>
+            <Text style={styles.emptyCommentsSubText}>
+              {isDisabled ? 'المحادثة مغلقة.' : 'كن أول من يضيف تعليقًا!'}
+            </Text>
+          </View>
+        ) : (
+          filteredAndSortedComments.map(comment => {
           const user = getUser(comment.userId);
           const userName = user?.name || comment.userName || 'مستخدم غير معروف';
           const isCurrentUser = comment.userId === currentUserId;
@@ -387,7 +396,8 @@ const CommentSection: React.FC<CommentSectionProps> = ({
               )}
             </View>
           );
-        })}
+          })
+        )}
       </View>
 
       {/* Input section */}
@@ -464,9 +474,11 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
+    flex: 1,
     backgroundColor: theme.background,
   },
   commentsList: {
+    flexGrow: 1,
     padding: 16,
     paddingBottom: 20,
   },
@@ -684,6 +696,26 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   disabledSendButton: {
     backgroundColor: theme.border,
+  },
+  emptyCommentsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    minHeight: 150,
+  },
+  emptyCommentsText: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.textSecondary,
+    textAlign: 'center',
+  },
+  emptyCommentsSubText: {
+    marginTop: 4,
+    fontSize: 14,
+    color: theme.placeholder,
+    textAlign: 'center',
   },
   // Modal styles
   modalOverlay: {

@@ -49,7 +49,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="my-requests"
         options={{
-          title: 'التكتات التي انشئتها',
+          title: 'التذاكر',
           tabBarIcon: ({ color, size }) => (
             <FontAwesome name="list-alt" size={size} color={color} />
           ),

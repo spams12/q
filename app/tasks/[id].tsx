@@ -3,7 +3,7 @@ import { usePermissions } from '@/context/PermissionsContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { arrayUnion, collection, doc, getDocs, onSnapshot, runTransaction, Timestamp } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { Alert, Animated, Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -31,6 +31,7 @@ type MaintenanceItem = InvoiceItem & {
 
 const TicketDetailPage = () => {
   const { id } = useLocalSearchParams();
+  const router = useRouter();
   const { user } = useFirebaseAuth();
   const { theme, themeName } = useTheme();
   const [serviceRequest, setServiceRequest] = useState<ServiceRequest | null>(null);
@@ -459,17 +460,20 @@ const TicketDetailPage = () => {
             <View style={styles.detailsContainer}>
               <ThemedText style={styles.detailsTitle}>الوصف</ThemedText>
               <ThemedText style={styles.detailText}>{serviceRequest.description}</ThemedText>
-                  <CommentSection
-              comments={serviceRequest.comments || []}
-              users={users}
-              currentUserId={user?.uid || ''}
-              ticketStatus={serviceRequest.status}
-              userHasAccepted={currentUserResponse === 'accepted'}
-              onAddComment={handleAddComment}
-              ticketId={id as string}
-            />
+            
             </View>
-        
+            <View style={styles.detailsContainer}>
+              <ThemedText style={styles.detailsTitle}>التعليقات</ThemedText>
+              <CommentSection
+                comments={serviceRequest.comments || []}
+                users={users}
+                currentUserId={user?.uid || ''}
+                ticketStatus={serviceRequest.status}
+                userHasAccepted={currentUserResponse === 'accepted'}
+                onAddComment={handleAddComment}
+                ticketId={id as string}
+              />
+            </View>
           </>
         );
       case 1:
@@ -492,80 +496,87 @@ const TicketDetailPage = () => {
 
   return (
     <ThemedView style={styles.container}>
-      {/* Header with gradient */}
-      <LinearGradient
-        colors={[theme.gradientStart, theme.gradientEnd]}
-        style={styles.headerGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+      {/* Content */}
+      <ScrollView
+        style={styles.contentScrollView}
+        showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[1]}
       >
-        <View style={styles.headerContent}>
-          <View style={styles.headerTop}>
-            <ThemedText style={styles.headerTitle}>{serviceRequest.title}</ThemedText>
-            <ThemedText style={styles.headerSubtitle}>تذكرة #{id}</ThemedText>
+        {/* Header with gradient */}
+        <LinearGradient
+          colors={[theme.gradientStart, theme.gradientEnd]}
+          style={styles.headerGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <Pressable onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back-circle-sharp" size={32} color={theme.white} />
+          </Pressable>
+          <View style={styles.headerContent}>
+            <View style={styles.headerTop}>
+              <ThemedText style={styles.headerTitle}>{serviceRequest.title}</ThemedText>
+              <ThemedText style={styles.headerSubtitle}>تذكرة #{id}</ThemedText>
+            </View>
+            <View style={styles.badgeContainer}>
+              <View style={[styles.badge, getStatusStyle(serviceRequest.status, theme)]}>
+                <ThemedText style={styles.badgeText}>{serviceRequest.status}</ThemedText>
+              </View>
+              <View style={[styles.badge, getPriorityStyle(serviceRequest.priority, theme)]}>
+                <ThemedText style={styles.badgeText}>{serviceRequest.priority}</ThemedText>
+              </View>
+            </View>
           </View>
-          <View style={styles.badgeContainer}>
-            <View style={[styles.badge, getStatusStyle(serviceRequest.status, theme)]}>
-              <ThemedText style={styles.badgeText}>{serviceRequest.status}</ThemedText>
-            </View>
-            <View style={[styles.badge, getPriorityStyle(serviceRequest.priority, theme)]}>
-              <ThemedText style={styles.badgeText}>{serviceRequest.priority}</ThemedText>
-            </View>
+        </LinearGradient>
+
+        {/* Modern Tab Bar */}
+        <View style={styles.tabBarContainer}>
+          <View style={styles.tabBar}>
+            {/* Animated indicator - with pointerEvents="none" to prevent touch blocking */}
+            <Animated.View
+              style={[
+                styles.tabIndicator,
+                {
+                  transform: [{
+                    translateX: slideAnim.interpolate({
+                      inputRange: [0, 1, 2],
+                      outputRange: [0, width / tabs.length, (width / tabs.length) * 2],
+                      extrapolate: 'clamp',
+                    })
+                  }],
+                  width: width / tabs.length - 20,
+                }
+              ]}
+              pointerEvents="none" // Prevents blocking touch events
+            />
+            
+            {tabs.map((tab, index) => (
+              <Pressable
+                key={tab.key}
+                style={styles.tab}
+                onPressIn={() => {
+                  console.log(`Tab ${index} pressed: ${tab.title}`);
+                  switchTab(index);
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
+              >
+                <Ionicons
+                  name={tab.icon as any}
+                  size={20}
+                  color={activeTab === index ? theme.primary : theme.textSecondary}
+                />
+                <ThemedText
+                  style={[
+                    styles.tabText,
+                    activeTab === index && styles.activeTabText
+                  ]}
+                >
+                  {tab.title}
+                </ThemedText>
+              </Pressable>
+            ))}
           </View>
         </View>
-      </LinearGradient>
 
-      {/* Modern Tab Bar */}
-    <View style={styles.tabBarContainer}>
-      <View style={styles.tabBar}>
-        {/* Animated indicator - with pointerEvents="none" to prevent touch blocking */}
-        <Animated.View
-          style={[
-            styles.tabIndicator,
-            {
-              transform: [{
-                translateX: slideAnim.interpolate({
-                  inputRange: [0, 1, 2],
-                  outputRange: [0, width / tabs.length, (width / tabs.length) * 2],
-                  extrapolate: 'clamp',
-                })
-              }],
-              width: width / tabs.length - 20,
-            }
-          ]}
-          pointerEvents="none" // Prevents blocking touch events
-        />
-        
-        {tabs.map((tab, index) => (
-          <Pressable
-            key={tab.key}
-            style={styles.tab}
-            onPressIn={() => {
-              console.log(`Tab ${index} pressed: ${tab.title}`);
-              switchTab(index);
-            }}
-            hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
-          >
-            <Ionicons
-              name={tab.icon as any}
-              size={20}
-              color={activeTab === index ? theme.primary : theme.textSecondary}
-            />
-            <ThemedText
-              style={[
-                styles.tabText,
-                activeTab === index && styles.activeTabText
-              ]}
-            >
-              {tab.title}
-            </ThemedText>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-
-      {/* Content */}
-      <ScrollView style={styles.contentScrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.contentContainer}>
           {renderTabContent()}
         </View>
@@ -642,6 +653,12 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       flex: 1,
       backgroundColor: theme.background,
     },
+    backButton: {
+      position: 'absolute',
+      top: 50,
+      left: 15,
+      zIndex: 10,
+    },
     loadingContainer: {
       flex: 1,
       justifyContent: 'center',
@@ -650,7 +667,7 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
     loadingText: {
       fontSize: 18,
       color: theme.textSecondary,
-      fontFamily: 'System',
+      fontFamily: 'Cairo',
     },
     errorContainer: {
       flex: 1,
@@ -663,7 +680,7 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       color: theme.textSecondary,
       textAlign: 'center',
       marginTop: 16,
-      fontFamily: 'System',
+      fontFamily: 'Cairo',
     },
     headerGradient: {
       paddingTop: 60,
@@ -682,14 +699,15 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       fontWeight: 'bold',
       color: theme.white,
       textAlign: 'right',
-      fontFamily: 'System',
+      fontFamily: 'Cairo',
+      padding: 10,
     },
     headerSubtitle: {
       fontSize: 16,
       color: theme.white,
       opacity: 0.8,
       marginTop: 4,
-      fontFamily: 'System',
+      fontFamily: 'Cairo',
     },
     badgeContainer: {
       flexDirection: 'row',
@@ -712,7 +730,7 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       color: theme.white,
       fontWeight: '600',
       fontSize: 12,
-      fontFamily: 'System',
+      fontFamily: 'Cairo',
     },
     tabBarContainer: {
       backgroundColor: theme.card,
@@ -749,7 +767,7 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       color: theme.textSecondary,
       marginTop: 4,
       textAlign: 'center',
-      fontFamily: 'System',
+      fontFamily: 'Cairo',
     },
     activeTabText: {
       color: theme.primary,
@@ -797,14 +815,14 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       color: theme.textSecondary,
       fontSize: 16,
       marginTop: 20,
-      fontFamily: 'System',
+      fontFamily: 'Cairo',
     },
     subscribersText: {
       textAlign: 'center',
       color: theme.textSecondary,
       fontSize: 16,
       marginTop: 20,
-      fontFamily: 'System',
+      fontFamily: 'Cairo',
     },
     actionsContainer: {
       position: 'absolute',
@@ -842,7 +860,7 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       fontWeight: 'bold',
       fontSize: 16,
       marginLeft: 8,
-      fontFamily: 'System',
+      fontFamily: 'Cairo',
     },
     acceptButton: {
       backgroundColor: theme.success,

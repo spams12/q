@@ -6,8 +6,8 @@ import { StyleSheet } from 'react-native';
 export default function NotificationsScreen() {
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title">Notifications</ThemedText>
-      <ThemedText>This is the notifications screen.</ThemedText>
+      <ThemedText type="title">الاشعارات</ThemedText>
+      <ThemedText>هذه هي شاشة الإشعارات.</ThemedText>
     </ThemedView>
   );
 }

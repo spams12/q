@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons"; // Using Feather icons
-import { Picker } from "@react-native-picker/picker";
 import Checkbox from "expo-checkbox";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -32,6 +31,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import CustomDropdown from "./ui/CustomDropdown";
 
 interface PackageType {
   id: string;
@@ -1434,78 +1434,42 @@ function InvoiceForm({
   }) => {
     if (!invoiceSettings) return null;
 
-    // A common wrapper for Pickers to give them a consistent, modern look
-    const ModernPicker: React.FC<{
-      selectedValue: any;
-      onValueChange: (value: any) => void;
-      children: React.ReactNode;
-      placeholder: string;
-    }> = ({ selectedValue, onValueChange, children, placeholder }) => (
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={selectedValue}
-          onValueChange={onValueChange}
-          style={styles.picker}
-          itemStyle={styles.pickerItem}
-        >
-          <Picker.Item
-            label={placeholder}
-            value={undefined}
-            color={theme.placeholder}
-          />
-          {children}
-        </Picker>
-        <Feather
-          name="chevron-down"
-          size={20}
-          color={theme.placeholder}
-          style={styles.pickerIcon}
-        />
-      </View>
-    );
-
     switch (currentItem.type) {
       case "newCustomerInstallation":
         return (
           <>
             <Text style={styles.label}>نوع الباقة</Text>
-            <ModernPicker
+            <CustomDropdown
               selectedValue={currentItem.packageType}
               onValueChange={(itemValue) => handlePackageTypeChange(itemValue)}
               placeholder="اختر نوع الباقة..."
-            >
-              {invoiceSettings.packageTypes
+              items={invoiceSettings.packageTypes
                 .filter((pt: PackageType) => pt.isActive)
-                .map((pt: PackageType) => (
-                  <Picker.Item
-                    key={pt.id}
-                    label={`${
-                      pt.name
-                    } (${pt.price.toLocaleString()} د.ع)`}
-                    value={pt.name}
-                  />
-                ))}
-            </ModernPicker>
+                .map((pt: PackageType) => ({
+                  label: `${pt.name} (${pt.price.toLocaleString()} د.ع)`,
+                  value: pt.name,
+                }))}
+            />
 
             <Text style={styles.label}>طول الكيبل المستخدم</Text>
-            <ModernPicker
+            <CustomDropdown
               selectedValue={currentItem.cableLength?.toString()}
               onValueChange={handleCableLengthChange}
               placeholder="اختر طول الكيبل..."
-            >
-              {invoiceSettings.cableLengths
-                .filter((cl: CableLength) => cl.isActive && !cl.isCustom)
-                .map((cl: CableLength) => (
-                  <Picker.Item
-                    key={cl.id}
-                    label={`${cl.length} متر`}
-                    value={cl.length.toString()}
-                  />
-                ))}
-              {invoiceSettings.cableLengths.some(
-                (cl: CableLength) => cl.isCustom && cl.isActive
-              ) && <Picker.Item label="طول مخصص" value="custom" />}
-            </ModernPicker>
+              items={[
+                ...invoiceSettings.cableLengths
+                  .filter((cl: CableLength) => cl.isActive && !cl.isCustom)
+                  .map((cl: CableLength) => ({
+                    label: `${cl.length} متر`,
+                    value: cl.length.toString(),
+                  })),
+                ...(invoiceSettings.cableLengths.some(
+                  (cl: CableLength) => cl.isCustom && cl.isActive
+                )
+                  ? [{ label: "طول مخصص", value: "custom" }]
+                  : []),
+              ]}
+            />
             {currentItem.cableLength === "custom" && (
               <TextInput
                 style={styles.input}
@@ -1518,17 +1482,17 @@ function InvoiceForm({
             )}
 
             <Text style={styles.label}>جهاز الاستقبال</Text>
-            <ModernPicker
+            <CustomDropdown
               selectedValue={currentItem.deviceModel}
               onValueChange={handleDeviceModelChange}
               placeholder="اختر نوع الجهاز..."
-            >
-              {invoiceSettings.deviceModels
+              items={invoiceSettings.deviceModels
                 .filter((dm: DeviceModel) => dm.isActive)
-                .map((dm: DeviceModel) => (
-                  <Picker.Item key={dm.id} label={dm.name} value={dm.name} />
-                ))}
-            </ModernPicker>
+                .map((dm: DeviceModel) => ({
+                  label: dm.name,
+                  value: dm.name,
+                }))}
+            />
 
             <Text style={styles.label}>المواد المستخدمة</Text>
             <View style={styles.checkboxGroupContainer}>
@@ -1591,39 +1555,40 @@ function InvoiceForm({
         return (
           <>
             <Text style={styles.label}>نوع الصيانة</Text>
-            <ModernPicker
+            <CustomDropdown
               selectedValue={currentItem.maintenanceType}
               onValueChange={handleMaintenanceTypeChange}
               placeholder="اختر نوع الصيانة..."
-            >
-              <Picker.Item label="استبدال كابل" value="cableReplacement" />
-              <Picker.Item label="استبدال كونيكتر" value="connectorReplacement" />
-              <Picker.Item label="استبدال جهاز" value="deviceReplacement" />
-            </ModernPicker>
+              items={[
+                { label: "استبدال كابل", value: "cableReplacement" },
+                { label: "استبدال كونيكتر", value: "connectorReplacement" },
+                { label: "استبدال جهاز", value: "deviceReplacement" },
+              ]}
+            />
 
             {currentItem.maintenanceType === "cableReplacement" && (
               <>
                 <Text style={styles.label}>طول الكيبل</Text>
-                <ModernPicker
+                <CustomDropdown
                   selectedValue={currentItem.cableLength?.toString()}
                   onValueChange={handleCableLengthChange}
                   placeholder="اختر طول الكيبل..."
-                >
-                  {invoiceSettings.cableLengths
-                    .filter((cl: CableLength) => cl.isActive && !cl.isCustom)
-                    .map((cl: CableLength) => (
-                      <Picker.Item
-                        key={cl.id}
-                        label={`${
+                  items={[
+                    ...invoiceSettings.cableLengths
+                      .filter((cl: CableLength) => cl.isActive && !cl.isCustom)
+                      .map((cl: CableLength) => ({
+                        label: `${
                           cl.length
-                        } متر (${cl.price.toLocaleString()} د.ع)`}
-                        value={cl.length.toString()}
-                      />
-                    ))}
-                  {invoiceSettings.cableLengths.some(
-                    (cl: CableLength) => cl.isCustom && cl.isActive
-                  ) && <Picker.Item label="طول مخصص" value="custom" />}
-                </ModernPicker>
+                        } متر (${cl.price.toLocaleString()} د.ع)`,
+                        value: cl.length.toString(),
+                      })),
+                    ...(invoiceSettings.cableLengths.some(
+                      (cl: CableLength) => cl.isCustom && cl.isActive
+                    )
+                      ? [{ label: "طول مخصص", value: "custom" }]
+                      : []),
+                  ]}
+                />
                 {currentItem.cableLength === "custom" && (
                   <TextInput
                     style={styles.input}
@@ -1675,23 +1640,17 @@ function InvoiceForm({
             {currentItem.maintenanceType === "deviceReplacement" && (
               <>
                 <Text style={styles.label}>نوع الجهاز</Text>
-                <ModernPicker
+                <CustomDropdown
                   selectedValue={currentItem.deviceModel}
                   onValueChange={handleDeviceModelChange}
                   placeholder="اختر نوع الجهاز..."
-                >
-                  {invoiceSettings.deviceModels
+                  items={invoiceSettings.deviceModels
                     .filter((dm: DeviceModel) => dm.isActive)
-                    .map((dm: DeviceModel) => (
-                      <Picker.Item
-                        key={dm.id}
-                        label={`${
-                          dm.name
-                        } (${dm.price.toLocaleString()} د.ع)`}
-                        value={dm.name}
-                      />
-                    ))}
-                </ModernPicker>
+                    .map((dm: DeviceModel) => ({
+                      label: `${dm.name} (${dm.price.toLocaleString()} د.ع)`,
+                      value: dm.name,
+                    }))}
+                />
               </>
             )}
 
@@ -1731,23 +1690,17 @@ function InvoiceForm({
         return (
           <>
             <Text style={styles.label}>نوع الاشتراك</Text>
-            <ModernPicker
+            <CustomDropdown
               selectedValue={currentItem.packageType}
               onValueChange={handlePackageTypeChange}
               placeholder="اختر نوع الاشتراك..."
-            >
-              {invoiceSettings.packageTypes
+              items={invoiceSettings.packageTypes
                 .filter((pt: PackageType) => pt.isActive)
-                .map((pt: PackageType) => (
-                  <Picker.Item
-                    key={pt.id}
-                    label={`${
-                      pt.name
-                    } (${pt.price.toLocaleString()} د.ع)`}
-                    value={pt.name}
-                  />
-                ))}
-            </ModernPicker>
+                .map((pt: PackageType) => ({
+                  label: `${pt.name} (${pt.price.toLocaleString()} د.ع)`,
+                  value: pt.name,
+                }))}
+            />
           </>
         );
       case "transportationFee":
@@ -1935,35 +1888,19 @@ function InvoiceForm({
               </Pressable>
             </View>
             <Text style={styles.label}>نوع العنصر</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={currentItem.type}
-                onValueChange={(itemValue) => handleItemTypeChange(itemValue)}
-                style={styles.picker}
-                itemStyle={styles.pickerItem}
-              >
-                <Picker.Item
-                  label="اختر نوع العنصر..."
-                  value={undefined}
-                  color={theme.placeholder}
-                />
-                <Picker.Item
-                  label="تنصيب مشترك جديد"
-                  value="newCustomerInstallation"
-                />
-                <Picker.Item label="صيانة مشترك" value="maintenance" />
-                <Picker.Item label="نقليات" value="transportationFee" />
-                <Picker.Item label="صرفيات" value="expenseReimbursement" />
-                <Picker.Item label="تجديد اشتراك" value="subscriptionRenewal" />
-                <Picker.Item label="عنصر مخصص" value="customItem" />
-              </Picker>
-              <Feather
-                name="chevron-down"
-                size={20}
-                color={theme.placeholder}
-                style={styles.pickerIcon}
-              />
-            </View>
+            <CustomDropdown
+              selectedValue={currentItem.type}
+              onValueChange={(itemValue) => handleItemTypeChange(itemValue)}
+              placeholder="اختر نوع العنصر..."
+              items={[
+                { label: "تنصيب مشترك جديد", value: "newCustomerInstallation" },
+                { label: "صيانة مشترك", value: "maintenance" },
+                { label: "نقليات", value: "transportationFee" },
+                { label: "صرفيات", value: "expenseReimbursement" },
+                { label: "تجديد اشتراك", value: "subscriptionRenewal" },
+                { label: "عنصر مخصص", value: "customItem" },
+              ]}
+            />
 
             <RenderItemSpecificFields
               currentItem={currentItem}

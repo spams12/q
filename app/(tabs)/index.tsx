@@ -27,6 +27,197 @@ interface LoadingStates {
   Done: boolean;
 }
 
+// Extracted Components
+
+interface TabButtonProps {
+  tabKey: TabKey;
+  label: string;
+  isActive: boolean;
+  isLoading: boolean;
+  onPress: (tabKey: TabKey) => void;
+  theme: any;
+}
+
+const TabButton = React.memo(({ tabKey, label, isActive, isLoading, onPress, theme }: TabButtonProps) => (
+  <Pressable
+    style={[
+      styles.tab,
+      isActive && styles.activeTab,
+      isActive && { backgroundColor: theme.background }
+    ]}
+    onPressIn={() => onPress(tabKey)}
+  >
+    <View style={styles.tabContent}>
+      <Text style={[
+        styles.tabText,
+        { color: isActive ? theme.tabActive : theme.tabInactive }
+      ]}>
+        {label}
+      </Text>
+      {isLoading && (
+        <ActivityIndicator
+          size="small"
+          color={theme.tabActive}
+          style={styles.tabLoader}
+        />
+      )}
+    </View>
+  </Pressable>
+));
+TabButton.displayName = 'TabButton';
+
+interface SearchInputProps {
+  value: string;
+  onChangeText: (text: string) => void;
+  theme: any;
+}
+
+const SearchInput = React.memo(({ value, onChangeText, theme }: SearchInputProps) => (
+  <View style={[styles.searchContainer, { backgroundColor: theme.header }]}>
+    <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
+    <TextInput
+      style={[styles.searchInput, { color: theme.text }]}
+      placeholder="بحث عن تكت..."
+      placeholderTextColor="#888"
+      value={value}
+      onChangeText={onChangeText}
+      returnKeyType="search"
+    />
+  </View>
+));
+SearchInput.displayName = 'SearchInput';
+
+interface FilterButtonProps {
+    onPress: () => void;
+    theme: any;
+}
+
+const FilterButton = React.memo(({ onPress, theme }: FilterButtonProps) => (
+  <TouchableOpacity
+    style={[styles.iconButton, { backgroundColor: theme.header }]}
+    onPress={onPress}
+    activeOpacity={0.7}
+  >
+    <Ionicons name="filter" size={22} color={theme.icon} />
+  </TouchableOpacity>
+));
+FilterButton.displayName = 'FilterButton';
+
+interface SortButtonProps {
+    onPress: () => void;
+    sortOrder: 'asc' | 'desc';
+    theme: any;
+}
+
+const SortButton = React.memo(({ onPress, sortOrder, theme }: SortButtonProps) => (
+  <TouchableOpacity
+    style={[styles.iconButton, { backgroundColor: theme.header }]}
+    onPress={onPress}
+    activeOpacity={0.7}
+  >
+    <Ionicons
+      name={sortOrder === 'desc' ? 'arrow-down' : 'arrow-up'}
+      size={22}
+      color={theme.icon}
+    />
+  </TouchableOpacity>
+));
+SortButton.displayName = 'SortButton';
+
+interface ListHeaderProps {
+  theme: any;
+  searchQuery: string;
+  setSearchQuery: (text: string) => void;
+  toggleFilterPopup: () => void;
+  toggleSortOrder: () => void;
+  sortOrder: 'asc' | 'desc';
+  activeTab: TabKey;
+  loadingStates: LoadingStates;
+  handleTabPress: (tab: TabKey) => void;
+  hasActiveFilters: boolean;
+  selectedPriority: string | null;
+  selectedType: string | null;
+  clearFilters: () => void;
+}
+
+const ListHeader = React.memo(({
+  theme,
+  searchQuery,
+  setSearchQuery,
+  toggleFilterPopup,
+  toggleSortOrder,
+  sortOrder,
+  activeTab,
+  loadingStates,
+  handleTabPress,
+  hasActiveFilters,
+  selectedPriority,
+  selectedType,
+  clearFilters,
+}: ListHeaderProps) => (
+  <>
+    <View style={styles.headerContainer}>
+      <View style={styles.headerRow}>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>التذاكر المسندة إليك</Text>
+      </View>
+      <Text style={[styles.headerSubtitle, { color: theme.text }]}>
+        قائمة التذاكر المسندة إليك من قبل المدير.
+      </Text>
+    </View>
+
+    <View style={styles.controlsContainer}>
+      <SearchInput value={searchQuery} onChangeText={setSearchQuery} theme={theme} />
+      <FilterButton onPress={toggleFilterPopup} theme={theme} />
+      <SortButton onPress={toggleSortOrder} sortOrder={sortOrder} theme={theme} />
+    </View>
+
+    <View style={[styles.tabsContainer, { backgroundColor: theme.header }]}>
+      <TabButton tabKey="Open" label="مفتوح" isActive={activeTab === 'Open'} isLoading={loadingStates.Open} onPress={handleTabPress} theme={theme} />
+      <TabButton tabKey="Accepted" label="مقبولة" isActive={activeTab === 'Accepted'} isLoading={loadingStates.Accepted} onPress={handleTabPress} theme={theme} />
+      <TabButton tabKey="Done" label="منجزة" isActive={activeTab === 'Done'} isLoading={loadingStates.Done} onPress={handleTabPress} theme={theme} />
+    </View>
+
+    {hasActiveFilters && (
+      <View style={styles.activeFiltersContainer}>
+        <Text style={[styles.activeFiltersText, { color: theme.text }]}>
+          المرشحات النشطة:
+          {selectedPriority && ` الأولوية: ${selectedPriority}`}
+          {selectedType && ` النوع: ${selectedType}`}
+        </Text>
+        <TouchableOpacity onPress={clearFilters}>
+          <Text style={styles.clearFiltersText}>مسح</Text>
+        </TouchableOpacity>
+      </View>
+    )}
+  </>
+));
+ListHeader.displayName = 'ListHeader';
+
+interface ListEmptyProps {
+    isLoading: boolean;
+    theme: any;
+}
+
+const ListEmptyComponent = React.memo(({ isLoading, theme }: ListEmptyProps) => {
+    if (isLoading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={theme.tabActive} />
+                <Text style={[styles.loadingText, { color: theme.text }]}>جاري التحميل...</Text>
+            </View>
+        );
+    }
+    return (
+        <View style={styles.emptyContainer}>
+            <Ionicons name="document-outline" size={48} color="#ccc" />
+            <Text style={[styles.emptyText, { color: theme.text }]}>
+                لا توجد تذاكر في هذا القسم
+            </Text>
+        </View>
+    );
+});
+ListEmptyComponent.displayName = 'ListEmptyComponent';
+
 const TasksScreen: React.FC = () => {
   // Data caching states
   const [cachedData, setCachedData] = useState<CachedData>({
@@ -297,152 +488,17 @@ const TasksScreen: React.FC = () => {
     setSortOrder(prev => (prev === 'desc' ? 'asc' : 'desc'));
   }, []);
 
-  // Memoized components
-  const TabButton = React.memo(({ tabKey, label }: { tabKey: TabKey; label: string }) => {
-    const isActive = activeTab === tabKey;
-    const isLoading = loadingStates[tabKey];
-    
-    return (
-      <Pressable
-        style={[
-          styles.tab, 
-          isActive && styles.activeTab, 
-          isActive && { backgroundColor: theme.background }
-        ]}
-        onPressIn={() => handleTabPress(tabKey)}
-  
-      >
-        <View style={styles.tabContent}>
-          <Text style={[
-            styles.tabText, 
-            { color: isActive ? theme.tabActive : theme.tabInactive }
-          ]}>
-            {label}
-          </Text>
-          {isLoading && (
-            <ActivityIndicator 
-              size="small" 
-              color={theme.tabActive} 
-              style={styles.tabLoader} 
-            />
-          )}
-        </View>
-      </Pressable>
-    );
-  });
-
-  TabButton.displayName = 'TabButton';
-
-  const SearchInput = React.memo(() => (
-    <View style={[styles.searchContainer, { backgroundColor: theme.header }]}>
-      <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
-      <TextInput
-        style={[styles.searchInput, { color: theme.text }]}
-        placeholder="بحث عن تكت..."
-        placeholderTextColor="#888"
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        returnKeyType="search"
-      />
-    </View>
-  ));
-
-  SearchInput.displayName = 'SearchInput';
-
-  const FilterButton = React.memo(({ onPress }: { onPress: () => void }) => (
-    <TouchableOpacity 
-      style={[styles.iconButton, { backgroundColor: theme.header }]} 
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <Ionicons name="filter" size={22} color={theme.icon} />
-    </TouchableOpacity>
-  ));
-
-  FilterButton.displayName = 'FilterButton';
-
-  const SortButton = React.memo(({ onPress }: { onPress: () => void }) => (
-    <TouchableOpacity
-      style={[styles.iconButton, { backgroundColor: theme.header }]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <Ionicons
-        name={sortOrder === 'desc' ? 'arrow-down' : 'arrow-up'}
-        size={22}
-        color={theme.icon}
-      />
-    </TouchableOpacity>
-  ));
-
-  SortButton.displayName = 'SortButton';
-
   // Pull to refresh
   const onRefresh = useCallback(() => {
     fetchTabData(activeTab, true);
   }, [activeTab, fetchTabData]);
 
   const isCurrentTabLoading = loadingStates[activeTab];
-  const hasActiveFilters = selectedPriority || selectedType;
+  const hasActiveFilters = !!(selectedPriority || selectedType);
 
-  const ListHeader = React.memo(() => (
-    <>
-      <View style={styles.headerContainer}>
-        <View style={styles.headerRow}>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>التذاكر المسندة إليك</Text>
-
-        </View>
-        <Text style={[styles.headerSubtitle, { color: theme.text }]}>
-          قائمة التذاكر المسندة إليك من قبل المدير.
-        </Text>
-      </View>
-
-      <View style={styles.controlsContainer}>
-        <SearchInput />
-        <FilterButton onPress={toggleFilterPopup} />
-        <SortButton onPress={toggleSortOrder} />
-      </View>
-
-      <View style={[styles.tabsContainer, { backgroundColor: theme.header }]}>
-        <TabButton tabKey="Open" label="مفتوح" />
-        <TabButton tabKey="Accepted" label="مقبولة" />
-        <TabButton tabKey="Done" label="منجزة" />
-      </View>
-
-      {hasActiveFilters && (
-        <View style={styles.activeFiltersContainer}>
-          <Text style={[styles.activeFiltersText, { color: theme.text }]}>
-            المرشحات النشطة:
-            {selectedPriority && ` الأولوية: ${selectedPriority}`}
-            {selectedType && ` النوع: ${selectedType}`}
-          </Text>
-          <TouchableOpacity onPress={clearFilters}>
-            <Text style={styles.clearFiltersText}>مسح</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </>
-  ));
-  ListHeader.displayName = 'ListHeader';
-
-  const renderListEmpty = useCallback(() => {
-    if (isCurrentTabLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.tabActive} />
-          <Text style={[styles.loadingText, { color: theme.text }]}>جاري التحميل...</Text>
-        </View>
-      );
-    }
-    return (
-      <View style={styles.emptyContainer}>
-        <Ionicons name="document-outline" size={48} color="#ccc" />
-        <Text style={[styles.emptyText, { color: theme.text }]}>
-          لا توجد تذاكر في هذا القسم
-        </Text>
-      </View>
-    );
-  }, [isCurrentTabLoading, theme]);
+  const renderListEmpty = useCallback(() => (
+    <ListEmptyComponent isLoading={isCurrentTabLoading} theme={theme} />
+  ), [isCurrentTabLoading, theme]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -450,7 +506,21 @@ const TasksScreen: React.FC = () => {
         data={filteredServiceRequests}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
-        ListHeaderComponent={<ListHeader />}
+        ListHeaderComponent={<ListHeader
+          theme={theme}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          toggleFilterPopup={toggleFilterPopup}
+          toggleSortOrder={toggleSortOrder}
+          sortOrder={sortOrder}
+          activeTab={activeTab}
+          loadingStates={loadingStates}
+          handleTabPress={handleTabPress}
+          hasActiveFilters={hasActiveFilters}
+          selectedPriority={selectedPriority}
+          selectedType={selectedType}
+          clearFilters={clearFilters}
+        />}
         ListEmptyComponent={renderListEmpty}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}

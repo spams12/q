@@ -5,13 +5,13 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Dimensions,
   FlatList,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  useWindowDimensions
 } from "react-native";
 
 
@@ -43,7 +43,6 @@ let tasksCache: ServiceRequest[] | null = null;
 let userDocIdCache: string | null = null;
 let cacheTimestamp: number | null = null;
  
-const { width } = Dimensions.get('window');
  
  // --- HELPER FUNCTIONS ---
 
@@ -85,33 +84,35 @@ const StatCard = ({ title, value, icon, color, styles }: { title: string; value:
   );
 };
 
-const TechnicianStatCards = React.memo(({ tickets, styles }: { tickets: ServiceRequest[], styles: any }) => {
+const TechnicianStatCards = React.memo(({ tickets, styles, isSmallScreen }: { tickets: ServiceRequest[], styles: any, isSmallScreen: boolean }) => {
   const stats = useMemo(() => {
     const pending = tickets.filter(t => ["مفتوح", "قيد المعالجة"].includes(t.status)).length;
     const completed = tickets.filter(t => ["مكتمل", "مغلق"].includes(t.status)).length;
     return { pending, completed, total: tickets.length };
   }, [tickets]);
 
+  const iconSize = isSmallScreen ? 24 : 28;
+
   return (
     <View style={styles.technicianStatsContainer}>
       <StatCard
         title="مهام قيد التنفيذ"
         value={stats.pending}
-        icon={<Clock color="#3B82F6" size={28} />}
+        icon={<Clock color="#3B82F6" size={iconSize} />}
         color="rgba(59, 130, 246, 0.1)"
         styles={styles}
       />
       <StatCard
         title="مهام مكتملة"
         value={stats.completed}
-        icon={<ListChecks color="#10B981" size={28} />}
+        icon={<ListChecks color="#10B981" size={iconSize} />}
         color="rgba(16, 185, 129, 0.1)"
         styles={styles}
       />
       <StatCard
         title="إجمالي المهام"
         value={stats.total}
-        icon={<Inbox color="#6B7280" size={28} />}
+        icon={<Inbox color="#6B7280" size={iconSize} />}
         color="rgba(107, 114, 128, 0.1)"
         styles={styles}
       />
@@ -216,17 +217,93 @@ TicketItem.displayName = 'TicketItem';
 
 // --- MAIN PAGE COMPONENT ---
 
-const TabsTrigger = ({ title, isActive, onPress, styles }: { title: string, isActive: boolean, onPress: () => void, styles: any }) => (
-  <TouchableOpacity onPress={onPress} style={styles.tabButton} activeOpacity={0.7}>
-      <View style={[styles.tab, isActive && styles.activeTab]}>
-          <Text style={[styles.tabText, isActive && styles.activeTabText]}>{title}</Text>
-      </View>
-  </TouchableOpacity>
+const TabButton = ({ title, isActive, onPress, styles }: { title: string, isActive: boolean, onPress: () => void, styles: any }) => (
+    <TouchableOpacity onPress={onPress} style={styles.tabButton} activeOpacity={0.7}>
+        <View style={[styles.tab, isActive && styles.activeTab]}>
+            <Text style={[styles.tabText, isActive && styles.activeTabText]}>{title}</Text>
+        </View>
+    </TouchableOpacity>
+);
+
+interface ListHeaderProps {
+    tasks: ServiceRequest[];
+    searchTerm: string;
+    setSearchTerm: (term: string) => void;
+    selectedTab: "all" | "pending" | "completed";
+    handleTabChange: (tab: "all" | "pending" | "completed") => void;
+    styles: any;
+    isSmallScreen: boolean;
+}
+
+const ListHeader = React.memo(({
+    tasks,
+    searchTerm,
+    setSearchTerm,
+    selectedTab,
+    handleTabChange,
+    styles,
+    isSmallScreen,
+}: ListHeaderProps) => (
+    <View style={styles.dashboardContainer}>
+        <View style={styles.welcomeHeader}>
+            <Text style={styles.dashboardTitle}>لوحة التحكم</Text>
+            <Text style={styles.dashboardSubtitle}>مرحباً بك، تتبع مهامك وأدائك</Text>
+        </View>
+        <TechnicianStatCards tickets={tasks} styles={styles} isSmallScreen={isSmallScreen} />
+        
+        <View style={styles.taskListContainer}>
+            <View style={styles.taskListHeader}>
+                <View style={styles.headerTop}>
+                    <View>
+                        <Text style={styles.taskListTitle}>قائمة المهام</Text>
+                        <Text style={styles.taskListSubtitle}>جميع المهام المسندة إليك</Text>
+                    </View>
+                </View>
+                
+                <View style={styles.searchContainer}>
+                    <Search size={20} color="#9CA3AF" style={styles.searchIcon} />
+                    <TextInput
+                        placeholder="بحث بالاسم، العنوان، أو رقم الطلب..."
+                        style={styles.searchInput}
+                        value={searchTerm}
+                        onChangeText={setSearchTerm}
+                        placeholderTextColor="#9CA3AF"
+                    />
+                </View>
+                
+                <View style={styles.tabsContainer}>
+                    <TabButton title="الكل" isActive={selectedTab === 'all'} onPress={() => handleTabChange('all')} styles={styles} />
+                    <TabButton title="قيد التنفيذ" isActive={selectedTab === 'pending'} onPress={() => handleTabChange('pending')} styles={styles} />
+                    <TabButton title="مكتملة" isActive={selectedTab === 'completed'} onPress={() => handleTabChange('completed')} styles={styles} />
+                </View>
+            </View>
+        </View>
+    </View>
+));
+ListHeader.displayName = 'ListHeader';
+
+
+interface EmptyListProps {
+    searchTerm: string;
+    styles: any;
+}
+
+const EmptyList = ({ searchTerm, styles }: EmptyListProps) => (
+    <View style={styles.centeredMessage}>
+        <View style={styles.emptyStateContainer}>
+            <Inbox size={48} color="#D1D5DB" />
+            <Text style={styles.emptyStateText}>
+                {searchTerm ? "لا توجد مهام تطابق الفلترة الحالية" : "ليس لديك مهام مسندة حالياً"}
+            </Text>
+        </View>
+    </View>
 );
 
 export default function TechnicianDashboardScreen() {
   const { theme } = useTheme();
-  const styles = getStyles(theme);
+  const { width } = useWindowDimensions();
+  const styles = getStyles(theme, width);
+  const isSmallScreen = width < 400;
   const [tasks, setTasks] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
@@ -351,58 +428,6 @@ const fetchTasks = useCallback(async (userDocId: string) => {
     />
   ), [currentUserDocId, router, styles, theme]);
 
-  const renderListHeader = useCallback(() => (
-    <View style={styles.dashboardContainer}>
-      <View style={styles.welcomeHeader}>
-        <Text style={styles.dashboardTitle}>لوحة التحكم</Text>
-        <Text style={styles.dashboardSubtitle}>مرحباً بك، تتبع مهامك وأدائك</Text>
-      </View>
-      <TechnicianStatCards tickets={tasks} styles={styles} />
-      
-      <View style={styles.taskListContainer}>
-        <View style={styles.taskListHeader}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.taskListTitle}>قائمة المهام</Text>
-              <Text style={styles.taskListSubtitle}>جميع المهام المسندة إليك</Text>
-            </View>
-          </View>
-          
-          <View style={styles.searchContainer}>
-            <Search size={20} color="#9CA3AF" style={styles.searchIcon} />
-            <TextInput
-              placeholder="بحث بالاسم، العنوان، أو رقم الطلب..."
-              style={styles.searchInput}
-              value={searchTerm}
-              onChangeText={setSearchTerm}
-              placeholderTextColor="#9CA3AF"
-            />
-          </View>
-          
-          <View style={styles.tabsContainer}>
-              <TabsTrigger title="الكل" isActive={selectedTab === 'all'} onPress={() => handleTabChange('all')} styles={styles} />
-              <TabsTrigger title="قيد التنفيذ" isActive={selectedTab === 'pending'} onPress={() => handleTabChange('pending')} styles={styles} />
-              <TabsTrigger title="مكتملة" isActive={selectedTab === 'completed'} onPress={() => handleTabChange('completed')} styles={styles} />
-          </View>
-        </View>
-      </View>
-    </View>
-  ), [tasks, currentUserDocId, searchTerm, selectedTab, handleTabChange, styles, theme]);
-
-
-  const renderEmptyList = () => {
-    if (loading) return null;
-    return (
-      <View style={styles.centeredMessage}>
-        <View style={styles.emptyStateContainer}>
-          <Inbox size={48} color="#D1D5DB" />
-          <Text style={styles.emptyStateText}>
-            {searchTerm ? "لا توجد مهام تطابق الفلترة الحالية" : "ليس لديك مهام مسندة حالياً"}
-          </Text>
-        </View>
-      </View>
-    );
-  };
 
 
   if (loading && tasks.length === 0) {
@@ -420,8 +445,16 @@ const fetchTasks = useCallback(async (userDocId: string) => {
         data={filteredTasks}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        ListHeaderComponent={renderListHeader}
-        ListEmptyComponent={renderEmptyList}
+        ListHeaderComponent={<ListHeader
+          tasks={tasks}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          selectedTab={selectedTab}
+          handleTabChange={handleTabChange}
+          styles={styles}
+          isSmallScreen={isSmallScreen}
+        />}
+        ListEmptyComponent={loading ? null : <EmptyList searchTerm={searchTerm} styles={styles} />}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContentContainer}
         initialNumToRender={10}
@@ -433,356 +466,360 @@ const fetchTasks = useCallback(async (userDocId: string) => {
   );
 }
 
-const getStyles = (theme: any) => StyleSheet.create({
-  screenContainer: {
-    flex: 1,
-    backgroundColor: theme.background,
-  },
-  scrollContentContainer: {
-    paddingBottom: 40,
-  },
-  dashboardContainer: {
-    padding: 16,
-  },
-  welcomeHeader: {
-    marginBottom: 24,
-    alignItems: 'flex-end',
-  },
-  dashboardTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: theme.text,
-    fontFamily: 'Cairo',
-    textAlign: 'right',
-  },
-  dashboardSubtitle: {
-    fontSize: 16,
-    color: theme.textSecondary,
-    fontFamily: 'Cairo',
-    textAlign: 'right',
-    marginTop: 4,
-  },
-  fullScreenLoader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: theme.background,
-  },
-  loadingTextScreen: {
-    marginTop: 12,
-    fontSize: 16,
-    color: theme.textSecondary,
-    fontFamily: 'Cairo',
-  },
-  // StatCard styles
-  technicianStatsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-    gap: 12,
-  },
-  statCardContainer: {
-    flex: 1,
-    backgroundColor: theme.card,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: theme.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  statCardContent: {
-    alignItems: 'center',
-  },
-  statCardValue: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: theme.text,
-    fontFamily: 'Cairo',
-  },
-  statCardTitle: {
-    fontSize: 14,
-    color: theme.textSecondary,
-    fontFamily: 'Cairo',
-    marginTop: 2,
-  },
-  cardGradientOverlay: {
-    position: 'absolute',
-    right: -40,
-    top: -20,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    opacity: 0.08,
-  },
-  // PerformanceSummaryCard styles
-  card: {
-    backgroundColor: theme.card,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    shadowColor: theme.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  performanceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-    justifyContent: 'flex-start',
-  },
-  performanceIconContainer: {
-    backgroundColor: 'rgba(255, 193, 7, 0.1)',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  performanceTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.text,
-    fontFamily: 'Cairo',
-  },
-  progressBarsContainer: {
-    gap: 18,
-  },
-  progressBarContainer: {
-    width: '100%',
-  },
-  progressBarHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-    alignItems: 'center',
-  },
-  progressBarTitle: {
-    fontSize: 14,
-    color: theme.textSecondary,
-    fontFamily: 'Cairo',
-  },
-  progressBarCount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.text,
-    fontFamily: 'Cairo',
-  },
-  progressBarTrack: {
-    height: 8,
-    backgroundColor: theme.border,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  // TaskList styles
-  taskListContainer: {
-    backgroundColor: theme.card,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: theme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  taskListHeader: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-    backgroundColor: theme.card,
-  },
-  headerTop: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  taskListTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: theme.text,
-    fontFamily: 'Cairo',
-    textAlign: 'right',
-  },
-  taskListSubtitle: {
-    fontSize: 14,
-    color: theme.textSecondary,
-    fontFamily: 'Cairo',
-    textAlign: 'right',
-    marginTop: 2,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.inputBackground,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginBottom: 16,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: 44,
-    fontSize: 15,
-    color: theme.text,
-    fontFamily: 'Cairo',
-    textAlign: 'right',
-  },
-  tabsContainer: {
-    flexDirection: 'row',
-    backgroundColor: theme.inputBackground,
-    borderRadius: 12,
-    padding: 4,
-  },
-  tabButton: {
-    flex: 1,
-  },
-  tab: {
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  activeTab: {
-    backgroundColor: theme.card,
-    shadowColor: theme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.textSecondary,
-    fontFamily: 'Cairo',
-  },
-  activeTabText: {
-    color: theme.primary,
-  },
-  taskListContent: {
-    minHeight: 200,
-  },
-  centeredMessage: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    minHeight: 200,
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 15,
-    color: theme.textSecondary,
-    fontFamily: 'Cairo',
-  },
-  emptyStateContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyStateText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: theme.textSecondary,
-    fontFamily: 'Cairo',
-    textAlign: 'center',
-  },
-  // TicketItem styles
-  ticketItemContainer: {
-    backgroundColor: theme.card,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  ticketContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  ticketHeader: {
-    marginBottom: 12,
-    alignItems: 'flex-start',
-  },
-  ticketTitleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-    marginBottom: 8,
-  },
-  ticketTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: theme.text,
-    fontFamily: 'Cairo',
-    flex: 1,
-    textAlign: 'right',
-    marginRight: 8,
-  },
-  ticketCustomer: {
-    fontSize: 14,
-    color: theme.textSecondary,
-    fontFamily: 'Cairo',
-    marginBottom: 4,
-  },
-  ticketDate: {
-    fontSize: 12,
-    color: theme.subtleText,
-    fontFamily: 'Cairo',
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    fontFamily: 'Cairo',
-  },
-  badgeBlue: { backgroundColor: '#3B82F6' },
-  badgeYellow: { backgroundColor: '#F59E0B' },
-  badgeGreen: { backgroundColor: '#10B981' },
-  badgeRed: { backgroundColor: '#EF4444' },
-  badgePurple: { backgroundColor: '#8B5CF6' },
-  badgeGray: { backgroundColor: '#6B7280' },
-  ticketActions: {
-    marginTop: 8,
-    alignItems: 'flex-end',
-  },
-  actionBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-  },
-  actionBadgeIcon: {
-    marginRight: 6,
-  },
-  actionBadgeGreen: { backgroundColor: theme.success + '20' },
-  actionBadgeTextGreen: { color: theme.success, fontWeight: '600', fontFamily: 'Cairo' },
-  actionBadgeRed: { backgroundColor: theme.destructive + '20' },
-  actionBadgeTextRed: { color: theme.destructive, fontWeight: '600', fontFamily: 'Cairo' },
-  actionBadgeBlue: { backgroundColor: theme.primary + '20' },
-  actionBadgeTextBlue: { color: theme.primary, fontWeight: '600', fontFamily: 'Cairo' },
-});
+const getStyles = (theme: any, width: number) => {
+  const isSmallScreen = width < 400;
+
+  return StyleSheet.create({
+    screenContainer: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    scrollContentContainer: {
+      paddingBottom: 40,
+    },
+    dashboardContainer: {
+      padding: isSmallScreen ? 12 : 16,
+    },
+    welcomeHeader: {
+      marginBottom: 24,
+      alignItems: isSmallScreen ? 'center' : 'flex-end',
+    },
+    dashboardTitle: {
+      fontSize: isSmallScreen ? 24 : 28,
+      fontWeight: 'bold',
+      color: theme.text,
+      fontFamily: 'Cairo',
+      textAlign: isSmallScreen ? 'center' : 'right',
+    },
+    dashboardSubtitle: {
+      fontSize: isSmallScreen ? 14 : 16,
+      color: theme.textSecondary,
+      fontFamily: 'Cairo',
+      textAlign: isSmallScreen ? 'center' : 'right',
+      marginTop: 4,
+    },
+    fullScreenLoader: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: theme.background,
+    },
+    loadingTextScreen: {
+      marginTop: 12,
+      fontSize: 16,
+      color: theme.textSecondary,
+      fontFamily: 'Cairo',
+    },
+    // StatCard styles
+    technicianStatsContainer: {
+      flexDirection: isSmallScreen ? 'column' : 'row',
+      justifyContent: 'space-between',
+      marginBottom: 24,
+      gap: isSmallScreen ? 16 : 12,
+    },
+    statCardContainer: {
+      flex: isSmallScreen ? undefined : 1,
+      backgroundColor: theme.card,
+      borderRadius: 16,
+      padding: isSmallScreen ? 12 : 16,
+      alignItems: 'center',
+      shadowColor: theme.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.05,
+      shadowRadius: 12,
+      elevation: 3,
+      overflow: 'hidden',
+      position: 'relative',
+    },
+    iconContainer: {
+      width: isSmallScreen ? 40 : 48,
+      height: isSmallScreen ? 40 : 48,
+      borderRadius: isSmallScreen ? 20 : 24,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: isSmallScreen ? 8 : 12,
+    },
+    statCardContent: {
+      alignItems: 'center',
+    },
+    statCardValue: {
+      fontSize: isSmallScreen ? 22 : 26,
+      fontWeight: 'bold',
+      color: theme.text,
+      fontFamily: 'Cairo',
+    },
+    statCardTitle: {
+      fontSize: isSmallScreen ? 12 : 14,
+      color: theme.textSecondary,
+      fontFamily: 'Cairo',
+      marginTop: 2,
+    },
+    cardGradientOverlay: {
+      position: 'absolute',
+      right: -40,
+      top: -20,
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      opacity: 0.08,
+    },
+    // PerformanceSummaryCard styles
+    card: {
+      backgroundColor: theme.card,
+      borderRadius: 16,
+      padding: 20,
+      marginBottom: 24,
+      shadowColor: theme.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.05,
+      shadowRadius: 12,
+      elevation: 3,
+    },
+    performanceHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 20,
+      justifyContent: 'flex-start',
+    },
+    performanceIconContainer: {
+      backgroundColor: 'rgba(255, 193, 7, 0.1)',
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    performanceTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: theme.text,
+      fontFamily: 'Cairo',
+    },
+    progressBarsContainer: {
+      gap: 18,
+    },
+    progressBarContainer: {
+      width: '100%',
+    },
+    progressBarHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+      alignItems: 'center',
+    },
+    progressBarTitle: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      fontFamily: 'Cairo',
+    },
+    progressBarCount: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.text,
+      fontFamily: 'Cairo',
+    },
+    progressBarTrack: {
+      height: 8,
+      backgroundColor: theme.border,
+      borderRadius: 4,
+      overflow: 'hidden',
+    },
+    progressBarFill: {
+      height: '100%',
+      borderRadius: 4,
+    },
+    // TaskList styles
+    taskListContainer: {
+      backgroundColor: theme.card,
+      borderRadius: 16,
+      overflow: 'hidden',
+      shadowColor: theme.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 10,
+      elevation: 2,
+    },
+    taskListHeader: {
+      padding: isSmallScreen ? 16 : 20,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+      backgroundColor: theme.card,
+    },
+    headerTop: {
+      flexDirection: 'row-reverse',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    taskListTitle: {
+      fontSize: isSmallScreen ? 18 : 20,
+      fontWeight: 'bold',
+      color: theme.text,
+      fontFamily: 'Cairo',
+      textAlign: 'right',
+    },
+    taskListSubtitle: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      fontFamily: 'Cairo',
+      textAlign: 'right',
+      marginTop: 2,
+    },
+    searchContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.inputBackground,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      marginBottom: 16,
+    },
+    searchIcon: {
+      marginRight: 8,
+    },
+    searchInput: {
+      flex: 1,
+      height: 44,
+      fontSize: 15,
+      color: theme.text,
+      fontFamily: 'Cairo',
+      textAlign: 'right',
+    },
+    tabsContainer: {
+      flexDirection: 'row',
+      backgroundColor: theme.inputBackground,
+      borderRadius: 12,
+      padding: 4,
+    },
+    tabButton: {
+      flex: 1,
+    },
+    tab: {
+      paddingVertical: 10,
+      borderRadius: 10,
+      alignItems: 'center',
+    },
+    activeTab: {
+      backgroundColor: theme.card,
+      shadowColor: theme.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    tabText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.textSecondary,
+      fontFamily: 'Cairo',
+    },
+    activeTabText: {
+      color: theme.primary,
+    },
+    taskListContent: {
+      minHeight: 200,
+    },
+    centeredMessage: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+      minHeight: 200,
+    },
+    loadingText: {
+      marginTop: 10,
+      fontSize: 15,
+      color: theme.textSecondary,
+      fontFamily: 'Cairo',
+    },
+    emptyStateContainer: {
+      alignItems: 'center',
+      paddingVertical: 40,
+    },
+    emptyStateText: {
+      marginTop: 16,
+      fontSize: 16,
+      color: theme.textSecondary,
+      fontFamily: 'Cairo',
+      textAlign: 'center',
+    },
+    // TicketItem styles
+    ticketItemContainer: {
+      backgroundColor: theme.card,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    ticketContent: {
+      paddingHorizontal: isSmallScreen ? 16 : 20,
+      paddingVertical: 16,
+    },
+    ticketHeader: {
+      marginBottom: 12,
+      alignItems: 'flex-start',
+    },
+    ticketTitleContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      width: '100%',
+      marginBottom: 8,
+    },
+    ticketTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: theme.text,
+      fontFamily: 'Cairo',
+      flex: 1,
+      textAlign: 'right',
+      marginRight: 8,
+    },
+    ticketCustomer: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      fontFamily: 'Cairo',
+      marginBottom: 4,
+    },
+    ticketDate: {
+      fontSize: 12,
+      color: theme.subtleText,
+      fontFamily: 'Cairo',
+    },
+    badge: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    badgeText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#FFFFFF',
+      fontFamily: 'Cairo',
+    },
+    badgeBlue: { backgroundColor: '#3B82F6' },
+    badgeYellow: { backgroundColor: '#F59E0B' },
+    badgeGreen: { backgroundColor: '#10B981' },
+    badgeRed: { backgroundColor: '#EF4444' },
+    badgePurple: { backgroundColor: '#8B5CF6' },
+    badgeGray: { backgroundColor: '#6B7280' },
+    ticketActions: {
+      marginTop: 8,
+      alignItems: 'flex-end',
+    },
+    actionBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 14,
+    },
+    actionBadgeIcon: {
+      marginRight: 6,
+    },
+    actionBadgeGreen: { backgroundColor: theme.success + '20' },
+    actionBadgeTextGreen: { color: theme.success, fontWeight: '600', fontFamily: 'Cairo' },
+    actionBadgeRed: { backgroundColor: theme.destructive + '20' },
+    actionBadgeTextRed: { color: theme.destructive, fontWeight: '600', fontFamily: 'Cairo' },
+    actionBadgeBlue: { backgroundColor: theme.primary + '20' },
+    actionBadgeTextBlue: { color: theme.primary, fontWeight: '600', fontFamily: 'Cairo' },
+  });
+};

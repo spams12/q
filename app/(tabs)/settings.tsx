@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import UpdatePhoneModal from '../../components/UpdatePhoneModal';
 import { auth, db } from '../../lib/firebase';
+import { User } from '../../lib/types';
 
 // --- Theming and Constants ---
 // No longer needed here, will be managed by getStyles
@@ -36,16 +37,6 @@ I18nManager.allowRTL(true);
 I18nManager.forceRTL(true);
 
 // --- Type Definitions ---
-interface User {
-  id: string;
-  photoURL?: string;
-  name?: string;
-  role?: string;
-  email?: string;
-  phone?: string;
-  teamId?: string;
-  lastClearTimes?: { seconds: number; toDate: () => Date }[];
-}
 
 interface ProfileHeaderProps {
   user: Partial<User>;
@@ -143,6 +134,25 @@ const SettingsPage = () => {
       year: 'numeric', month: 'long', day: 'numeric',
   }).format(latestClearTime.toDate()) : 'لا توجد تصفية سابقة';
 
+// --- Real-time User Data Listener ---
+  useEffect(() => {
+    if (!realuserUid) {
+      return;
+    }
+
+    const userDocRef = doc(db, 'users', realuserUid);
+    const unsubscribe = onSnapshot(userDocRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setUserdoc({ id: snapshot.id, ...snapshot.data() } as User);
+      } else {
+        console.log('User document does not exist');
+      }
+    }, (error) => {
+      console.error("Error fetching user document:", error);
+    });
+
+    return () => unsubscribe();
+  }, [realuserUid, setUserdoc]);
   // --- Logic and Handlers (kept the same) ---
   useEffect(() => {
     if (!realuserUid) {
