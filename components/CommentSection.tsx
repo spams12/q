@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+import { Video } from 'expo-av';
 import * as DocumentPicker from 'expo-document-picker';
-import { serverTimestamp } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import React, { useState } from 'react';
 import {
@@ -39,22 +39,22 @@ const getAvatarFallback = (name: string = 'مستخدم غير معروف') => {
 };
 
 // Helper to reliably parse the timestamp
-const getCommentDate = (createdAt: any): Date => {
-  if (!createdAt) return new Date();
-  if (typeof createdAt.toDate === 'function') {
-    return createdAt.toDate();
+const getCommentDate = (timestamp: any): Date => {
+  if (!timestamp) return new Date();
+  if (typeof timestamp.toDate === 'function') {
+    return timestamp.toDate();
   }
-  if (createdAt instanceof Date) {
-    return createdAt;
+  if (timestamp instanceof Date) {
+    return timestamp;
   }
-  if (typeof createdAt === 'string') {
-    const date = new Date(createdAt);
+  if (typeof timestamp === 'string') {
+    const date = new Date(timestamp);
     if (!isNaN(date.getTime())) {
       return date;
     }
   }
-  if (typeof createdAt === 'number') {
-    return new Date(createdAt);
+  if (typeof timestamp === 'number') {
+    return new Date(timestamp);
   }
   return new Date();
 };
@@ -82,13 +82,14 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const [attachments, setAttachments] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [allImages, setAllImages] = useState<string[]>([]);
   const { theme } = useTheme();
   const styles = getStyles(theme);
 
   const getUser = (userId: string) => users.find(u => u.id === userId);
-
+  console.log('Current User ID:', currentUserId);
   // Filter and sort comments
   const filteredAndSortedComments = comments
     .filter(comment => {
@@ -102,7 +103,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
       }
       return true;
     })
-    .sort((a, b) => getCommentDate(a.createdAt).getTime() - getCommentDate(b.createdAt).getTime());
+    .sort((a, b) => getCommentDate(a.timestamp).getTime() - getCommentDate(b.timestamp).getTime());
 
   const handlePickDocument = async () => {
     try {
@@ -155,8 +156,8 @@ const CommentSection: React.FC<CommentSectionProps> = ({
       id: `${Date.now()}`,
       content: newComment.trim(),
       userId: currentUserId,
-      userName: users.find(u => u.id === currentUserId)?.name || 'مستخدم غير معروف',
-      createdAt: serverTimestamp(),
+      userName: users.find(u => u.uid === currentUserId)?.name || 'مستخدم غير معروف',
+      timestamp: new Date().toISOString(),
       attachments: uploadedAttachments,
     };
     await onAddComment(newCommentData);
@@ -168,8 +169,15 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 
   const handleImagePress = (imageUrl: string, images: string[], index: number) => {
     setSelectedImage(imageUrl);
+    setSelectedVideo(null);
     setAllImages(images);
     setSelectedImageIndex(index);
+    setModalVisible(true);
+  };
+
+  const handleVideoPress = (videoUrl: string) => {
+    setSelectedVideo(videoUrl);
+    setSelectedImage(null);
     setModalVisible(true);
   };
 
@@ -216,39 +224,49 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             <View style={styles.modalButton} />
           </View>
 
-          {/* Image */}
+          {/* Image or Video */}
           <View style={styles.imageContainer}>
-            <Image 
-              source={{ uri: selectedImage || '' }} 
-              style={styles.fullscreenImage}
-              resizeMode="contain"
-            />
+            {selectedImage ? (
+              <Image
+                source={{ uri: selectedImage }}
+                style={styles.fullscreenImage}
+                resizeMode="contain"
+              />
+            ) : selectedVideo ? (
+              <Video
+                source={{ uri: selectedVideo }}
+                style={styles.fullscreenImage}
+                useNativeControls
+                resizeMode="contain"
+                isLooping
+              />
+            ) : null}
           </View>
 
-          {/* Navigation */}
-          {allImages.length > 1 && (
+          {/* Navigation for Images */}
+          {selectedImage && allImages.length > 1 && (
             <View style={styles.navigationContainer}>
               <TouchableOpacity
                 style={[styles.navButton, selectedImageIndex === 0 && styles.navButtonDisabled]}
                 onPressIn={() => navigateImage('prev')}
                 disabled={selectedImageIndex === 0}
               >
-                <Ionicons 
-                  name="chevron-back" 
-                  size={24} 
-                  color={selectedImageIndex === 0 ? 'rgba(255,255,255,0.3)' : 'white'} 
+                <Ionicons
+                  name="chevron-back"
+                  size={24}
+                  color={selectedImageIndex === 0 ? 'rgba(255,255,255,0.3)' : 'white'}
                 />
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={[styles.navButton, selectedImageIndex === allImages.length - 1 && styles.navButtonDisabled]}
                 onPressIn={() => navigateImage('next')}
                 disabled={selectedImageIndex === allImages.length - 1}
               >
-                <Ionicons 
-                  name="chevron-forward" 
-                  size={24} 
-                  color={selectedImageIndex === allImages.length - 1 ? 'rgba(255,255,255,0.3)' : 'white'} 
+                <Ionicons
+                  name="chevron-forward"
+                  size={24}
+                  color={selectedImageIndex === allImages.length - 1 ? 'rgba(255,255,255,0.3)' : 'white'}
                 />
               </TouchableOpacity>
             </View>
@@ -270,7 +288,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
           const user = getUser(comment.userId);
           const userName = user?.name || comment.userName || 'مستخدم غير معروف';
           const isCurrentUser = comment.userId === currentUserId;
-          const commentDate = getCommentDate(comment.createdAt);
+          const commentDate = getCommentDate(comment.timestamp);
 
           // Collect all images in this comment for modal navigation
           const commentImages = comment.attachments?.filter(att => 
@@ -328,31 +346,46 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                   <View style={styles.attachmentsContainer}>
                     {comment.attachments.map((att, index) => {
                       const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName);
-                      const imageUrl = att.downloadURL;
+                      const isVideo = /\.(mp4|mov|avi|mkv)$/i.test(att.fileName);
+                      const mediaUrl = att.downloadURL;
 
                       return (
                         <TouchableOpacity
                           key={index}
                           onPressIn={() => {
-                            if (isImage && imageUrl) {
-                              const currentImageIndex = commentImages.indexOf(imageUrl);
-                              handleImagePress(imageUrl, commentImages, currentImageIndex);
-                            } else if (imageUrl) {
-                              Linking.openURL(imageUrl);
+                            if (isImage && mediaUrl) {
+                              const currentImageIndex = commentImages.indexOf(mediaUrl);
+                              handleImagePress(mediaUrl, commentImages, currentImageIndex);
+                            } else if (isVideo && mediaUrl) {
+                              handleVideoPress(mediaUrl);
+                            } else if (mediaUrl) {
+                              Linking.openURL(mediaUrl);
                             }
                           }}
                           style={styles.attachmentItem}
                           activeOpacity={0.8}
                         >
-                          {isImage && imageUrl ? (
+                          {isImage && mediaUrl ? (
                             <View style={styles.imageAttachmentContainer}>
-                              <Image 
-                                source={{ uri: imageUrl }} 
+                              <Image
+                                source={{ uri: mediaUrl }}
                                 style={styles.attachmentImage}
                                 resizeMode="cover"
                               />
                               <View style={styles.imageOverlay}>
                                 <Ionicons name="expand-outline" size={20} color="white" />
+                              </View>
+                            </View>
+                          ) : isVideo && mediaUrl ? (
+                            <View style={styles.imageAttachmentContainer}>
+                              <Video
+                                source={{ uri: mediaUrl }}
+                                style={styles.attachmentImage}
+                                resizeMode="cover"
+                                isMuted
+                              />
+                              <View style={styles.videoOverlay}>
+                                <Ionicons name="play-circle-outline" size={40} color="white" />
                               </View>
                             </View>
                           ) : (
@@ -476,10 +509,12 @@ const getStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
+    borderRadius: 12,
   },
   commentsList: {
     flexGrow: 1,
-    padding: 16,
+    paddingVertical: 12,
+    paddingHorizontal:8,
     paddingBottom: 20,
   },
   messageRow: {
@@ -593,6 +628,12 @@ const getStyles = (theme: any) => StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 16,
     padding: 6,
+  },
+  videoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   fileAttachment: {
     flexDirection: 'row',

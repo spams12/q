@@ -6,12 +6,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { arrayUnion, collection, doc, getDocs, onSnapshot, runTransaction, Timestamp } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, Animated, Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { InvoiceList } from '../../components/InvoiceList';
 import { ThemedText } from '../../components/ThemedText';
 import { ThemedView } from '../../components/ThemedView';
 import useFirebaseAuth from '../../hooks/use-firebase-auth';
-import { db, uploadCommentAttachment } from '../../lib/firebase';
+import { db } from '../../lib/firebase';
 import { Comment, Invoice, InvoiceItem, ServiceRequest, StockTransaction, User, UserStockItem } from '../../lib/types';
 
 const { width } = Dimensions.get('window');
@@ -29,6 +29,16 @@ type MaintenanceItem = InvoiceItem & {
     cableLength?: number;
 };
 
+interface Subscriber {
+  subscriberId: string;
+  name: string;
+  phone: string;
+  packageType: string;
+  price: string;
+  zoneNumber: string;
+  isPaid: boolean;
+}
+
 const TicketDetailPage = () => {
   const { id } = useLocalSearchParams();
   const router = useRouter();
@@ -41,7 +51,9 @@ const TicketDetailPage = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [currentUserResponse, setCurrentUserResponse] = useState<'pending' | 'accepted' | 'rejected' | 'completed' | null>(null);
   const [slideAnim] = useState(new Animated.Value(0));
-  const { userUid } = usePermissions();
+  const { userUid ,userdoc } = usePermissions();
+  const [subscriberSearch, setSubscriberSearch] = useState("");
+  const [subscriberIndexBeingProcessed, setSubscriberIndexBeingProcessed] = useState<number | null>(null);
 
   const tabs = [
     { key: 'details', title: 'التفاصيل', icon: 'document-text-outline' },
@@ -70,7 +82,8 @@ const TicketDetailPage = () => {
         setServiceRequest(data);
 
         if (user && data.userResponses) {
-          const response = data.userResponses.find(r => r.userId === user.uid);
+          const response = data.userResponses.find(r => r.userId === userdoc.id);
+          console.log("Current user response:", response);
           setCurrentUserResponse(response ? response.response : 'pending');
         } else {
           setCurrentUserResponse('pending');
@@ -249,13 +262,6 @@ const TicketDetailPage = () => {
           timestamp: Timestamp.now(),
         };
 
-        if (comment.attachments && comment.attachments.length > 0) {
-          const attachmentPromises = (comment.attachments as any[]).map(file =>
-            uploadCommentAttachment(file, id as string)
-          );
-          const uploadedAttachments = await Promise.all(attachmentPromises);
-          newComment.attachments = uploadedAttachments;
-        }
 
         transaction.update(docRef, {
           comments: arrayUnion(newComment),
@@ -401,6 +407,86 @@ const TicketDetailPage = () => {
     }
   };
 
+  const handleMarkSubscriberAsPaid = async (subscriberIndex: number) => {
+    if (!id || !user || !userdoc.teamId) {
+      Alert.alert("خطأ", "البيانات المطلوبة غير متوفرة (user team id).");
+      return;
+    }
+
+    setSubscriberIndexBeingProcessed(subscriberIndex);
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const requestRef = doc(db, "serviceRequests", id as string);
+        const serviceRequestDoc = await transaction.get(requestRef);
+
+        if (!serviceRequestDoc.exists()) {
+          throw new Error("لم يتم العثور على طلب الخدمة.");
+        }
+
+        const currentServiceRequest = serviceRequestDoc.data() as ServiceRequest;
+        const subscribers = currentServiceRequest.subscribers as unknown as Subscriber[];
+        const subscriber = subscribers?.[subscriberIndex];
+
+        if (!subscriber) {
+          throw new Error("لم يتم العثور على المشترك.");
+        }
+
+        if (subscriber.isPaid) {
+          throw new Error("هذا المشترك مسجل كمدفوع بالفعل.");
+        }
+
+        const price = parseFloat(String(subscriber.price)?.replace(/,/g, "") || "0");
+        const newInvoice: Invoice = {
+          id: `${Date.now()}_${id}_${subscriberIndex}`,
+          linkedServiceRequestId: id as string,
+          customerName: subscriber.name,
+          items: [
+            {
+              description: `اشتراك: ${subscriber.packageType} - ${subscriber.name}`,
+              quantity: 1,
+              unitPrice: price,
+              totalPrice: price,
+              id: `item_sub_${Date.now()}_${subscriberIndex}`,
+              type: "subscriptionRenewal",
+            },
+          ],
+          totalAmount: price,
+          status: "pending",
+          createdBy: userdoc.uid,
+          creatorName: userdoc?.name || user.email || "النظام",
+          createdAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString(),
+          type: "invoice",
+          teamId: userdoc.teamId,
+          teamCreatorId: null,
+          subscriberId: subscriber.subscriberId,
+          notes: "فاتورة اشتراك",
+        };
+
+        const invoiceRef = doc(db, "invoices", newInvoice.id);
+        transaction.set(invoiceRef, newInvoice);
+
+        const updatedSubscribers = subscribers?.map((sub, index) =>
+          index === subscriberIndex ? { ...sub, isPaid: true } : sub
+        ) || [];
+
+        transaction.update(requestRef, {
+          invoiceIds: arrayUnion(newInvoice.id),
+          subscribers: updatedSubscribers,
+          lastUpdated: new Date().toISOString(),
+        });
+      });
+
+      Alert.alert("نجاح", "تم تسجيل اشتراك كمدفوع وإنشاء الفاتورة.");
+    } catch (error) {
+      console.error("Error marking subscriber as paid:", error);
+      Alert.alert("خطأ", `فشل في تسجيل الاشتراك كمدفوع: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSubscriberIndexBeingProcessed(null);
+    }
+  };
+
  const styles = getStyles(theme, themeName);
   if (loading) {
     return (
@@ -487,8 +573,95 @@ const TicketDetailPage = () => {
             />
           </>
         );
-      case 2:
-        return <ThemedText style={styles.subscribersText}>محتوى المشتركين</ThemedText>;
+      case 2: {
+        const subscribers = serviceRequest?.subscribers as unknown as Subscriber[];
+        const filteredSubscribers = subscribers
+            ?.map((subscriber, index) => ({ ...subscriber, originalIndex: index }))
+            .filter(subscriber =>
+                !subscriberSearch ||
+                subscriber.name.toLowerCase().includes(subscriberSearch.toLowerCase()) ||
+                (subscriber.phone && subscriber.phone.includes(subscriberSearch))
+            );
+        console.log("Filtered Subscribers:", filteredSubscribers);
+        const isCurrentUserTaskCompleted = currentUserResponse === 'completed';
+        const overallTaskIsCompleted = serviceRequest.status === 'مكتمل';
+
+        if ((!subscribers || subscribers.length === 0) && !loading) {
+            return (
+                <View style={styles.detailsContainer}>
+                    <ThemedText style={{ textAlign: 'center', color: theme.textSecondary, padding: 20 }}>
+                        لا يوجد مشتركين مضافين لهذا الطلب.
+                    </ThemedText>
+                </View>
+            );
+        }
+
+        return (
+            <View style={{gap: 16}}>
+                <TextInput
+                    style={styles.searchInput}
+                    placeholder="ابحث عن مشترك بالاسم أو رقم الهاتف..."
+                    value={subscriberSearch}
+                    onChangeText={setSubscriberSearch}
+                    placeholderTextColor={theme.textSecondary}
+                />
+                {filteredSubscribers && filteredSubscribers.length > 0 ? (
+                    filteredSubscribers.map((subscriber) => {
+                        const isButtonDisabled = {
+                            "subscriberIndexBeingProcessed !== null": subscriberIndexBeingProcessed !== null,
+                            "subscriber.isPaid": subscriber.isPaid,
+                            "currentUserResponse !== 'accepted'": currentUserResponse !== "accepted",
+                            isCurrentUserTaskCompleted,
+                            overallTaskIsCompleted,
+                        };
+                        console.log(`Button disabled states for ${subscriber.name}:`, isButtonDisabled);
+
+                        return (
+                            <View key={subscriber.originalIndex} style={styles.detailsContainer}>
+                                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                    <ThemedText style={styles.detailsTitle}>{subscriber.name}</ThemedText>
+                                    <View style={[styles.badge, { backgroundColor: subscriber.isPaid ? theme.success : theme.destructive }]}>
+                                        <ThemedText style={styles.badgeText}>
+                                            {subscriber.isPaid ? "مدفوع" : "غير مدفوع"}
+                                        </ThemedText>
+                                    </View>
+                                </View>
+                                <View style={{gap: 4, alignItems: 'flex-end'}}>
+                                    <ThemedText style={styles.detailText}>نوع الباقة: {subscriber.packageType}</ThemedText>
+                                    <ThemedText style={styles.detailText}>الهاتف: {subscriber.phone}</ThemedText>
+                                    <ThemedText style={styles.detailText}>السعر: {subscriber.price} د.ع</ThemedText>
+                                    <ThemedText style={styles.detailText}>المنطقة: {subscriber.zoneNumber}</ThemedText>
+                                </View>
+                                <View style={{marginTop: 16}}>
+                                    <Pressable
+                                        style={[styles.button, styles.fullWidthButton, { backgroundColor: theme.primary }, (subscriberIndexBeingProcessed !== null || subscriber.isPaid || currentUserResponse !== "accepted" || isCurrentUserTaskCompleted || overallTaskIsCompleted) && { opacity: 0.5 }]}
+                                        onPress={() => handleMarkSubscriberAsPaid(subscriber.originalIndex)}
+                                        disabled={
+                                            subscriberIndexBeingProcessed !== null ||
+                                            subscriber.isPaid ||
+                                            currentUserResponse !== "accepted" ||
+                                            isCurrentUserTaskCompleted ||
+                                            overallTaskIsCompleted
+                                        }
+                                    >
+                                        {subscriberIndexBeingProcessed === subscriber.originalIndex ? (
+                                            <ActivityIndicator color="#fff" />
+                                        ) : (
+                                            <ThemedText style={styles.buttonText}>تسجيل كمدفوع</ThemedText>
+                                        )}
+                                    </Pressable>
+                                </View>
+                            </View>
+                        );
+                    })
+                ) : (
+                    <ThemedText style={{ textAlign: 'center', color: theme.textSecondary, marginTop: 20 }}>
+                        لا توجد نتائج مطابقة للبحث.
+                    </ThemedText>
+                )}
+            </View>
+        );
+      }
       default:
         return null;
     }
@@ -781,7 +954,7 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
     detailsContainer: {
       backgroundColor: theme.card,
       borderRadius: 12,
-      padding: 16,
+      padding: 8,
       marginBottom: 16,
       shadowColor: shadowColor,
       shadowOffset: { width: 0, height: 1 },
@@ -823,6 +996,18 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       fontSize: 16,
       marginTop: 20,
       fontFamily: 'Cairo',
+    },
+    searchInput: {
+        height: 50,
+        borderColor: theme.border,
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 16,
+        backgroundColor: theme.card,
+        color: theme.text,
+        fontSize: 16,
+        textAlign: 'right',
+        fontFamily: 'Cairo',
     },
     actionsContainer: {
       position: 'absolute',
