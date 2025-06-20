@@ -1,8 +1,9 @@
 import { usePermissions } from "@/context/PermissionsContext";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useRouter } from "expo-router";
 import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 import { ChevronDown, Plus, X } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
   ActivityIndicator,
@@ -91,106 +92,249 @@ interface CreateServiceRequestFormProps {
 }
 
 
-// --- REUSABLE FORM & UI COMPONENTS ---
+// --- CONSTANTS & HELPERS ---
+const FONT_FAMILY = 'Cairo';
+
+const FormItem = ({ children, style }: { children: React.ReactNode, style?: object }) => {
+    const { theme: colors } = useTheme();
+    const styles = getStyles(colors);
+    return <View style={[styles.formItem, style]}>{children}</View>;
+};
+
+const FormLabel = ({ children }: { children: string }) => {
+    const { theme: colors } = useTheme();
+    const styles = getStyles(colors);
+    return <Text style={styles.label}>{children}</Text>;
+};
+
+const FormMessage = ({ message }: { message?: string }) => {
+    const { theme: colors } = useTheme();
+    const styles = getStyles(colors);
+    return message ? <Text style={styles.errorMessage}>{message}</Text> : null;
+};
+
+const Select = ({ label, options, selectedValue, onValueChange, placeholder, disabled, isLoading }: {
+    label?: string;
+    options: { label: string; value: string }[];
+    selectedValue?: string;
+    onValueChange: (value: string) => void;
+    placeholder: string;
+    disabled?: boolean;
+    isLoading?: boolean;
+}) => {
+    const { theme: colors } = useTheme();
+    const styles = getStyles(colors);
+    const [modalVisible, setModalVisible] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const selectedLabel = options.find(opt => opt.value === selectedValue)?.label || placeholder;
+
+    const filteredOptions = options.filter(option =>
+        option.label.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const handleOpen = () => {
+        if (!disabled && !isLoading) {
+            setSearchQuery("");
+            setModalVisible(true);
+        }
+    };
+
+    const handleClose = () => {
+        setModalVisible(false);
+        setSearchQuery("");
+    };
+
+    const handleSelect = (value: string) => {
+        onValueChange(value);
+        handleClose();
+    };
+
+    return (
+        <View>
+            {label && <FormLabel>{label}</FormLabel>}
+            <TouchableOpacity
+                style={[styles.selectTrigger, disabled && styles.disabledInput]}
+                onPress={handleOpen}
+                disabled={disabled || isLoading}
+            >
+                <Text style={[styles.selectValueText, !selectedValue && { color: colors.placeholder }]}>{selectedLabel}</Text>
+                {isLoading ? <ActivityIndicator size="small" color={styles.icon.color} /> : <ChevronDown color={styles.icon.color} size={20} />}
+            </TouchableOpacity>
+            <Modal
+                transparent={true}
+                visible={modalVisible}
+                onRequestClose={handleClose}
+                animationType="fade"
+            >
+                <Pressable style={styles.modalOverlay} onPress={handleClose}>
+                    <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="بحث..."
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            placeholderTextColor={colors.placeholder}
+                        />
+                        <ScrollView keyboardShouldPersistTaps="handled">
+                            {filteredOptions.map(option => (
+                                <TouchableOpacity
+                                    key={option.value}
+                                    style={styles.selectItem}
+                                    onPress={() => handleSelect(option.value)}
+                                >
+                                    <Text style={styles.selectItemText}>{option.label}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                </Pressable>
+            </Modal>
+        </View>
+    );
+};
+
+// --- SUBSCRIBER ITEM COMPONENT ---
+const SubscriberItem = React.memo(({
+    subscriber,
+    index,
+    updateSubscriber,
+    removeSubscriber,
+    zones,
+    packageTypes,
+    isLoadingPackageTypes,
+    isOnlySubscriber
+}: {
+    subscriber: Subscriber;
+    index: number;
+    updateSubscriber: (id: string, field: keyof Subscriber, value: any) => void;
+    removeSubscriber: (id: string) => void;
+    zones: { id: string; name: string }[];
+    packageTypes: { name: string; price: string }[];
+    isLoadingPackageTypes: boolean;
+    isOnlySubscriber: boolean;
+}) => {
+    const { theme: colors } = useTheme();
+    const styles = getStyles(colors);
+
+    const handleUpdate = useCallback((field: keyof Subscriber, value: string) => {
+        updateSubscriber(subscriber.id, field, value);
+    }, [subscriber.id, updateSubscriber]);
+
+const handlePackageChange = useCallback((packageName: string) => {
+    
+    const selectedPackage = packageTypes.find(p => p.name === packageName);
+    console.log('Found package:', selectedPackage);
+    
+    if (selectedPackage) {
+        updateSubscriber(subscriber.id, 'packageType', packageName);
+        // Convert number to string for TextInput
+        updateSubscriber(subscriber.id, 'price', selectedPackage.price.toString());
+    } else {
+        updateSubscriber(subscriber.id, 'packageType', packageName);
+    }
+}, [subscriber.id, updateSubscriber, packageTypes]);
+
+    const handleRemove = useCallback(() => {
+        removeSubscriber(subscriber.id);
+    }, [subscriber.id, removeSubscriber]);
+
+    return (
+        <View style={[styles.card, styles.subscriberCard]}>
+            <View style={styles.subscriberHeader}>
+                <Text style={styles.subscriberTitle}>مشترك {index + 1}</Text>
+                {!isOnlySubscriber && (
+                    <TouchableOpacity style={styles.removeButton} onPress={handleRemove}>
+                        <X color={styles.removeButtonIcon.color} size={18} />
+                    </TouchableOpacity>
+                )}
+            </View>
+            <FormItem>
+                <FormLabel>اسم المشترك</FormLabel>
+                <TextInput
+                    style={styles.input}
+                    placeholder="أدخل اسم المشترك"
+                    value={subscriber.name}
+                    onChangeText={(val) => handleUpdate('name', val)}
+                    placeholderTextColor={colors.placeholder}
+                    keyboardType="default"
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                />
+            </FormItem>
+            <FormItem>
+                <FormLabel>رقم هاتف المشترك</FormLabel>
+                <TextInput
+                    style={styles.input}
+                    placeholder="أدخل رقم الهاتف"
+                    value={subscriber.phone}
+                    onChangeText={(val) => handleUpdate('phone', val)}
+                    keyboardType="phone-pad"
+                    placeholderTextColor={colors.placeholder}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                />
+            </FormItem>
+            <FormItem>
+                <Select
+                    label="منطقة المشترك"
+                    placeholder="اختر المنطقة"
+                    options={zones.map(z => ({ label: z.name, value: z.name }))}
+                    selectedValue={subscriber.zoneNumber}
+                    onValueChange={(val) => handleUpdate('zoneNumber', val)}
+                    isLoading={zones.length === 0}
+                />
+            </FormItem>
+            <FormItem>
+                <Select
+                    label="نوع الباقة"
+                    placeholder="اختر نوع الباقة"
+                    options={packageTypes.map(p => ({ label: p.name, value: p.name }))}
+                    selectedValue={subscriber.packageType}
+                    onValueChange={handlePackageChange}
+                    isLoading={isLoadingPackageTypes}
+                />
+            </FormItem>
+            <FormItem>
+                <Select
+                    label="نوع الخدمة"
+                    placeholder="اختر نوع الخدمة"
+                    options={SERVICE_TYPES.map(s => ({ label: s, value: s }))}
+                    selectedValue={subscriber.serviceType}
+                    onValueChange={(val) => handleUpdate('serviceType', val)}
+                />
+            </FormItem>
+            <FormItem style={{ marginBottom: 0 }}>
+                <FormLabel>السعر (IQD)</FormLabel>
+                <TextInput
+                    style={styles.input}
+                    placeholder="السعر"
+                    value={subscriber.price}
+                    onChangeText={(val) => handleUpdate('price', val)}
+                    keyboardType="numeric"
+                    placeholderTextColor={colors.placeholder}
+                    returnKeyType="done"
+                    blurOnSubmit={false}
+                />
+            </FormItem>
+        </View>
+    );
+});
+
+SubscriberItem.displayName = 'SubscriberItem'; 
 
 
-
-
+// --- MAIN FORM COMPONENT ---
 export default function CreateServiceRequestForm({
   onSuccess,
   users,
   selectedUserIds,
   setSelectedUserIds
 }: CreateServiceRequestFormProps) {
+  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { userName, userUid, currentUserTeamId } = usePermissions()
+  const { userName, realuserUid, currentUserTeamId } = usePermissions()
   const { theme: colors } = useTheme();
   const styles = getStyles(colors);
-
-
-  const FormItem = ({ children, style }: { children: React.ReactNode, style?: object }) => <View style={[styles.formItem, style]}>{children}</View>;
-  const FormLabel = ({ children }: { children: string }) => <Text style={styles.label}>{children}</Text>;
-  const FormMessage = ({ message }: { message?: string }) => message ? <Text style={styles.errorMessage}>{message}</Text> : null;
-
-  const Select = ({ label, options, selectedValue, onValueChange, placeholder, disabled, isLoading }: {
-      label?: string;
-      options: { label: string; value: string }[];
-      selectedValue?: string;
-      onValueChange: (value: string) => void;
-      placeholder: string;
-      disabled?: boolean;
-      isLoading?: boolean;
-  }) => {
-      const [modalVisible, setModalVisible] = useState(false);
-      const [searchQuery, setSearchQuery] = useState(""); // State for search query
-      const selectedLabel = options.find(opt => opt.value === selectedValue)?.label || placeholder;
-
-      // Filter options based on search query
-      const filteredOptions = options.filter(option =>
-          option.label.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-
-      const handleOpen = () => {
-          if (!disabled && !isLoading) {
-              setSearchQuery(""); // Reset search on open
-              setModalVisible(true);
-          }
-      };
-
-      const handleClose = () => {
-          setModalVisible(false);
-          setSearchQuery(""); // Reset search on close
-      };
-
-      const handleSelect = (value: string) => {
-          onValueChange(value);
-          handleClose();
-      };
-
-
-      return (
-          <View>
-              {label && <FormLabel>{label}</FormLabel>}
-              <TouchableOpacity
-                  style={[styles.selectTrigger, disabled && styles.disabledInput]}
-                  onPress={handleOpen}
-                  disabled={disabled || isLoading}
-              >
-                  <Text style={[styles.selectValueText, !selectedValue && { color: colors.placeholder }]}>{selectedLabel}</Text>
-                  {isLoading ? <ActivityIndicator size="small" color={styles.icon.color} /> : <ChevronDown color={styles.icon.color} size={20} />}
-              </TouchableOpacity>
-              <Modal
-                  transparent={true}
-                  visible={modalVisible}
-                  onRequestClose={handleClose}
-                  animationType="fade"
-              >
-                  <Pressable style={styles.modalOverlay} onPress={handleClose}>
-                      <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
-                           <TextInput
-                              style={styles.searchInput}
-                              placeholder="بحث..."
-                              value={searchQuery}
-                              onChangeText={setSearchQuery}
-                              placeholderTextColor={colors.placeholder}
-                          />
-                          <ScrollView keyboardShouldPersistTaps="handled">
-                              {filteredOptions.map(option => (
-                                  <TouchableOpacity
-                                      key={option.value}
-                                      style={styles.selectItem}
-                                      onPress={() => handleSelect(option.value)}
-                                  >
-                                      <Text style={styles.selectItemText}>{option.label}</Text>
-                                  </TouchableOpacity>
-                              ))}
-                          </ScrollView>
-                      </View>
-                  </Pressable>
-              </Modal>
-          </View>
-      );
-  };
   
   const [subscribers, setSubscribers] = useState<Subscriber[]>([
     { id: uuidv4(), name: "", phone: "", zoneNumber: "", packageType: "", price: "", serviceType: "" }
@@ -245,7 +389,7 @@ export default function CreateServiceRequestForm({
   const ticketType = watch("type");
 
   const handleAddTicket = async (values: FormValues) => {
-    if (!userUid) return;
+    if (!realuserUid) return;
     setIsSubmitting(true);
     try {
       const ticketData: any = {
@@ -261,7 +405,7 @@ export default function CreateServiceRequestForm({
         createdAt: serverTimestamp(),
         lastUpdated: serverTimestamp(),
         assignedUsers: selectedUserIds,
-        creatorId: userUid,
+        creatorId: realuserUid,
         creatorName: userName || "",
         senttouser: false,
       };
@@ -284,6 +428,7 @@ export default function CreateServiceRequestForm({
       reset();
       setSelectedUserIds([]);
       setSubscribers([{ id: uuidv4(), name: "", phone: "", zoneNumber: "", packageType: "", price: "", serviceType: "" }]);
+      router.push('/(tabs)/my-requests');
       onSuccess();
     } catch (error) {
       console.error("Error adding ticket:", error);
@@ -292,25 +437,19 @@ export default function CreateServiceRequestForm({
     }
   };
 
-  const addSubscriber = () => setSubscribers([...subscribers, { id: uuidv4(), name: "", phone: "", zoneNumber: "", packageType: "", price: "", serviceType: "" }]);
-  const removeSubscriber = (id: string) => {
-    if (subscribers.length > 1) {
-        setSubscribers(subscribers.filter(sub => sub.id !== id));
-    }
-  }
-  const updateSubscriber = (id: string, field: keyof Subscriber, value: any) => {
-    setSubscribers(prev => prev.map(sub => {
-      if (sub.id === id) {
-        const updatedSub = { ...sub, [field]: value };
-        if (field === 'packageType') {
-          const pkg = packageTypes.find(p => p.name === value);
-          if (pkg) updatedSub.price = pkg.price;
-        }
-        return updatedSub;
-      }
-      return sub;
-    }));
-  };
+  const addSubscriber = useCallback(() => {
+    setSubscribers(prev => [...prev, { id: uuidv4(), name: "", phone: "", zoneNumber: "", packageType: "", price: "", serviceType: "" }]);
+  }, []);
+
+  const removeSubscriber = useCallback((id: string) => {
+    setSubscribers(prev => prev.length > 1 ? prev.filter(sub => sub.id !== id) : prev);
+  }, []);
+
+  const updateSubscriber = useCallback((id: string, field: keyof Subscriber, value: any) => {
+    setSubscribers(prev => prev.map(sub =>
+      sub.id === id ? { ...sub, [field]: value } : sub
+    ));
+  }, []);
 
   return (
     <KeyboardAwareScrollView
@@ -337,7 +476,39 @@ export default function CreateServiceRequestForm({
                 </FormItem>
             )}
         />
-        
+        <View style={styles.card}>
+            <Controller control={control} name="title" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>عنوان التكت</FormLabel>
+                    <TextInput 
+                      style={styles.input} 
+                      placeholder="أدخل عنوان التكت" 
+                      value={field.value || ''} 
+                      onChangeText={field.onChange} 
+                      onBlur={field.onBlur}
+                      placeholderTextColor={colors.placeholder}
+                      returnKeyType="next"
+                    />
+                    <FormMessage message={errors.title?.message} />
+                </FormItem>
+            )} />
+            <Controller control={control} name="description" render={({ field }) => (
+                <FormItem style={{ marginBottom: 0 }}>
+                    <FormLabel>وصف التكت</FormLabel>
+                    <TextInput 
+                      style={[styles.input, styles.textArea]} 
+                      placeholder="أدخل تفاصيل التكت" 
+                      value={field.value || ''} 
+                      onChangeText={field.onChange} 
+                      onBlur={field.onBlur}
+                      multiline
+                      placeholderTextColor={colors.placeholder}
+                      returnKeyType="default"
+                     />
+                    <FormMessage message={errors.description?.message} />
+                </FormItem>
+            )} />
+        </View>
         {ticketType !== "جباية" && (
             <View style={styles.card}>
                 <Controller control={control} name="customerName" render={({ field }) => (
@@ -390,41 +561,9 @@ export default function CreateServiceRequestForm({
             </View>
         )}
 
-        <View style={styles.card}>
-            <Controller control={control} name="title" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>عنوان التكت</FormLabel>
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder="أدخل عنوان التكت" 
-                      value={field.value || ''} 
-                      onChangeText={field.onChange} 
-                      onBlur={field.onBlur}
-                      placeholderTextColor={colors.placeholder}
-                      returnKeyType="next"
-                    />
-                    <FormMessage message={errors.title?.message} />
-                </FormItem>
-            )} />
-            <Controller control={control} name="description" render={({ field }) => (
-                <FormItem style={{ marginBottom: 0 }}>
-                    <FormLabel>وصف التكت</FormLabel>
-                    <TextInput 
-                      style={[styles.input, styles.textArea]} 
-                      placeholder="أدخل تفاصيل التكت" 
-                      value={field.value || ''} 
-                      onChangeText={field.onChange} 
-                      onBlur={field.onBlur}
-                      multiline
-                      placeholderTextColor={colors.placeholder}
-                      returnKeyType="default"
-                     />
-                    <FormMessage message={errors.description?.message} />
-                </FormItem>
-            )} />
-        </View>
+        
 
-        <View style={styles.card}>
+        {/* <View style={styles.card}>
             <Controller
                 control={control}
                 name="priority"
@@ -470,90 +609,23 @@ export default function CreateServiceRequestForm({
                     }}
                 />
             </FormItem>
-        </View>
+        </View> */}
 
         {ticketType === "جباية" && (
             <View>
                  <Text style={styles.sectionTitle}>معلومات المشتركين</Text>
                  {subscribers.map((subscriber, index) => (
-                    <View key={subscriber.id} style={[styles.card, styles.subscriberCard]}>
-                        <View style={styles.subscriberHeader}>
-                           <Text style={styles.subscriberTitle}>مشترك {index + 1}</Text>
-                            {subscribers.length > 1 && (
-                                <TouchableOpacity style={styles.removeButton} onPress={() => removeSubscriber(subscriber.id)}>
-                                    <X color={styles.removeButtonIcon.color} size={18} />
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                        <FormItem>
-                            <FormLabel>اسم المشترك</FormLabel>
-                            <TextInput 
-                              style={styles.input} 
-                              placeholder="أدخل اسم المشترك" 
-                              value={subscriber.name} 
-                              onChangeText={(val) => updateSubscriber(subscriber.id, 'name', val)}
-                              placeholderTextColor={colors.placeholder}
-                              keyboardType="default"
-                              returnKeyType="next"
-                              blurOnSubmit={false}
-                            />
-                        </FormItem>
-                        <FormItem>
-                            <FormLabel>رقم هاتف المشترك</FormLabel>
-                            <TextInput 
-                              style={styles.input} 
-                              placeholder="أدخل رقم الهاتف" 
-                              value={subscriber.phone} 
-                              onChangeText={(val) => updateSubscriber(subscriber.id, 'phone', val)}
-                              keyboardType="phone-pad"
-                              placeholderTextColor={colors.placeholder}
-                              returnKeyType="next"
-                              blurOnSubmit={false}
-                            />
-                        </FormItem>
-                        <FormItem>
-                            <Select
-                                label="منطقة المشترك"
-                                placeholder="اختر المنطقة"
-                                options={zones.map(z => ({ label: z.name, value: z.name }))}
-                                selectedValue={subscriber.zoneNumber}
-                                onValueChange={(val) => updateSubscriber(subscriber.id, 'zoneNumber', val)}
-                                isLoading={zones.length === 0}
-                            />
-                        </FormItem>
-                        <FormItem>
-                            <Select
-                                label="نوع الباقة"
-                                placeholder="اختر نوع الباقة"
-                                options={packageTypes.map(p => ({ label: p.name, value: p.name }))}
-                                selectedValue={subscriber.packageType}
-                                onValueChange={(val) => updateSubscriber(subscriber.id, 'packageType', val)}
-                                isLoading={isLoadingPackageTypes}
-                            />
-                        </FormItem>
-                        <FormItem>
-                            <Select
-                                label="نوع الخدمة"
-                                placeholder="اختر نوع الخدمة"
-                                options={SERVICE_TYPES.map(s => ({ label: s, value: s }))}
-                                selectedValue={subscriber.serviceType}
-                                onValueChange={(val) => updateSubscriber(subscriber.id, 'serviceType', val)}
-                            />
-                        </FormItem>
-                        <FormItem style={{ marginBottom: 0 }}>
-                            <FormLabel>السعر (IQD)</FormLabel>
-                            <TextInput 
-                              style={styles.input} 
-                              placeholder="السعر" 
-                              value={subscriber.price} 
-                              onChangeText={(val) => updateSubscriber(subscriber.id, 'price', val)}
-                              keyboardType="numeric"
-                              placeholderTextColor={colors.placeholder}
-                              returnKeyType="done"
-                              blurOnSubmit={false}
-                            />
-                        </FormItem>
-                    </View>
+                    <SubscriberItem
+                        key={subscriber.id}
+                        subscriber={subscriber}
+                        index={index}
+                        updateSubscriber={updateSubscriber}
+                        removeSubscriber={removeSubscriber}
+                        zones={zones}
+                        packageTypes={packageTypes}
+                        isLoadingPackageTypes={isLoadingPackageTypes}
+                        isOnlySubscriber={subscribers.length === 1}
+                    />
                  ))}
                  <TouchableOpacity style={styles.addButton} onPress={addSubscriber}>
                      <Plus color={styles.addButtonText.color} size={18} />
@@ -574,8 +646,6 @@ export default function CreateServiceRequestForm({
     </KeyboardAwareScrollView>
   );
 }
-const FONT_FAMILY = 'Cairo';
-
 const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,

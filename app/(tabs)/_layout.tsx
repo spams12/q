@@ -49,7 +49,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="my-requests"
         options={{
-          title: 'التذاكر',
+          title: 'التكتات',
           tabBarIcon: ({ color, size }) => (
             <FontAwesome name="list-alt" size={size} color={color} />
           ),
@@ -58,9 +58,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="stock-management"
         options={{
-          title: 'المخزن',
+          title: 'الحقيبة',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="store" size={size} color={color} />
+            <MaterialIcons name="backpack" size={size} color={color} />
           ),
         }}
       />

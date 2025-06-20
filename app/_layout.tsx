@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter, useSegments } from 'expo-router';
@@ -5,7 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import 'react-native-get-random-values';
 import 'react-native-reanimated';
 import { PermissionsProvider } from '../context/PermissionsContext';
@@ -26,6 +27,7 @@ SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   const { theme } = useTheme();
+  const router = useRouter();
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -40,19 +42,40 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="tasks/[id]" options={{ headerShown: false }}/>
-        <Stack.Screen name="create-request"  options={{
+        <Stack.Screen
+          name="create-request"
+          options={{
             title: 'إنشاء تكت',
             headerTitleAlign: 'center',
-          }} />
+            headerLeft: () => (
+              <Pressable
+                onPress={() => router.back()}
+                style={styles.backButton}
+              >
+                <Ionicons
+                  name="arrow-back-circle-sharp"
+                  size={32}
+                  color={theme.text}
+                />
+              </Pressable>
+            ),
+          }}
+        />
         <Stack.Screen name="notifications" options={{
             title: 'الاشعارات',
             headerTitleAlign: 'center',
           }}/>
         <Stack.Screen name="+not-found" />
+  
       </Stack>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  backButton: {
+  },
+});
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({

@@ -108,7 +108,7 @@ const StockManagementScreen: React.FC = () => {
       reduction: 'تقليل',
       inventory: 'جرد',
       invoice: 'فاتورة',
-      hook: 'خطاف',
+      hook: 'هوك',
       cable: 'كابل',
       bag: 'شنطات'
     };
@@ -116,7 +116,7 @@ const StockManagementScreen: React.FC = () => {
   };
 
   const getItemTypeColor = (type: string) => {
-    const colors = { packageType: '#FF6B6B', cableLength: '#4ECDC4', connectorType: '#45B7D1', deviceModel: '#96CEB4', maintenanceType: '#FFEAA7' };
+    const colors = { packageType: '#2F80ED', cableLength: '#2F80ED', connectorType: '#2F80ED', deviceModel: '#2F80ED', maintenanceType: '#2F80ED' , hook: '#2F80ED', cable: '#2F80ED', bag: '#2F80ED' };
     return colors[type as keyof typeof colors] || '#DDD';
   };
 
@@ -206,14 +206,14 @@ const StockManagementScreen: React.FC = () => {
   const ListHeader = React.memo(() => (
     <>
       <View style={styles.headerContainer}>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>إدارة المخزون</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>إدارة الحقيبة</Text>
         <Text style={[styles.headerSubtitle, { color: theme.text }]}>
           عرض وإدارة مخزونك ومعاملاتك.
         </Text>
       </View>
       <View style={[styles.tabsContainer, { backgroundColor: theme.header }]}>
-        <TabButton tabKey="stock" label="المخزون" count={stockItems.length} />
-        <TabButton tabKey="transactions" label="المعاملات" count={transactions.length} />
+        <TabButton tabKey="stock" label="الحقيبة" count={stockItems.length} />
+        <TabButton tabKey="transactions" label="سجل الاضافات" count={transactions.length} />
       </View>
     </>
   ));

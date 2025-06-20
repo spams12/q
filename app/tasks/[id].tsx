@@ -688,7 +688,7 @@ const TicketDetailPage = () => {
           <View style={styles.headerContent}>
             <View style={styles.headerTop}>
               <ThemedText style={styles.headerTitle}>{serviceRequest.title}</ThemedText>
-              <ThemedText style={styles.headerSubtitle}>تذكرة #{id}</ThemedText>
+              <ThemedText style={styles.headerSubtitle}>#{id}</ThemedText>
             </View>
             <View style={styles.badgeContainer}>
               <View style={[styles.badge, getStatusStyle(serviceRequest.status, theme)]}>

@@ -28,7 +28,7 @@ const CustomHeader = (props: CustomHeaderProps) => {
       {/* Left side: Avatar */}
       <View style={styles.leftContainer}>
         <Image
-          source={{ uri: userdoc?.photoURL || 'https://i.pravatar.cc/40' }}
+          source={{ uri: userdoc?.photoURL }}
           style={styles.avatar}
         />
       </View>

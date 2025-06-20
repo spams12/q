@@ -11,12 +11,13 @@ import { ServiceRequest } from '../lib/types';
 interface InfoCardProps {
   item: ServiceRequest;
   viewableItems?: Animated.SharedValue<ViewToken[]>;
-  handleAcceptTask: (ticketId: string) => void;
-  handleRejectTask: (ticketId: string) => void;
-  hasResponded: boolean;
+  handleAcceptTask?: (ticketId: string) => void;
+  handleRejectTask?: (ticketId: string) => void;
+  hasResponded?: boolean;
+  showActions?: boolean;
 }
 
-const InfoCard: React.FC<InfoCardProps> = React.memo(({ item, viewableItems, handleAcceptTask, handleRejectTask, hasResponded }) => {
+const InfoCard: React.FC<InfoCardProps> = React.memo(({ item, viewableItems, handleAcceptTask, handleRejectTask, hasResponded, showActions = true }) => {
   const { theme } = useTheme();
   const router = useRouter();
 
@@ -121,11 +122,11 @@ id: item.id,
   }, []);
 
   const handleAccept = useCallback(() => {
-    handleAcceptTask(item.id);
+    handleAcceptTask?.(item.id);
   }, [item.id, handleAcceptTask]);
 
   const handleReject = useCallback(() => {
-    handleRejectTask(item.id);
+    handleRejectTask?.(item.id);
   }, [item.id, handleRejectTask]);
 
   const rStyle = useAnimatedStyle(() => {
@@ -195,7 +196,7 @@ id: item.id,
           </Text>
         </View>
         
-        {item.status === 'مفتوح' && !hasResponded && (
+        {showActions && item.status === 'مفتوح' && !hasResponded && (
           <View style={styles.footer}>
             <TouchableOpacity
               style={[styles.button, styles.denyButton]}

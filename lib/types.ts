@@ -135,22 +135,25 @@ export interface ServiceRequest {
   customerPhone?: string;
   title: string;
   description: string;
-  type: string; // e.g., "مشكلة", "طلب جديد"
-  status: string; // e.g., "مفتوح", "قيد المعالجة", "مغلق"
-  priority: string; // e.g., "عالية", "متوسطة", "منخفضة"
-  date: string; // Original date, might be ISO string
-  createdAt: string; // Firestore timestamp or ISO string
-  lastUpdated: string; // Firestore timestamp or ISO string
+  type: string; 
+  status: string; 
+  priority: string; 
+  date: string; 
+  createdAt: string; 
+  lastUpdated: string;
   assignedTo?: string;
   assignedUsers?: string[];
-  attachments?: string[]; // URLs or identifiers
+  attachments?: string[]; 
   comments?: Comment[];
   creatorId: string;
   creatorName: string;
-  subscribers?: string[]; // IDs of users subscribed to this request
+  subscribers?: string[];
   subscriberId?: string | null;
   invoiceIds?: string[];
   userResponses?: UserResponse[];
+completionTimestamp?: any;
+  onLocationTimestamp?: any;
+  estimatedTime?: number;
 }
 export interface UserResponse {
   userId: string;

@@ -6,6 +6,7 @@ import {
   Alert,
   Animated,
   FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -31,7 +32,7 @@ import {
 import { db } from "../../lib/firebase";
 
 // ICONS
-import { AlertCircle, CheckCircle, Clock, Inbox, ListChecks, Search } from "lucide-react-native";
+import { AlertCircle, CheckCircle, Clock, Inbox, ListChecks, Search, Zap } from "lucide-react-native";
 
 // CONTEXT & TYPES
 import { useTheme } from "../../context/ThemeContext";
@@ -151,7 +152,7 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
       "مفتوح": styles.badgeBlue,
       "قيد المعالجة": styles.badgeYellow,
       "مكتمل": styles.badgeGreen,
-      "مغلق": styles.badgeRed,
+      "مغلق": styles.badgeGray,
       "معلق": styles.badgePurple
     };
     return [styles.badge, statusStyles[status] || styles.badgeGray];
@@ -214,6 +215,95 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
 
 TicketItem.displayName = 'TicketItem';
 
+const PerformanceSummaryCard = ({ tasks, styles }: { tasks: ServiceRequest[], styles: any }) => {
+    const performanceStats = useMemo(() => {
+        const relevantTasks = tasks.filter(
+            (t) =>
+                (t.status === "مكتمل" || t.status === "مغلق") &&
+                t.completionTimestamp &&
+                t.onLocationTimestamp
+        );
+
+        if (relevantTasks.length === 0) {
+            return { onTimePercentage: 100, latePercentage: 0, onTimeCount: 0, lateCount: 0, averageCompletionTime: 0 };
+        }
+
+        let totalCompletionTime = 0;
+        relevantTasks.forEach(task => {
+            const onLocationTime = task.onLocationTimestamp.toDate().getTime();
+            const completionTime = task.completionTimestamp.toDate().getTime();
+            totalCompletionTime += (completionTime - onLocationTime);
+        });
+
+        const averageCompletionTime = (totalCompletionTime / relevantTasks.length) / (1000 * 60);
+
+        const tasksWithSla = relevantTasks.filter(t => t.estimatedTime != null);
+        
+        let lateCount = 0;
+        if (tasksWithSla.length > 0) {
+            tasksWithSla.forEach((task) => {
+                if (task.onLocationTimestamp && task.completionTimestamp && task.estimatedTime) {
+                    const onLocationTime = task.onLocationTimestamp.toDate().getTime();
+                    const completionTime = task.completionTimestamp.toDate().getTime();
+                    const estimatedDuration = task.estimatedTime * 60 * 1000; // minutes to ms
+
+                    if (completionTime > onLocationTime + estimatedDuration) {
+                        lateCount++;
+                    }
+                }
+            });
+        }
+
+        const totalSla = tasksWithSla.length;
+        const onTimeCount = totalSla - lateCount;
+
+        return {
+            onTimePercentage: totalSla > 0 ? Math.round((onTimeCount / totalSla) * 100) : 100,
+            latePercentage: totalSla > 0 ? Math.round((lateCount / totalSla) * 100) : 0,
+            onTimeCount,
+            lateCount,
+            averageCompletionTime: Math.round(averageCompletionTime)
+        };
+    }, [tasks]);
+
+    const { onTimePercentage, latePercentage, onTimeCount, lateCount, averageCompletionTime } = performanceStats;
+
+    return (
+        <View style={styles.card}>
+            <View style={styles.performanceHeader}>
+                <View style={styles.performanceIconContainer}>
+                    <Zap size={22} color="#F59E0B" />
+                </View>
+                <Text style={styles.performanceTitle}>مؤشر الأداء (SLA)</Text>
+            </View>
+            <View style={styles.avgTimeContainer}>
+                <Text style={styles.avgTimeText}>متوسط وقت الإنجاز</Text>
+                <Text style={styles.avgTimeValue}>{averageCompletionTime} دقيقة</Text>
+            </View>
+            <View style={styles.progressBarsContainer}>
+                <View style={styles.progressBarContainer}>
+                    <View style={styles.progressBarHeader}>
+                        <Text style={styles.progressBarTitle}>الإنجاز في الوقت المحدد</Text>
+                        <Text style={styles.progressBarCount}>{onTimeCount} ({onTimePercentage}%)</Text>
+                    </View>
+                    <View style={styles.progressBarTrack}>
+                        <View style={[styles.progressBarFill, { width: `${onTimePercentage}%`, backgroundColor: '#10B981' }]} />
+                    </View>
+                </View>
+                <View style={styles.progressBarContainer}>
+                    <View style={styles.progressBarHeader}>
+                        <Text style={styles.progressBarTitle}>المهام المتأخرة</Text>
+                        <Text style={styles.progressBarCount}>{lateCount} ({latePercentage}%)</Text>
+                    </View>
+                    <View style={styles.progressBarTrack}>
+                        <View style={[styles.progressBarFill, { width: `${latePercentage}%`, backgroundColor: '#EF4444' }]} />
+                    </View>
+                </View>
+            </View>
+        </View>
+    );
+};
+
 
 // --- MAIN PAGE COMPONENT ---
 
@@ -229,8 +319,8 @@ interface ListHeaderProps {
     tasks: ServiceRequest[];
     searchTerm: string;
     setSearchTerm: (term: string) => void;
-    selectedTab: "all" | "pending" | "completed";
-    handleTabChange: (tab: "all" | "pending" | "completed") => void;
+    selectedTab: "all" | "pending" | "completed" | "rejected";
+    handleTabChange: (tab: "all" | "pending" | "completed" | "rejected") => void;
     styles: any;
     isSmallScreen: boolean;
 }
@@ -250,6 +340,7 @@ const ListHeader = React.memo(({
             <Text style={styles.dashboardSubtitle}>مرحباً بك، تتبع مهامك وأدائك</Text>
         </View>
         <TechnicianStatCards tickets={tasks} styles={styles} isSmallScreen={isSmallScreen} />
+        <PerformanceSummaryCard tasks={tasks} styles={styles} />
         
         <View style={styles.taskListContainer}>
             <View style={styles.taskListHeader}>
@@ -275,6 +366,7 @@ const ListHeader = React.memo(({
                     <TabButton title="الكل" isActive={selectedTab === 'all'} onPress={() => handleTabChange('all')} styles={styles} />
                     <TabButton title="قيد التنفيذ" isActive={selectedTab === 'pending'} onPress={() => handleTabChange('pending')} styles={styles} />
                     <TabButton title="مكتملة" isActive={selectedTab === 'completed'} onPress={() => handleTabChange('completed')} styles={styles} />
+                    <TabButton title="مرفوضة" isActive={selectedTab === 'rejected'} onPress={() => handleTabChange('rejected')} styles={styles} />
                 </View>
             </View>
         </View>
@@ -306,12 +398,13 @@ export default function TechnicianDashboardScreen() {
   const isSmallScreen = width < 400;
   const [tasks, setTasks] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const { user } = useAuth();
   const [currentUserDocId, setCurrentUserDocId] = useState<string | null>(null);
   const router = useRouter();
 
 
-  const [selectedTab, setSelectedTab] = useState<"all" | "pending" | "completed">("all");
+  const [selectedTab, setSelectedTab] = useState<"all" | "pending" | "completed" | "rejected">("all");
   const [searchTerm, setSearchTerm] = useState("");
 
   const mapDocToServiceRequest = (docSnap: DocumentSnapshot): ServiceRequest => {
@@ -359,6 +452,17 @@ const fetchTasks = useCallback(async (userDocId: string) => {
   }
 }, []);
 
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    if (currentUserDocId) {
+      // Invalidate cache to force re-fetch
+      cacheTimestamp = null;
+      fetchTasks(currentUserDocId).finally(() => setRefreshing(false));
+    } else {
+      setRefreshing(false);
+    }
+  }, [currentUserDocId, fetchTasks]);
+
   useEffect(() => {
     const now = Date.now();
     // Use cache if it's less than 1 minute old to prevent re-fetch on rapid tab switching
@@ -391,7 +495,7 @@ const fetchTasks = useCallback(async (userDocId: string) => {
   }, [user, fetchUserDocId, fetchTasks]);
 
 
-  const handleTabChange = useCallback((tab: "all" | "pending" | "completed") => {
+  const handleTabChange = useCallback((tab: "all" | "pending" | "completed" | "rejected") => {
     if (tab === selectedTab) return;
     setSelectedTab(tab);
   }, [selectedTab]);
@@ -404,6 +508,11 @@ const fetchTasks = useCallback(async (userDocId: string) => {
       baseTickets = tasks.filter(ticket => ["مفتوح", "قيد المعالجة"].includes(ticket.status));
     } else if (selectedTab === "completed") {
       baseTickets = tasks.filter(ticket => ["مكتمل", "مغلق"].includes(ticket.status));
+    } else if (selectedTab === "rejected") {
+      baseTickets = tasks.filter(ticket => {
+        const userResponse = ticket.userResponses?.find(r => r.userId === currentUserDocId);
+        return userResponse?.response === 'rejected';
+      });
     }
   
     if (searchTerm) {
@@ -416,7 +525,7 @@ const fetchTasks = useCallback(async (userDocId: string) => {
     }
   
     return baseTickets;
-  }, [tasks, selectedTab, searchTerm]);
+  }, [tasks, selectedTab, searchTerm, currentUserDocId]);
 
   const renderItem = useCallback(({ item }: { item: ServiceRequest }) => (
     <TicketItem
@@ -445,6 +554,14 @@ const fetchTasks = useCallback(async (userDocId: string) => {
         data={filteredTasks}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
         ListHeaderComponent={<ListHeader
           tasks={tasks}
           searchTerm={searchTerm}
@@ -596,6 +713,28 @@ const getStyles = (theme: any, width: number) => {
       color: theme.text,
       fontFamily: 'Cairo',
     },
+    avgTimeContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 12,
+        borderTopWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: theme.border,
+        marginTop: 20,
+        marginBottom: 20,
+    },
+    avgTimeText: {
+        fontSize: 16,
+        color: theme.textSecondary,
+        fontFamily: 'Cairo',
+    },
+    avgTimeValue: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: theme.text,
+        fontFamily: 'Cairo',
+    },
     progressBarsContainer: {
       gap: 18,
     },
@@ -679,7 +818,7 @@ const getStyles = (theme: any, width: number) => {
     },
     searchInput: {
       flex: 1,
-      height: 44,
+      height: 50,
       fontSize: 15,
       color: theme.text,
       fontFamily: 'Cairo',
@@ -748,6 +887,9 @@ const getStyles = (theme: any, width: number) => {
       backgroundColor: theme.card,
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
+      marginBottom: 16,
+      borderRadius: 12,
+      marginHorizontal: isSmallScreen ? 12 : 16,
     },
     ticketContent: {
       paddingHorizontal: isSmallScreen ? 16 : 20,

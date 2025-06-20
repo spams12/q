@@ -172,7 +172,7 @@ const ListHeader = React.memo(({
     </View>
 
     <View style={[styles.tabsContainer, { backgroundColor: theme.header }]}>
-      <TabButton tabKey="Open" label="مفتوح" isActive={activeTab === 'Open'} isLoading={loadingStates.Open} onPress={handleTabPress} theme={theme} />
+      <TabButton tabKey="Open" label="قيد المعالجة" isActive={activeTab === 'Open'} isLoading={loadingStates.Open} onPress={handleTabPress} theme={theme} />
       <TabButton tabKey="Accepted" label="مقبولة" isActive={activeTab === 'Accepted'} isLoading={loadingStates.Accepted} onPress={handleTabPress} theme={theme} />
       <TabButton tabKey="Done" label="منجزة" isActive={activeTab === 'Done'} isLoading={loadingStates.Done} onPress={handleTabPress} theme={theme} />
     </View>
