@@ -51,7 +51,7 @@ const formatTimestamp = (date: any): string => {
   if (!date) return "N/A";
   try {
     const d = date.toDate ? date.toDate() : new Date(date);
-    return d.toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' });
+    return d.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
   } catch {
     return "تاريخ غير صالح";
   }

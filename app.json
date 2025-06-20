@@ -41,7 +41,8 @@
           "icon": "./assets/images/icon.png",
           "color": "#ffffff"
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

@@ -3,7 +3,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { arrayUnion, collection, doc, getDocs, limit, orderBy, query, updateDoc, where } from 'firebase/firestore';
+import { arrayUnion, collection, doc, getDocs, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, FlatList, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ViewToken } from 'react-native';
 import { useSharedValue, withSpring } from 'react-native-reanimated';
@@ -13,18 +13,18 @@ import useFirebaseAuth from '../../hooks/use-firebase-auth';
 import { db } from '../../lib/firebase';
 import { Comment, ServiceRequest, UserResponse } from '../../lib/types';
 
-type TabKey = 'Open' | 'Accepted' | 'Done';
+type TabKey = 'New' | 'Accepted' | 'Rejected';
 
 interface CachedData {
-  Open: ServiceRequest[];
+  New: ServiceRequest[];
   Accepted: ServiceRequest[];
-  Done: ServiceRequest[];
+  Rejected: ServiceRequest[];
 }
 
 interface LoadingStates {
-  Open: boolean;
+  New: boolean;
   Accepted: boolean;
-  Done: boolean;
+  Rejected: boolean;
 }
 
 // Extracted Components
@@ -158,10 +158,10 @@ const ListHeader = React.memo(({
   <>
     <View style={styles.headerContainer}>
       <View style={styles.headerRow}>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>التذاكر المسندة إليك</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>المهام</Text>
       </View>
       <Text style={[styles.headerSubtitle, { color: theme.text }]}>
-        قائمة التذاكر المسندة إليك من قبل المدير.
+        قائمة المهام المسندة إليك من قبل المدير.
       </Text>
     </View>
 
@@ -172,9 +172,9 @@ const ListHeader = React.memo(({
     </View>
 
     <View style={[styles.tabsContainer, { backgroundColor: theme.header }]}>
-      <TabButton tabKey="Open" label="قيد المعالجة" isActive={activeTab === 'Open'} isLoading={loadingStates.Open} onPress={handleTabPress} theme={theme} />
+      <TabButton tabKey="New" label="جديدة" isActive={activeTab === 'New'} isLoading={loadingStates.New} onPress={handleTabPress} theme={theme} />
       <TabButton tabKey="Accepted" label="مقبولة" isActive={activeTab === 'Accepted'} isLoading={loadingStates.Accepted} onPress={handleTabPress} theme={theme} />
-      <TabButton tabKey="Done" label="منجزة" isActive={activeTab === 'Done'} isLoading={loadingStates.Done} onPress={handleTabPress} theme={theme} />
+      <TabButton tabKey="Rejected" label="مرفوضة" isActive={activeTab === 'Rejected'} isLoading={loadingStates.Rejected} onPress={handleTabPress} theme={theme} />
     </View>
 
     {hasActiveFilters && (
@@ -218,22 +218,40 @@ const ListEmptyComponent = React.memo(({ isLoading, theme }: ListEmptyProps) => 
 });
 ListEmptyComponent.displayName = 'ListEmptyComponent';
 
+const getMillis = (timestamp: any): number => {
+    if (!timestamp) return 0;
+    if (typeof timestamp.toMillis === 'function') {
+        return timestamp.toMillis(); // Firestore Timestamp
+    }
+    if (typeof timestamp === 'string') {
+        const date = new Date(timestamp);
+        return isNaN(date.getTime()) ? 0 : date.getTime(); // ISO String
+    }
+    if (typeof timestamp === 'number') {
+        return timestamp; // Milliseconds
+    }
+    if (timestamp.seconds && typeof timestamp.seconds === 'number') {
+        return timestamp.seconds * 1000; // Firestore-like object
+    }
+    return 0;
+};
+
 const TasksScreen: React.FC = () => {
   // Data caching states
   const [cachedData, setCachedData] = useState<CachedData>({
-    Open: [],
+    New: [],
     Accepted: [],
-    Done: []
+    Rejected: [],
   });
   
   const [loadingStates, setLoadingStates] = useState<LoadingStates>({
-    Open: true,
-    Accepted: false,
-    Done: false
+    New: true,
+    Accepted: true,
+    Rejected: true,
   });
 
   // UI states
-  const [activeTab, setActiveTab] = useState<TabKey>('Open');
+  const [activeTab, setActiveTab] = useState<TabKey>('New');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
@@ -250,113 +268,105 @@ const TasksScreen: React.FC = () => {
   const { theme } = useTheme();
   
   // Refs for optimization
-  const dataCache = useRef<Map<TabKey, { data: ServiceRequest[]; timestamp: number }>>(new Map());
+  const dataCache = useRef<Map<TabKey | 'all', { data: ServiceRequest[]; timestamp: number }>>(new Map());
   const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
 
-  // Status mapping
-  const getStatusFilter = useCallback((tab: TabKey): string => {
-    const statusMap = {
-      'Open': 'مفتوح',
-      'Accepted': 'قيد المعالجة',
-      'Done': 'مكتمل'
-    };
-    return statusMap[tab];
-  }, []);
-
-  // Optimized data fetching with caching
-  const fetchTabData = useCallback(async (tab: TabKey, forceRefresh = false) => {
+  const fetchAndCategorizeTasks = useCallback(async (forceRefresh = false) => {
     if (!userUid) {
-      return; // Don't fetch if user is not identified
-    }
-
-    // Check cache first
-    const cached = dataCache.current.get(tab);
-    const now = Date.now();
-    
-    if (!forceRefresh && cached && (now - cached.timestamp) < CACHE_DURATION) {
-      setCachedData(prev => ({ ...prev, [tab]: cached.data }));
       return;
     }
 
-    setLoadingStates(prev => ({ ...prev, [tab]: true }));
-    
-    try {
-      const statusFilter = getStatusFilter(tab);
-      const q = query(
-        collection(db, 'serviceRequests'), 
-        where('status', '==', statusFilter),
-        where("assignedUsers", "array-contains", userUid),
-        orderBy('createdAt', 'desc'),
-        limit(50) // Reduced limit for faster loading
-      );
-      
-      const querySnapshot = await getDocs(q);
-      const requests = querySnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      } as ServiceRequest));
-      
-      // Update cache
-      dataCache.current.set(tab, { data: requests, timestamp: now });
-      setCachedData(prev => ({ ...prev, [tab]: requests }));
-      
-    } catch (error) {
-      console.error(`Error fetching ${tab} requests:`, error);
-      setCachedData(prev => ({ ...prev, [tab]: [] }));
-    } finally {
-      setLoadingStates(prev => ({ ...prev, [tab]: false }));
+    const cached = dataCache.current.get('all');
+    const now = Date.now();
+    if (!forceRefresh && cached && (now - cached.timestamp) < CACHE_DURATION) {
+      const allRequests = cached.data;
+      const newData: CachedData = { New: [], Accepted: [], Rejected: [] };
+      allRequests.forEach((req: ServiceRequest) => {
+        const userResponse = req.userResponses?.find(res => res.userId === userUid);
+        if (userResponse) {
+          if (userResponse.response === 'accepted') {
+            newData.Accepted.push(req);
+          } else if (userResponse.response === 'rejected') {
+            newData.Rejected.push(req);
+          }
+        } else {
+          newData.New.push(req);
+        }
+      });
+      setCachedData(newData);
+      return;
     }
-  }, [getStatusFilter, CACHE_DURATION, userUid]);
+
+    setLoadingStates({ New: true, Accepted: true, Rejected: true });
+
+    try {
+      const q = query(
+        collection(db, 'serviceRequests'),
+        where("assignedUsers", "array-contains", userUid),
+        where('status', '!=', 'مكتمل'),
+        orderBy('status'),
+        orderBy('createdAt', 'desc')
+      );
+
+      const querySnapshot = await getDocs(q);
+      const allRequests = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as ServiceRequest));
+
+      dataCache.current.set('all', { data: allRequests, timestamp: now });
+
+      const newData: CachedData = { New: [], Accepted: [], Rejected: [] };
+      allRequests.forEach(req => {
+        const userResponse = req.userResponses?.find(res => res.userId === userUid);
+        if (userResponse) {
+          if (userResponse.response === 'accepted') {
+            newData.Accepted.push(req);
+          } else if (userResponse.response === 'rejected') {
+            newData.Rejected.push(req);
+          }
+        } else {
+          newData.New.push(req);
+        }
+      });
+
+      setCachedData(newData);
+
+    } catch (error) {
+      console.error(`Error fetching all requests:`, error);
+      setCachedData({ New: [], Accepted: [], Rejected: [] });
+    } finally {
+      setLoadingStates({ New: false, Accepted: false, Rejected: false });
+    }
+  }, [userUid, CACHE_DURATION]);
 
   // Initial data loading with smart preloading
   useEffect(() => {
-    if (!userUid) return; // Wait for userUid to be available
-
-    const loadInitialData = async () => {
-      // Load active tab immediately
-      await fetchTabData('Open');
-      
-      // Preload other tabs with staggered timing
-      const preloadTabs = async () => {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        await fetchTabData('Accepted');
-        
-        await new Promise(resolve => setTimeout(resolve, 300));
-        await fetchTabData('Done');
-      };
-      
-      preloadTabs();
-    };
-    
-    loadInitialData();
-  }, [userUid, fetchTabData]);
+    if (!userUid) return;
+    fetchAndCategorizeTasks();
+  }, [userUid, fetchAndCategorizeTasks]);
 
   // Optimized tab switching with haptic feedback
   const handleTabPress = useCallback(async (tab: TabKey) => {
     if (tab === activeTab) return;
 
-    // Haptic feedback for better UX
     try {
       await Haptics.selectionAsync();
     } catch {
-      // Haptics not available, continue without it
+      // Haptics not available
     }
 
-    // Immediate visual feedback
     setActiveTab(tab);
     
-    // Animate tab indicator
-    const tabIndex = ['Open', 'Accepted', 'Done'].indexOf(tab);
+    const tabIndex = ['New', 'Accepted', 'Rejected'].indexOf(tab);
     tabIndicatorX.value = withSpring(tabIndex * (Dimensions.get('window').width / 3 - 32));
-    
-    // Load data if not cached or outdated
-    const cached = dataCache.current.get(tab);
+
+    const cached = dataCache.current.get('all');
     const now = Date.now();
-    
     if (!cached || (now - cached.timestamp) > CACHE_DURATION) {
-      fetchTabData(tab);
+        fetchAndCategorizeTasks();
     }
-  }, [activeTab, fetchTabData, CACHE_DURATION, tabIndicatorX]);
+  }, [activeTab, fetchAndCategorizeTasks, CACHE_DURATION, tabIndicatorX]);
 
   // Memoized filtered data
   const filteredServiceRequests = useMemo(() => {
@@ -375,8 +385,8 @@ const TasksScreen: React.FC = () => {
     });
 
     return [...filteredData].sort((a, b) => {
-      const dateA = (a.createdAt as any)?.toMillis() || 0;
-      const dateB = (b.createdAt as any)?.toMillis() || 0;
+      const dateA = getMillis(a.createdAt);
+      const dateB = getMillis(b.createdAt);
       if (sortOrder === 'asc') {
         return dateA - dateB;
       }
@@ -389,7 +399,7 @@ const TasksScreen: React.FC = () => {
     try {
       const requestRef = doc(db, "serviceRequests", ticketId);
       // Find the ticket in the 'notAccepted' tab specifically
-      const currentTicket = cachedData.Open.find(t => t.id === ticketId);
+      const currentTicket = cachedData.New.find((t: ServiceRequest) => t.id === ticketId);
       if (!currentTicket) return;
 
       const userResponse: UserResponse = {
@@ -415,8 +425,7 @@ const TasksScreen: React.FC = () => {
       };
       await updateDoc(requestRef, { comments: arrayUnion(acceptanceComment) });
       
-      fetchTabData('Open', true);
-      fetchTabData('Accepted', true);
+      fetchAndCategorizeTasks(true);
 
       router.push(`/tasks/${ticketId}`);
     } catch (error) {
@@ -454,7 +463,7 @@ const TasksScreen: React.FC = () => {
       };
       await updateDoc(requestRef, { comments: arrayUnion(rejectionComment) });
 
-      fetchTabData(activeTab, true);
+      fetchAndCategorizeTasks(true);
       Alert.alert("تم رفض المهمة بنجاح");
     } catch (error) {
       console.error("Error rejecting task:", error);
@@ -490,8 +499,8 @@ const TasksScreen: React.FC = () => {
 
   // Pull to refresh
   const onRefresh = useCallback(() => {
-    fetchTabData(activeTab, true);
-  }, [activeTab, fetchTabData]);
+    fetchAndCategorizeTasks(true);
+  }, [fetchAndCategorizeTasks]);
 
   const isCurrentTabLoading = loadingStates[activeTab];
   const hasActiveFilters = !!(selectedPriority || selectedType);
@@ -594,7 +603,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'center',
     marginBottom: 16,
-    gap: 8,
+    gap: 2,
   },
   searchContainer: {
     flex: 1,

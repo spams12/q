@@ -1,9 +1,8 @@
 import { useTheme } from '@/context/ThemeContext';
-import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Timestamp } from 'firebase/firestore';
 import React, { useCallback } from 'react';
-import { Pressable, StyleSheet, Text, TouchableOpacity, View, ViewToken } from 'react-native';
+import { Pressable, StyleSheet, Text, View, ViewToken } from 'react-native';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { ServiceRequest } from '../lib/types';
 
@@ -11,13 +10,12 @@ import { ServiceRequest } from '../lib/types';
 interface InfoCardProps {
   item: ServiceRequest;
   viewableItems?: Animated.SharedValue<ViewToken[]>;
-  handleAcceptTask?: (ticketId: string) => void;
-  handleRejectTask?: (ticketId: string) => void;
   hasResponded?: boolean;
-  showActions?: boolean;
+  handleAcceptTask: (ticketId: string) => void;
+  handleRejectTask: (ticketId: string) => void;
 }
 
-const InfoCard: React.FC<InfoCardProps> = React.memo(({ item, viewableItems, handleAcceptTask, handleRejectTask, hasResponded, showActions = true }) => {
+const InfoCard: React.FC<InfoCardProps> = React.memo(({ item, viewableItems, hasResponded, handleAcceptTask, handleRejectTask }) => {
   const { theme } = useTheme();
   const router = useRouter();
 
@@ -35,7 +33,7 @@ id: item.id,
   const formatTimestamp = useCallback((timestamp: Timestamp | string | undefined) => {
     if (!timestamp) return 'N/A';
     const date = (timestamp as Timestamp).toDate ? (timestamp as Timestamp).toDate() : new Date(timestamp as string);
-    return date.toLocaleString('ar-SA', {
+    return date.toLocaleString('en-GB', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -46,34 +44,22 @@ id: item.id,
   }, []);
 
   const getStatusPillStyle = useCallback((status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'open':
-      case 'مفتوح':
-        return { backgroundColor: '#007bff' };
-      case 'accepted':
-      case 'قيد المعالجة':
-        return { backgroundColor: '#28a745' };
-      case 'done':
-      case 'مكتمل':
-        return { backgroundColor: '#6c757d' };
-      default:
-        return { backgroundColor: '#6c757d' };
+    switch (status) {
+      case "مفتوح": return { backgroundColor: '#3b82f6' }; // bg-blue-500
+      case "قيد المعالجة": return { backgroundColor: '#eab308' }; // bg-yellow-500
+      case "معلق": return { backgroundColor: '#8b5cf6' }; // bg-purple-500
+      case "مكتمل": return { backgroundColor: '#22c55e' }; // bg-green-500
+      case "مغلق": return { backgroundColor: '#6b7280' }; // bg-gray-500
+      default: return { backgroundColor: '#6b7280' };
     }
   }, []);
 
-  const getPriorityPillStyle = useCallback((priority: string) => {
-    switch (priority?.toLowerCase()) {
-      case 'high':
-      case 'عالية':
-        return { backgroundColor: '#dc3545' };
-      case 'medium':
-      case 'متوسطة':
-        return { backgroundColor: '#ffc107' };
-      case 'low':
-      case 'منخفضة':
-        return { backgroundColor: '#28a745' };
+  const getStatusPillTextStyle = useCallback((status: string) => {
+    switch (status) {
+      case "قيد المعالجة":
+        return { color: '#000' }; // text-black
       default:
-        return { backgroundColor: '#6c757d' };
+        return { color: '#fff' }; // text-white
     }
   }, []);
 
@@ -121,13 +107,6 @@ id: item.id,
     }
   }, []);
 
-  const handleAccept = useCallback(() => {
-    handleAcceptTask?.(item.id);
-  }, [item.id, handleAcceptTask]);
-
-  const handleReject = useCallback(() => {
-    handleRejectTask?.(item.id);
-  }, [item.id, handleRejectTask]);
 
   const rStyle = useAnimatedStyle(() => {
     if (!viewableItems) {
@@ -171,11 +150,9 @@ id: item.id,
                 {item.type}
               </Text>
             </View>
-            <View style={[styles.pill, getPriorityPillStyle(item.priority)]}>
-              <Text style={styles.pillText}>{item.priority}</Text>
-            </View>
+         
             <View style={[styles.pill, getStatusPillStyle(item.status)]}>
-              <Text style={styles.pillText}>{item.status}</Text>
+              <Text style={[styles.pillText, getStatusPillTextStyle(item.status)]}>{item.status}</Text>
             </View>
           </View>
         </View>
@@ -196,28 +173,24 @@ id: item.id,
           </Text>
         </View>
         
-        {showActions && item.status === 'مفتوح' && !hasResponded && (
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={[styles.button, styles.denyButton]}
-              onPress={handleReject}
-              activeOpacity={0.8}
-            >
-              <Feather name="x" size={18} color="#fff" />
-              <Text style={styles.buttonText}>رفض</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.button, styles.acceptButton]}
-              onPress={handleAccept}
-              activeOpacity={0.8}
-            >
-              <Feather name="check" size={18} color="#fff" />
-              <Text style={styles.buttonText}>قبول</Text>
-            </TouchableOpacity>
-          </View>
-        )}
         
 
+        {!hasResponded && (
+          <View style={styles.actionButtonsContainer}>
+            <Pressable
+              style={[styles.actionButton, styles.acceptButton]}
+              onPress={() => handleAcceptTask(item.id)}
+            >
+              <Text style={[styles.actionButtonText, styles.acceptButtonText]}>قبول</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionButton, styles.rejectButton]}
+              onPress={() => handleRejectTask(item.id)}
+            >
+              <Text style={[styles.actionButtonText, styles.rejectButtonText]}>رفض</Text>
+            </Pressable>
+          </View>
+        )}
       </Animated.View>
     </Pressable>
     
@@ -318,31 +291,42 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     opacity: 0.8,
   },
-  footer: {
+  actionButtonsContainer: {
     flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     marginTop: 16,
-    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+    paddingTop: 16,
   },
-  button: {
+  actionButton: {
     flex: 1,
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
     borderRadius: 12,
-    gap: 8,
+    marginHorizontal: 6,
   },
-  buttonText: {
-    color: '#fff',
+  actionButtonText: {
     fontSize: 16,
     fontFamily: 'Cairo',
     fontWeight: 'bold',
   },
   acceptButton: {
-    backgroundColor: '#28a745',
+    backgroundColor: '#e8f5e8',
+    borderWidth: 1,
+    borderColor: '#4caf50',
   },
-  denyButton: {
-    backgroundColor: '#dc3545',
+  acceptButtonText: {
+    color: '#4caf50',
+  },
+  rejectButton: {
+    backgroundColor: '#ffebee',
+    borderWidth: 1,
+    borderColor: '#f44336',
+  },
+  rejectButtonText: {
+    color: '#f44336',
   },
 });

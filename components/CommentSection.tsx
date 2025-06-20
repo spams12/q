@@ -1,13 +1,12 @@
 import { format } from 'date-fns';
-import { arSA } from 'date-fns/locale';
-import { Video } from 'expo-av';
+import { enGB } from 'date-fns/locale';
 import * as DocumentPicker from 'expo-document-picker';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   Image,
-  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -18,6 +17,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Ionicons } from '@expo/vector-icons';
 
@@ -69,6 +69,13 @@ interface CommentSectionProps {
   ticketId: string;
 }
 
+const AttachmentVideoPreview: React.FC<{ mediaUrl: string; style: any }> = ({ mediaUrl, style }) => {
+  const player = useVideoPlayer(mediaUrl, (p) => {
+    p.muted = true;
+  });
+  return <VideoView player={player} style={style} />;
+};
+
 const CommentSection: React.FC<CommentSectionProps> = ({
   comments,
   users,
@@ -88,8 +95,75 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const { theme } = useTheme();
   const styles = getStyles(theme);
 
+  const modalPlayer = useVideoPlayer(selectedVideo || '', (player) => {
+    if (selectedVideo) {
+      player.play();
+      player.loop = true;
+    }
+  });
+
+  // Reset modal state when modal closes
+  useEffect(() => {
+    if (!modalVisible) {
+      setSelectedImage(null);
+      setSelectedVideo(null);
+      setAllImages([]);
+      setSelectedImageIndex(0);
+    }
+  }, [modalVisible]);
+
+  const navigateImage = useCallback(
+    (direction: 'next' | 'prev') => {
+      // Add bounds checking to prevent crashes
+      if (!allImages.length) return;
+      
+      let newIndex = selectedImageIndex;
+      
+      if (direction === 'next' && selectedImageIndex < allImages.length - 1) {
+        newIndex = selectedImageIndex + 1;
+      } else if (direction === 'prev' && selectedImageIndex > 0) {
+        newIndex = selectedImageIndex - 1;
+      } else {
+        // If at bounds, do nothing
+        return;
+      }
+
+      // Ensure the new index is valid
+      if (newIndex >= 0 && newIndex < allImages.length && allImages[newIndex]) {
+        setSelectedImageIndex(newIndex);
+        setSelectedImage(allImages[newIndex]);
+      }
+    },
+    [allImages, selectedImageIndex]
+  );
+
+  const pan = useMemo(
+    () =>
+      Gesture.Pan()
+        .onEnd(event => {
+          // Add checks to prevent crashes
+          if (!modalVisible || !selectedImage || allImages.length <= 1) {
+            return;
+          }
+
+          const threshold = 50;
+          if (Math.abs(event.translationX) > threshold) {
+            if (event.translationX < -threshold) {
+              // Swipe left (next image)
+              navigateImage('next');
+            } else if (event.translationX > threshold) {
+              // Swipe right (previous image)
+              navigateImage('prev');
+            }
+          }
+        })
+        .failOffsetY([-50, 50]), // Prevent conflict with vertical scrolling
+    [modalVisible, selectedImage, allImages.length, navigateImage]
+  );
+
   const getUser = (userId: string) => users.find(u => u.id === userId);
   console.log('Current User ID:', currentUserId);
+  
   // Filter and sort comments
   const filteredAndSortedComments = comments
     .filter(comment => {
@@ -168,110 +242,93 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const isDisabled = ticketStatus === 'مكتمل' || ticketStatus === 'مغلق' 
 
   const handleImagePress = (imageUrl: string, images: string[], index: number) => {
+    // Validate inputs before setting state
+    if (!imageUrl || !Array.isArray(images) || images.length === 0) {
+      console.warn('Invalid image data provided to handleImagePress');
+      return;
+    }
+
+    const validIndex = Math.max(0, Math.min(index, images.length - 1));
+    
     setSelectedImage(imageUrl);
     setSelectedVideo(null);
     setAllImages(images);
-    setSelectedImageIndex(index);
+    setSelectedImageIndex(validIndex);
     setModalVisible(true);
   };
 
   const handleVideoPress = (videoUrl: string) => {
+    if (!videoUrl) {
+      console.warn('Invalid video URL provided to handleVideoPress');
+      return;
+    }
+    
     setSelectedVideo(videoUrl);
     setSelectedImage(null);
+    setAllImages([]);
+    setSelectedImageIndex(0);
     setModalVisible(true);
   };
 
-  const navigateImage = (direction: 'next' | 'prev') => {
-    if (direction === 'next' && selectedImageIndex < allImages.length - 1) {
-      const newIndex = selectedImageIndex + 1;
-      setSelectedImageIndex(newIndex);
-      setSelectedImage(allImages[newIndex]);
-    } else if (direction === 'prev' && selectedImageIndex > 0) {
-      const newIndex = selectedImageIndex - 1;
-      setSelectedImageIndex(newIndex);
-      setSelectedImage(allImages[newIndex]);
-    }
+  const closeModal = () => {
+    setModalVisible(false);
+    // Let useEffect handle the cleanup
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 100}
-    >
+    <View style={styles.container}>
       
       {/* Enhanced Image Modal */}
       <Modal
         animationType="fade"
         transparent={true}
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={closeModal}
       >
-        <View style={styles.modalOverlay}>
-          <StatusBar barStyle="light-content" backgroundColor="rgba(0,0,0,0.9)" />
-          
-          {/* Header */}
-          <View style={styles.modalHeader}>
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPressIn={() => setModalVisible(false)}
-            >
-              <Ionicons name="close" size={28} color="white" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>
-              {selectedImageIndex + 1} من {allImages.length}
-            </Text>
-            <View style={styles.modalButton} />
-          </View>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <View style={styles.modalOverlay}>
+            <StatusBar barStyle="light-content" backgroundColor="black" />
 
-          {/* Image or Video */}
-          <View style={styles.imageContainer}>
             {selectedImage ? (
-              <Image
-                source={{ uri: selectedImage }}
-                style={styles.fullscreenImage}
-                resizeMode="contain"
-              />
+              <GestureDetector gesture={pan}>
+                <Image
+                  source={{ uri: selectedImage }}
+                  style={styles.fullscreenImage}
+                  resizeMode="contain"
+                  onError={() => {
+                    console.warn('Failed to load image:', selectedImage);
+                  }}
+                />
+              </GestureDetector>
             ) : selectedVideo ? (
-              <Video
-                source={{ uri: selectedVideo }}
+              <VideoView
+                player={modalPlayer}
                 style={styles.fullscreenImage}
-                useNativeControls
-                resizeMode="contain"
-                isLooping
+                allowsFullscreen
+                allowsPictureInPicture
               />
             ) : null}
-          </View>
 
-          {/* Navigation for Images */}
-          {selectedImage && allImages.length > 1 && (
-            <View style={styles.navigationContainer}>
+            {/* Header with close button */}
+            <View style={styles.modalHeader}>
               <TouchableOpacity
-                style={[styles.navButton, selectedImageIndex === 0 && styles.navButtonDisabled]}
-                onPressIn={() => navigateImage('prev')}
-                disabled={selectedImageIndex === 0}
+                style={styles.modalButton}
+                onPress={closeModal}
               >
-                <Ionicons
-                  name="chevron-back"
-                  size={24}
-                  color={selectedImageIndex === 0 ? 'rgba(255,255,255,0.3)' : 'white'}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.navButton, selectedImageIndex === allImages.length - 1 && styles.navButtonDisabled]}
-                onPressIn={() => navigateImage('next')}
-                disabled={selectedImageIndex === allImages.length - 1}
-              >
-                <Ionicons
-                  name="chevron-forward"
-                  size={24}
-                  color={selectedImageIndex === allImages.length - 1 ? 'rgba(255,255,255,0.3)' : 'white'}
-                />
+                <Ionicons name="close" size={32} color="white" />
               </TouchableOpacity>
             </View>
-          )}
-        </View>
+
+            {/* Image navigation indicators */}
+            {selectedImage && allImages.length > 1 && (
+              <View style={styles.imageCounter}>
+                <Text style={styles.imageCounterText}>
+                  {selectedImageIndex + 1} / {allImages.length}
+                </Text>
+              </View>
+            )}
+          </View>
+        </GestureHandlerRootView>
       </Modal>
 
       <View style={styles.commentsList}>
@@ -291,9 +348,10 @@ const CommentSection: React.FC<CommentSectionProps> = ({
           const commentDate = getCommentDate(comment.timestamp);
 
           // Collect all images in this comment for modal navigation
-          const commentImages = comment.attachments?.filter(att => 
-            /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName)
-          ).map(att => att.downloadURL) || [];
+          const commentImages = comment.attachments?.filter(att => {
+            const isImage = att.fileType === 'image' || (att.mimeType && att.mimeType.startsWith('image/'));
+            return isImage || /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName);
+          }).map(att => att.fileUrl || att.downloadURL).filter((url): url is string => !!url) || [];
 
           return (
             <View
@@ -345,17 +403,18 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                 {comment.attachments && comment.attachments.length > 0 && (
                   <View style={styles.attachmentsContainer}>
                     {comment.attachments.map((att, index) => {
-                      const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName);
-                      const isVideo = /\.(mp4|mov|avi|mkv)$/i.test(att.fileName);
-                      const mediaUrl = att.downloadURL;
+                      const isImage = att.fileType === 'image' || (att.mimeType ? att.mimeType.startsWith('image/') : /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
+                      const isVideo = att.fileType === 'video' || (att.mimeType ? att.mimeType.startsWith('video/') : /\.(mp4|mov|avi|mkv)$/i.test(att.fileName));
+                      const mediaUrl = att.fileUrl || att.downloadURL;
 
                       return (
                         <TouchableOpacity
                           key={index}
-                          onPressIn={() => {
+                          onPress={() => {
                             if (isImage && mediaUrl) {
                               const currentImageIndex = commentImages.indexOf(mediaUrl);
-                              handleImagePress(mediaUrl, commentImages, currentImageIndex);
+                              const validIndex = currentImageIndex >= 0 ? currentImageIndex : 0;
+                              handleImagePress(mediaUrl, commentImages, validIndex);
                             } else if (isVideo && mediaUrl) {
                               handleVideoPress(mediaUrl);
                             } else if (mediaUrl) {
@@ -370,7 +429,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                               <Image
                                 source={{ uri: mediaUrl }}
                                 style={styles.attachmentImage}
-                                resizeMode="cover"
+                                resizeMode="contain"
                               />
                               <View style={styles.imageOverlay}>
                                 <Ionicons name="expand-outline" size={20} color="white" />
@@ -378,12 +437,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                             </View>
                           ) : isVideo && mediaUrl ? (
                             <View style={styles.imageAttachmentContainer}>
-                              <Video
-                                source={{ uri: mediaUrl }}
-                                style={styles.attachmentImage}
-                                resizeMode="cover"
-                                isMuted
-                              />
+                              <AttachmentVideoPreview mediaUrl={mediaUrl} style={styles.attachmentImage} />
                               <View style={styles.videoOverlay}>
                                 <Ionicons name="play-circle-outline" size={40} color="white" />
                               </View>
@@ -397,9 +451,9 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                                 <Text style={styles.fileName} numberOfLines={1}>
                                   {att.fileName}
                                 </Text>
-                                {att.size && (
+                                {(att.fileSize || att.size) && (
                                   <Text style={styles.fileSize}>
-                                    {(att.size / 1024).toFixed(1)} كيلوبايت
+                                    {(((att.fileSize || att.size) ?? 0) / 1024).toFixed(1)} كيلوبايت
                                   </Text>
                                 )}
                               </View>
@@ -417,7 +471,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                   styles.timestamp,
                   isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp
                 ]}>
-                  {format(commentDate, 'HH:mm', { locale: arSA })}
+                  {format(commentDate, 'yyyy/MM/dd hh:mm a', { locale: enGB })}
                 </Text>
               </View>
 
@@ -450,7 +504,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                     {file.name}
                   </Text>
                   <TouchableOpacity 
-                    onPressIn={() => setAttachments(prev => prev.filter((_, i) => i !== index))}
+                    onPress={() => setAttachments(prev => prev.filter((_, i) => i !== index))}
                     style={styles.removeAttachment}
                   >
                     <Ionicons name="close" size={16} color="white" />
@@ -474,7 +528,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
           />
           
           <TouchableOpacity 
-            onPressIn={handlePickDocument} 
+            onPress={handlePickDocument} 
             style={[styles.iconButton, isDisabled && styles.disabledButton]}
      
           >
@@ -486,7 +540,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
           </TouchableOpacity>
           
           <TouchableOpacity 
-            onPressIn={handleCommentSubmit} 
+            onPress={handleCommentSubmit} 
             style={[
               styles.sendButton,
               isDisabled && styles.disabledSendButton,
@@ -501,13 +555,12 @@ const CommentSection: React.FC<CommentSectionProps> = ({
           </TouchableOpacity>
         </View>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 };
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: theme.background,
     borderRadius: 12,
   },
@@ -620,6 +673,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     height: 180,
     borderRadius: 12,
     backgroundColor: theme.inputBackground,
+    objectFit: 'contain',
   },
   imageOverlay: {
     position: 'absolute',
@@ -761,51 +815,37 @@ const getStyles = (theme: any) => StyleSheet.create({
   // Modal styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.95)',
+    backgroundColor: 'black',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 40 : 20,
+    left: 10,
+    zIndex: 1,
   },
   modalButton: {
     padding: 8,
-    width: 44,
-    alignItems: 'center',
-  },
-  modalTitle: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  imageContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   fullscreenImage: {
     width: screenWidth,
-    height: screenHeight * 0.7,
+    height: screenHeight,
+    objectFit: 'contain',
   },
-  navigationContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+  imageCounter: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 50 : 30,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
-  navButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 25,
-    width: 50,
-    height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  navButtonDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+  imageCounterText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 

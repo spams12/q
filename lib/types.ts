@@ -78,6 +78,9 @@ export interface Attachment {
   fileName: string;
   mimeType?: string;
   size?: number;
+  fileUrl?: string;
+  fileType?: string;
+  fileSize?: number;
 }
 
 export interface User {
@@ -106,11 +109,11 @@ export interface Invoice {
   lastUpdated: string;
   items: InvoiceItem[];
   totalAmount: number;
-  status: "draft" | "pending" | "paid" | "cancelled";
+  status: "draft" | "pending" | "paid" | "cancelled" | "submitted" | "approved";
   notes?: string;
   customerName?: string;
   creatorName?: string;
-  type: "invoice"; // Or other types if applicable
+  type: "invoice" | "newsubscriberinstall"; // Or other types if applicable
   teamId?: string | null;
   teamCreatorId?: string | null; // Assuming this might exist
   subscriberId?: string | null;
@@ -164,7 +167,16 @@ export interface UserResponse {
 
 export interface UserStockItem {
   id: string;
-  itemType: "packageType" | "cableLength" | "connectorType" | "deviceModel" | "maintenanceType";
+  itemType:
+    | "packageType"
+    | "cableLength"
+    | "connectorType"
+    | "deviceModel"
+    | "maintenanceType"
+    | "hook"
+    | "bag"
+    | "cable"
+    | string;
   itemId: string;
   itemName: string;
   quantity: number;
@@ -184,7 +196,16 @@ export interface StockTransaction {
   id: string;
   userId: string;
   userName: string;
-  itemType: "packageType" | "cableLength" | "connectorType" | "deviceModel" | "maintenanceType";
+  itemType:
+    | "packageType"
+    | "cableLength"
+    | "connectorType"
+    | "deviceModel"
+    | "maintenanceType"
+    | "hook"
+    | "bag"
+    | "cable"
+    | string;
   itemId: string;
   itemName: string;
   quantity: number;

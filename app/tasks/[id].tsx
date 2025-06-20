@@ -2,11 +2,14 @@ import CommentSection from '@/components/CommentSection';
 import { usePermissions } from '@/context/PermissionsContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { arrayUnion, collection, doc, getDocs, onSnapshot, runTransaction, Timestamp } from 'firebase/firestore';
+import { arrayUnion, collection, doc, getDocs, onSnapshot, runTransaction, Timestamp, updateDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { InvoiceList } from '../../components/InvoiceList';
 import { ThemedText } from '../../components/ThemedText';
 import { ThemedView } from '../../components/ThemedView';
@@ -44,6 +47,17 @@ const TicketDetailPage = () => {
   const router = useRouter();
   const { user } = useFirebaseAuth();
   const { theme, themeName } = useTheme();
+
+  const copyToClipboard = (text: string) => {
+    Clipboard.setStringAsync(text);
+    Alert.alert('تم النسخ', 'تم نسخ الرقم إلى الحافظة.');
+  };
+
+  const handlePhonePress = (phoneNumber: string) => {
+    if (phoneNumber) {
+      Linking.openURL(`tel:${phoneNumber}`);
+    }
+  };
   const [serviceRequest, setServiceRequest] = useState<ServiceRequest | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,9 +65,13 @@ const TicketDetailPage = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [currentUserResponse, setCurrentUserResponse] = useState<'pending' | 'accepted' | 'rejected' | 'completed' | null>(null);
   const [slideAnim] = useState(new Animated.Value(0));
-  const { userUid ,userdoc } = usePermissions();
+  const { userdoc } = usePermissions();
   const [subscriberSearch, setSubscriberSearch] = useState("");
   const [subscriberIndexBeingProcessed, setSubscriberIndexBeingProcessed] = useState<number | null>(null);
+  const [isArrivalLogVisible, setIsArrivalLogVisible] = useState(false);
+  const [estimatedDuration, setEstimatedDuration] = useState('');
+  const [timeUnit, setTimeUnit] = useState<'minutes' | 'hours'>('minutes');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const tabs = [
     { key: 'details', title: 'التفاصيل', icon: 'document-text-outline' },
@@ -82,7 +100,7 @@ const TicketDetailPage = () => {
         setServiceRequest(data);
 
         if (user && data.userResponses) {
-          const response = data.userResponses.find(r => r.userId === userdoc.id);
+          const response = userdoc ? data.userResponses.find(r => r.userId === userdoc.id) : undefined;
           console.log("Current user response:", response);
           setCurrentUserResponse(response ? response.response : 'pending');
         } else {
@@ -113,8 +131,9 @@ const TicketDetailPage = () => {
   };
 
   const handleAccept = async () => {
-    if (!user || !id) return;
+    if (!user || !id || !userdoc) return;
 
+    setActionLoading('accept');
     try {
       await runTransaction(db, async (transaction) => {
         const docRef = doc(db, 'serviceRequests', id as string);
@@ -130,14 +149,14 @@ const TicketDetailPage = () => {
         if (userResponseIndex > -1) {
           newUserResponses[userResponseIndex].response = 'accepted';
         } else {
-          newUserResponses.push({ userId: user.uid, userName: user.displayName || 'Unknown', response: 'accepted', timestamp: Timestamp.now().toDate().toISOString() });
+          newUserResponses.push({ userId: userdoc.id, userName: userdoc.name || 'Unknown', response: 'accepted', timestamp: Timestamp.now().toDate().toISOString() });
         }
 
         const newComment: Comment = {
           id: `${Date.now()}`,
-          content: `قبل المستخدم ${user.displayName} المهمة.`,
-          userId: user.uid,
-          userName: user.displayName || 'النظام',
+          content: `قبل المستخدم ${userdoc.name} المهمة.`,
+          userId: userdoc.id,
+          userName: userdoc.name || 'النظام',
           createdAt: Timestamp.now(),
           timestamp: Timestamp.now(),
           isStatusChange: true,
@@ -154,93 +173,54 @@ const TicketDetailPage = () => {
       });
     } catch (e) {
       console.error("فشل في التعامل: ", e);
+    } finally {
+      setActionLoading(null);
     }
   };
 
   const handleReject = async () => {
-    if (!user || !id) return;
-
+    if (!user || !id || !userdoc) return;
+    setActionLoading('reject');
     try {
-      await runTransaction(db, async (transaction) => {
-        const docRef = doc(db, 'serviceRequests', id as string);
-        const sfDoc = await transaction.get(docRef);
-        if (!sfDoc.exists()) {
-          throw "المستند غير موجود!";
-        }
+        await runTransaction(db, async (transaction) => {
+            const docRef = doc(db, 'serviceRequests', id as string);
+            const sfDoc = await transaction.get(docRef);
+            if (!sfDoc.exists()) {
+                throw "المستند غير موجود!";
+            }
 
-        const data = sfDoc.data() as ServiceRequest;
-        const newUserResponses = data.userResponses ? [...data.userResponses] : [];
-        const userResponseIndex = newUserResponses.findIndex(res => res.userId === user.uid);
+            const data = sfDoc.data() as ServiceRequest;
+            const newUserResponses = data.userResponses ? [...data.userResponses] : [];
+            const userResponseIndex = newUserResponses.findIndex(res => res.userId === user.uid);
 
-        if (userResponseIndex > -1) {
-          newUserResponses[userResponseIndex].response = 'rejected';
-        } else {
-          newUserResponses.push({ userId: user.uid, userName: user.displayName || 'Unknown', response: 'rejected', timestamp: Timestamp.now().toDate().toISOString() });
-        }
+            if (userResponseIndex > -1) {
+                newUserResponses[userResponseIndex].response = 'rejected';
+            } else {
+                newUserResponses.push({ userId: userdoc.id, userName: userdoc.name || 'Unknown', response: 'rejected', timestamp: Timestamp.now().toDate().toISOString() });
+            }
 
-        const newComment: Comment = {
-          id: `${Date.now()}`,
-          content: `رفض المستخدم ${user.displayName} المهمة.`,
-          userId: user.uid,
-          userName: user.displayName || 'النظام',
-          createdAt: Timestamp.now(),
-          timestamp: Timestamp.now(),
-          isStatusChange: true,
-        };
+            const newComment: Comment = {
+                id: `${Date.now()}`,
+                content: `رفض المستخدم ${userdoc.name} المهمة.`,
+                userId: userdoc.id,
+                userName: userdoc.name || 'النظام',
+                createdAt: Timestamp.now(),
+                timestamp: Timestamp.now(),
+                isStatusChange: true,
+            };
 
-        transaction.update(docRef, {
-          userResponses: newUserResponses,
-          comments: arrayUnion(newComment),
-          lastUpdated: Timestamp.now(),
+            transaction.update(docRef, {
+                userResponses: newUserResponses,
+                comments: arrayUnion(newComment),
+                lastUpdated: Timestamp.now(),
+            });
         });
-      });
+        Alert.alert('تم', 'تم تسجيل رفضك للمهمة.');
     } catch (e) {
-      console.error("فشل في التعامل: ", e);
-    }
-  };
-
-  const handleMarkAsDone = async () => {
-    if (!user || !id) return;
-
-    try {
-      await runTransaction(db, async (transaction) => {
-        const docRef = doc(db, 'serviceRequests', id as string);
-        const sfDoc = await transaction.get(docRef);
-        if (!sfDoc.exists()) {
-          throw "المستند غير موجود!";
-        }
-
-        const data = sfDoc.data() as ServiceRequest;
-        const newUserResponses = data.userResponses ? [...data.userResponses] : [];
-        const userResponseIndex = newUserResponses.findIndex(res => res.userId === user.uid);
-
-        if (userResponseIndex > -1) {
-          newUserResponses[userResponseIndex].response = 'completed';
-        }
-
-        const newComment: Comment = {
-          id: `${Date.now()}`,
-          content: `أكمل المستخدم ${user.displayName} مهمته.`,
-          userId: user.uid,
-          userName: user.displayName || 'النظام',
-          createdAt: Timestamp.now(),
-          timestamp: Timestamp.now(),
-          isStatusChange: true,
-        };
-
-        const acceptedUsers = newUserResponses.filter(r => r.response === 'accepted' || r.response === 'completed');
-        const allCompleted = acceptedUsers.every(r => r.response === 'completed');
-        const newStatus = allCompleted ? 'مكتمل' : data.status;
-
-        transaction.update(docRef, {
-          userResponses: newUserResponses,
-          comments: arrayUnion(newComment),
-          status: newStatus,
-          lastUpdated: Timestamp.now(),
-        });
-      });
-    } catch (e) {
-      console.error("فشل في التعامل: ", e);
+        console.error("فشل في التعامل: ", e);
+        Alert.alert('خطأ', 'فشل في تسجيل رفضك للمهمة.');
+    } finally {
+        setActionLoading(null);
     }
   };
 
@@ -408,7 +388,7 @@ const TicketDetailPage = () => {
   };
 
   const handleMarkSubscriberAsPaid = async (subscriberIndex: number) => {
-    if (!id || !user || !userdoc.teamId) {
+    if (!id || !user || !userdoc?.teamId) {
       Alert.alert("خطأ", "البيانات المطلوبة غير متوفرة (user team id).");
       return;
     }
@@ -487,6 +467,144 @@ const TicketDetailPage = () => {
     }
   };
 
+  const handleMarkAsDone = async () => {
+    if (!user || !id || !serviceRequest) return;
+
+    const ticketId = id as string;
+    const currentUserDocId = user.uid;
+    const userName = user.displayName || 'Unknown';
+
+    setActionLoading('markAsDone');
+    try {
+        await runTransaction(db, async (transaction) => {
+            const docRef = doc(db, 'serviceRequests', ticketId);
+            const sfDoc = await transaction.get(docRef);
+
+            if (!sfDoc.exists()) {
+                throw "Document does not exist!";
+            }
+
+            const currentServiceRequest = sfDoc.data() as ServiceRequest;
+
+            const userCompletionResponse = {
+                userId: currentUserDocId,
+                userName: userName,
+                response: "completed" as const,
+                timestamp: new Date().toISOString(),
+            };
+
+            const newUserResponses = [...(currentServiceRequest.userResponses || [])];
+            const userResponseIndex = newUserResponses.findIndex(res => res.userId === currentUserDocId);
+
+            if (userResponseIndex > -1) {
+                newUserResponses[userResponseIndex] = userCompletionResponse;
+            } else {
+                newUserResponses.push(userCompletionResponse);
+            }
+
+            const completionComment: Comment = {
+                id: `${Date.now()}-${currentUserDocId}`,
+                userId: currentUserDocId,
+                userName: userName,
+                timestamp: Timestamp.now(),
+                createdAt: Timestamp.now(),
+                content: `أكمل ${userName} الجزء الخاص به من المهمة.`,
+                isStatusChange: true,
+            };
+
+            const requiredUserIds = new Set(currentServiceRequest.assignedUsers);
+            (currentServiceRequest.userResponses || []).forEach(res => {
+                if (res.response === 'accepted' || res.response === 'completed') {
+                    requiredUserIds.add(res.userId);
+                }
+            });
+            requiredUserIds.add(currentUserDocId);
+
+            const completedUserIds = new Set(
+                newUserResponses
+                    .filter(r => r.response === 'completed')
+                    .map(r => r.userId)
+            );
+
+            let allRequiredUsersCompleted = true;
+            for (const userId of requiredUserIds) {
+                if (!completedUserIds.has(userId)) {
+                    allRequiredUsersCompleted = false;
+                    break;
+                }
+            }
+
+            const updatePayload: { [key: string]: any } = {
+                userResponses: newUserResponses,
+                comments: arrayUnion(completionComment),
+                lastUpdated: Timestamp.now(),
+            };
+
+            if (allRequiredUsersCompleted) {
+                updatePayload.status = "مكتمل";
+                updatePayload.completionTimestamp = Timestamp.now();
+            }
+
+            transaction.update(docRef, updatePayload);
+        });
+
+        Alert.alert("نجاح", "تم تحديث حالة مهمتك بنجاح.");
+
+    } catch (e) {
+        console.error("Transaction failed: ", e);
+        Alert.alert("خطأ", `فشل تحديث الحالة: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+        setActionLoading(null);
+    }
+  };
+
+  const handleLogArrival = async (estimatedDuration: number, timeUnit: 'minutes' | 'hours') => {
+    if (!id || !user) {
+        Alert.alert("خطأ", "البيانات المطلوبة غير متوفرة لتسجيل الوصول.");
+        return;
+    }
+
+    const ticketId = id as string;
+    const currentUserDocId = user.uid;
+    const userName = user.displayName || 'Unknown';
+
+    const estimatedTimeInMinutes = timeUnit === 'hours' ? estimatedDuration * 60 : estimatedDuration;
+    const unitText = timeUnit === 'hours' ? 'ساعة' : 'دقيقة';
+    const pluralUnitText = timeUnit === 'hours' ? 'ساعات' : 'دقائق';
+    const durationText = estimatedDuration === 1 ? unitText : (estimatedDuration === 2 ? (timeUnit === 'hours' ? 'ساعتان' : 'دقيقتان') : pluralUnitText);
+
+
+    const arrivalComment: Comment = {
+        id: `${Date.now()}-${currentUserDocId}`,
+        userId: currentUserDocId,
+        userName: userName,
+        timestamp: Timestamp.now(),
+        createdAt: Timestamp.now(),
+        content: `وصل الفني للموقع. مدة العمل المقدرة: ${estimatedDuration} ${durationText}.`,
+        isStatusChange: false,
+    };
+
+    setActionLoading('logArrival');
+    try {
+        const docRef = doc(db, 'serviceRequests', ticketId);
+        await updateDoc(docRef, {
+            onLocation: true,
+            onLocationTimestamp: Timestamp.now(),
+            estimatedTime: estimatedTimeInMinutes,
+            comments: arrayUnion(arrivalComment),
+            lastUpdated: Timestamp.now(),
+        });
+        Alert.alert("نجاح", "تم تسجيل الوصول بنجاح.");
+    } catch (error) {
+        console.error("Error logging arrival:", error);
+        Alert.alert("خطأ", `فشل تسجيل الوصول: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+        setActionLoading(null);
+        setIsArrivalLogVisible(false);
+        setEstimatedDuration('');
+    }
+  };
+
  const styles = getStyles(theme, themeName);
   if (loading) {
     return (
@@ -538,10 +656,11 @@ const TicketDetailPage = () => {
                 <Ionicons name="location-outline" size={20} color={theme.textSecondary} style={styles.detailIcon} />
                 <ThemedText style={styles.detailText}>{serviceRequest.customerEmail}</ThemedText>
               </View>
-              <View style={styles.detailItem}>
+              <Pressable style={styles.detailItem} onPress={() => handlePhonePress(serviceRequest.customerPhone)}>
                 <Ionicons name="call-outline" size={20} color={theme.textSecondary} style={styles.detailIcon} />
                 <ThemedText style={styles.detailText}>{serviceRequest.customerPhone}</ThemedText>
-              </View>
+                <Ionicons name="call" size={20} color={theme.primary} style={{ marginHorizontal: 10 }}/>
+              </Pressable>
             </View>
             <View style={styles.detailsContainer}>
               <ThemedText style={styles.detailsTitle}>الوصف</ThemedText>
@@ -560,6 +679,70 @@ const TicketDetailPage = () => {
                 ticketId={id as string}
               />
             </View>
+
+            {/* Action Buttons */}
+            {(currentUserResponse === 'pending' || currentUserResponse === 'accepted') && (
+              <View style={styles.actionsContainer}>
+                {currentUserResponse === 'pending' && (
+                  <View style={styles.buttonRow}>
+                    <Pressable
+                      style={[styles.button, styles.acceptButton, actionLoading === 'accept' && { opacity: 0.7 }]}
+                      onPress={handleAccept}
+                      disabled={!!actionLoading}
+                    >
+                      {actionLoading === 'accept' ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                          <ThemedText style={styles.buttonText}>قبول</ThemedText>
+                        </>
+                      )}
+                    </Pressable>
+                    <Pressable
+                      style={[styles.button, styles.rejectButton, actionLoading === 'reject' && { opacity: 0.7 }]}
+                      onPress={handleReject}
+                      disabled={!!actionLoading}
+                    >
+                      {actionLoading === 'reject' ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="close-circle" size={20} color="#fff" />
+                          <ThemedText style={styles.buttonText}>رفض</ThemedText>
+                        </>
+                      )}
+                    </Pressable>
+                  </View>
+                )}
+                {currentUserResponse === 'accepted' && (
+                  <View style={{ gap: 8 }}>
+                    <Pressable
+                      style={[styles.button, { backgroundColor: theme.primary || '#007bff' }, styles.fullWidthButton, !!actionLoading && { opacity: 0.7 }]}
+                      onPress={() => setIsArrivalLogVisible(true)}
+                      disabled={!!actionLoading}
+                    >
+                      <Ionicons name="location-outline" size={20} color="#fff" />
+                      <ThemedText style={styles.buttonText}>تسجيل الوصول للموقع</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.button, styles.doneButton, styles.fullWidthButton, actionLoading === 'markAsDone' && { opacity: 0.7 }]}
+                      onPress={handleMarkAsDone}
+                      disabled={!!actionLoading}
+                    >
+                      {actionLoading === 'markAsDone' ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="flag" size={20} color="#fff" />
+                          <ThemedText style={styles.buttonText}>تم إنجاز مهمتي</ThemedText>
+                        </>
+                      )}
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            )}
           </>
         );
       case 1:
@@ -628,7 +811,10 @@ const TicketDetailPage = () => {
                                 </View>
                                 <View style={{gap: 4, alignItems: 'flex-end'}}>
                                     <ThemedText style={styles.detailText}>نوع الباقة: {subscriber.packageType}</ThemedText>
-                                    <ThemedText style={styles.detailText}>الهاتف: {subscriber.phone}</ThemedText>
+                                    <Pressable style={{flexDirection: 'row-reverse', alignItems: 'center', gap: 8}} onPress={() => handlePhonePress(subscriber.phone)}>
+                                      <ThemedText style={styles.detailText}>الهاتف: {subscriber.phone}</ThemedText>
+                                      <Ionicons name="call-outline" size={18} color={theme.primary} />
+                                    </Pressable>
                                     <ThemedText style={styles.detailText}>السعر: {subscriber.price} د.ع</ThemedText>
                                     <ThemedText style={styles.detailText}>المنطقة: {subscriber.zoneNumber}</ThemedText>
                                 </View>
@@ -669,130 +855,160 @@ const TicketDetailPage = () => {
 
   return (
     <ThemedView style={styles.container}>
-      {/* Content */}
-      <ScrollView
-        style={styles.contentScrollView}
-        showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[1]}
-      >
-        {/* Header with gradient */}
-        <LinearGradient
-          colors={[theme.gradientStart, theme.gradientEnd]}
-          style={styles.headerGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back-circle-sharp" size={32} color={theme.white} />
-          </Pressable>
-          <View style={styles.headerContent}>
-            <View style={styles.headerTop}>
-              <ThemedText style={styles.headerTitle}>{serviceRequest.title}</ThemedText>
-              <ThemedText style={styles.headerSubtitle}>#{id}</ThemedText>
-            </View>
-            <View style={styles.badgeContainer}>
-              <View style={[styles.badge, getStatusStyle(serviceRequest.status, theme)]}>
-                <ThemedText style={styles.badgeText}>{serviceRequest.status}</ThemedText>
-              </View>
-              <View style={[styles.badge, getPriorityStyle(serviceRequest.priority, theme)]}>
-                <ThemedText style={styles.badgeText}>{serviceRequest.priority}</ThemedText>
-              </View>
-            </View>
-          </View>
-        </LinearGradient>
 
-        {/* Modern Tab Bar */}
-        <View style={styles.tabBarContainer}>
-          <View style={styles.tabBar}>
-            {/* Animated indicator - with pointerEvents="none" to prevent touch blocking */}
-            <Animated.View
-              style={[
-                styles.tabIndicator,
-                {
-                  transform: [{
-                    translateX: slideAnim.interpolate({
-                      inputRange: [0, 1, 2],
-                      outputRange: [0, width / tabs.length, (width / tabs.length) * 2],
-                      extrapolate: 'clamp',
-                    })
-                  }],
-                  width: width / tabs.length - 20,
-                }
-              ]}
-              pointerEvents="none" // Prevents blocking touch events
-            />
-            
-            {tabs.map((tab, index) => (
-              <Pressable
-                key={tab.key}
-                style={styles.tab}
-                onPressIn={() => {
-                  console.log(`Tab ${index} pressed: ${tab.title}`);
-                  switchTab(index);
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
-              >
-                <Ionicons
-                  name={tab.icon as any}
-                  size={20}
-                  color={activeTab === index ? theme.primary : theme.textSecondary}
-                />
-                <ThemedText
-                  style={[
-                    styles.tabText,
-                    activeTab === index && styles.activeTabText
-                  ]}
+        <KeyboardAwareScrollView
+
+          style={styles.contentScrollView}
+          showsVerticalScrollIndicator={false}
+          stickyHeaderIndices={[1]}
+        >
+          {/* Header with gradient */}
+          <LinearGradient
+            colors={[theme.gradientStart, theme.gradientEnd]}
+            style={styles.headerGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Pressable onPress={() => router.back()} style={styles.backButton}>
+              <Ionicons name="arrow-back-circle-sharp" size={32} color={theme.white} />
+            </Pressable>
+            <View style={styles.headerContent}>
+              <View style={styles.headerTop}>
+                <ThemedText style={styles.headerTitle}>{serviceRequest.title}</ThemedText>
+                <Pressable style={{flexDirection: 'row-reverse', alignItems: 'center', gap: 4}} onPress={() => copyToClipboard(id as string)}>
+                  <ThemedText style={styles.headerSubtitle}>#{id}</ThemedText>
+                  <Ionicons name="copy-outline" size={22} color={theme.white} style={{ opacity: 0.8 }} />
+                </Pressable>
+              </View>
+              <View style={styles.badgeContainer}>
+                <View style={[styles.badge, getStatusStyle(serviceRequest.status, theme)]}>
+                  <ThemedText style={styles.badgeText}>{serviceRequest.status}</ThemedText>
+                </View>
+                <View style={[styles.badge, getPriorityStyle(serviceRequest.priority, theme)]}>
+                  <ThemedText style={styles.badgeText}>{serviceRequest.priority}</ThemedText>
+                </View>
+              </View>
+            </View>
+          </LinearGradient>
+
+          {/* Modern Tab Bar */}
+          <View style={styles.tabBarContainer}>
+            <View style={styles.tabBar}>
+              {/* Animated indicator - with pointerEvents="none" to prevent touch blocking */}
+              <Animated.View
+                style={[
+                  styles.tabIndicator,
+                  {
+                    transform: [{
+                      translateX: slideAnim.interpolate({
+                        inputRange: [0, 1, 2],
+                        outputRange: [0, width / tabs.length, (width / tabs.length) * 2],
+                        extrapolate: 'clamp',
+                      })
+                    }],
+                    width: width / tabs.length - 20,
+                  }
+                ]}
+                pointerEvents="none" // Prevents blocking touch events
+              />
+              
+              {tabs.map((tab, index) => (
+                <Pressable
+                  key={tab.key}
+                  style={styles.tab}
+                  onPressIn={() => {
+                    console.log(`Tab ${index} pressed: ${tab.title}`);
+                    switchTab(index);
+                  }}
+                  hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
                 >
-                  {tab.title}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.contentContainer}>
-          {renderTabContent()}
-        </View>
-      </ScrollView>
-
-      {/* Action Buttons */}
-      {(currentUserResponse === 'pending' || currentUserResponse === 'accepted') && (
-        <LinearGradient
-          colors={[theme.actionsContainerBackground, theme.card]}
-          style={styles.actionsContainer}
-        >
-          {/* {currentUserResponse === 'pending' && (
-            <View style={styles.buttonRow}>
-              <TouchableOpacity
-                style={[styles.button, styles.acceptButton]}
-                onPress={handleAccept}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                <ThemedText style={styles.buttonText}>قبول</ThemedText>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.button, styles.rejectButton]}
-                onPress={handleReject}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="close-circle" size={20} color="#fff" />
-                <ThemedText style={styles.buttonText}>رفض</ThemedText>
-              </TouchableOpacity>
+                  <Ionicons
+                    name={tab.icon as any}
+                    size={20}
+                    color={activeTab === index ? theme.primary : theme.textSecondary}
+                  />
+                  <ThemedText
+                    style={[
+                      styles.tabText,
+                      activeTab === index && styles.activeTabText
+                    ]}
+                  >
+                    {tab.title}
+                  </ThemedText>
+                </Pressable>
+              ))}
             </View>
-          )}
-          {currentUserResponse === 'accepted' && (
-            <TouchableOpacity
-              style={[styles.button, styles.doneButton, styles.fullWidthButton]}
-              onPress={handleMarkAsDone}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="flag" size={20} color="#fff" />
-              <ThemedText style={styles.buttonText}>تم إنجاز مهمتي</ThemedText>
-            </TouchableOpacity>
-          )} */}
-        </LinearGradient>
-      )}
+          </View>
+
+          <View style={styles.contentContainer}>
+            {renderTabContent()}
+          </View>
+        </KeyboardAwareScrollView>
+
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isArrivalLogVisible}
+        onRequestClose={() => {
+            setIsArrivalLogVisible(!isArrivalLogVisible);
+        }}
+      >
+        <View style={styles.centeredView}>
+            <View style={styles.modalView}>
+                <ThemedText style={styles.modalText}>تسجيل الوصول للموقع</ThemedText>
+                <ThemedText style={{textAlign: 'right', width: '100%', marginBottom: 8, color: theme.textSecondary}}>مدة العمل المقدرة</ThemedText>
+                <TextInput
+                    style={styles.searchInput}
+                    placeholder="مثال: 30"
+                    keyboardType="numeric"
+                    value={estimatedDuration}
+                    onChangeText={setEstimatedDuration}
+                    placeholderTextColor={theme.textSecondary}
+                />
+                <View style={styles.timeUnitSelector}>
+                    <Pressable
+                        style={[styles.timeUnitButton, timeUnit === 'minutes' && styles.timeUnitButtonSelected]}
+                        onPress={() => setTimeUnit('minutes')}
+                    >
+                        <ThemedText style={[styles.timeUnitButtonText, timeUnit === 'minutes' && styles.timeUnitButtonTextSelected]}>دقائق</ThemedText>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.timeUnitButton, timeUnit === 'hours' && styles.timeUnitButtonSelected]}
+                        onPress={() => setTimeUnit('hours')}
+                    >
+                        <ThemedText style={[styles.timeUnitButtonText, timeUnit === 'hours' && styles.timeUnitButtonTextSelected]}>ساعات</ThemedText>
+                    </Pressable>
+                </View>
+                <View style={styles.buttonRow}>
+                    <Pressable
+                        style={[styles.button, styles.rejectButton, {flex: 1, marginHorizontal: 4}]}
+                        onPress={() => setIsArrivalLogVisible(false)}
+                    >
+                        <ThemedText style={styles.buttonText}>إلغاء</ThemedText>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.button, styles.acceptButton, {flex: 1, marginHorizontal: 4}, actionLoading === 'logArrival' && { opacity: 0.7 }]}
+                        onPress={() => {
+                            const duration = parseInt(estimatedDuration, 10);
+                            if (isNaN(duration) || duration <= 0) {
+                                Alert.alert("خطأ", "الرجاء إدخال مدة زمنية صالحة.");
+                                return;
+                            }
+                            handleLogArrival(duration, timeUnit);
+                        }}
+                        disabled={actionLoading === 'logArrival'}
+                    >
+                        {actionLoading === 'logArrival' ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <ThemedText style={styles.buttonText}>تأكيد</ThemedText>
+                        )}
+                    </Pressable>
+                </View>
+            </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 };
@@ -1010,14 +1226,15 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
         fontFamily: 'Cairo',
     },
     actionsContainer: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      paddingVertical: 16,
-      paddingHorizontal: 20,
-      borderTopWidth: 1,
-      borderTopColor: theme.border,
+      backgroundColor: theme.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+      shadowColor: shadowColor,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
     },
     buttonRow: {
       flexDirection: 'row',
@@ -1056,6 +1273,59 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
     doneButton: {
       backgroundColor: theme.primary,
     },
+    centeredView: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    modalView: {
+      margin: 20,
+      backgroundColor: theme.card,
+      borderRadius: 20,
+      padding: 35,
+      alignItems: "center",
+      shadowColor: "#000",
+      shadowOffset: {
+        width: 0,
+        height: 2
+      },
+      shadowOpacity: 0.25,
+      shadowRadius: 4,
+      elevation: 5,
+      width: '90%',
+    },
+    modalText: {
+      marginBottom: 15,
+      textAlign: "center",
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: theme.text,
+    },
+    timeUnitSelector: {
+      flexDirection: 'row-reverse',
+      marginVertical: 16,
+    },
+    timeUnitButton: {
+      flex: 1,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginHorizontal: 4,
+    },
+    timeUnitButtonSelected: {
+      backgroundColor: theme.primary,
+      borderColor: theme.primary,
+    },
+    timeUnitButtonText: {
+      color: theme.text,
+    },
+    timeUnitButtonTextSelected: {
+      color: theme.white,
+      fontWeight: 'bold',
+    }
   });
 };
 

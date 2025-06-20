@@ -21,6 +21,20 @@ import { Theme, useTheme } from "@/context/ThemeContext";
 import useFirebaseAuth from "@/hooks/use-firebase-auth";
 import { db } from "@/lib/firebase";
 import {
+  CableLength,
+  Comment,
+  ConnectorType,
+  DeviceModel,
+  Invoice,
+  InvoiceItem,
+  InvoiceSettings,
+  PackageType,
+  ServiceRequest,
+  StockTransaction,
+  UserStock,
+  UserStockItem
+} from "@/lib/types";
+import {
   arrayUnion,
   collection,
   doc,
@@ -31,180 +45,360 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import InvoiceDetails from "./InvoiceDetails";
 import CustomDropdown from "./ui/CustomDropdown";
 
-interface PackageType {
-  id: string;
-  name: string;
-  price: number;
-  isActive: boolean;
+// --- HELPER FUNCTION & CONSTANTS ---
+// This function is part of the UI layer as it directly renders UI elements.
+// It is modified to use the new design system styles and component structures.
+interface RenderItemSpecificFieldsProps {
+  currentItem: Partial<InvoiceItem>;
+  setCurrentItem: React.Dispatch<React.SetStateAction<Partial<InvoiceItem>>>;
+  invoiceSettings: InvoiceSettings;
+  customCableLength: string;
+  handleCustomCableLengthInputChange: (text: string) => void;
+  handlePackageTypeChange: (value: string) => void;
+  handleCableLengthChange: (value: string) => void;
+  handleDeviceModelChange: (value: string) => void;
+  handleMaintenanceTypeChange: (value: string) => void;
+  styles: ReturnType<typeof getStyles>;
+  theme: Theme;
 }
 
-interface CableLength {
-  id: string;
-  length: number;
-  price: number;
-  isCustom?: boolean;
-  isActive: boolean;
-}
+const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
+  React.memo(
+    ({
+      currentItem,
+      setCurrentItem,
+      invoiceSettings,
+      customCableLength,
+      handleCustomCableLengthInputChange,
+      handlePackageTypeChange,
+      handleCableLengthChange,
+      handleDeviceModelChange,
+      handleMaintenanceTypeChange,
+      styles, // Pass styles down to use the new design system
+      theme, // Pass colors down for consistency
+    }) => {
+      if (!invoiceSettings) return null;
 
-interface ConnectorType {
-  id: string;
-  name: string;
-  price: number;
-  isActive: boolean;
-}
+      switch (currentItem.type) {
+        case "newCustomerInstallation":
+          return (
+            <>
+              <Text style={styles.label}>نوع الباقة</Text>
+              <CustomDropdown
+                selectedValue={currentItem.packageType}
+                onValueChange={(itemValue) => handlePackageTypeChange(itemValue)}
+                placeholder="اختر نوع الباقة..."
+                items={invoiceSettings.packageTypes
+                  .filter((pt: PackageType) => pt.isActive)
+                  .map((pt: PackageType) => ({
+                    label: `${pt.name} (${pt.price.toLocaleString()} د.ع)`,
+                    value: pt.name,
+                  }))}
+              />
 
-interface DeviceModel {
-  id: string;
-  name: string;
-  price: number;
-  type: string; // e.g., "ONU", "ONT"
-  isActive: boolean;
-}
+              <Text style={styles.label}>طول الكيبل المستخدم</Text>
+              <CustomDropdown
+                selectedValue={currentItem.cableLength?.toString()}
+                onValueChange={handleCableLengthChange}
+                placeholder="اختر طول الكيبل..."
+                items={[
+                  ...invoiceSettings.cableLengths
+                    .filter((cl: CableLength) => cl.isActive && !cl.isCustom)
+                    .map((cl: CableLength) => ({
+                      label: `${cl.length} متر`,
+                      value: cl.length.toString(),
+                    })),
+                  ...(invoiceSettings.cableLengths.some(
+                    (cl: CableLength) => cl.isCustom && cl.isActive
+                  )
+                    ? [{ label: "طول مخصص", value: "custom" }]
+                    : []),
+                ]}
+              />
+              {currentItem.cableLength === "custom" && (
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  placeholder="أدخل الطول بالمتر"
+                  value={customCableLength}
+                  onChangeText={handleCustomCableLengthInputChange}
+                  placeholderTextColor={theme.placeholder}
+                />
+              )}
 
-interface MaintenanceType {
-  id: string;
-  name: string;
-  basePrice: number;
-  description: string;
-  isActive: boolean;
-}
+              <Text style={styles.label}>جهاز الاستقبال</Text>
+              <CustomDropdown
+                selectedValue={currentItem.deviceModel}
+                onValueChange={handleDeviceModelChange}
+                placeholder="اختر نوع الجهاز..."
+                items={invoiceSettings.deviceModels
+                  .filter((dm: DeviceModel) => dm.isActive)
+                  .map((dm: DeviceModel) => ({
+                    label: dm.name,
+                    value: dm.name,
+                  }))}
+              />
 
-interface InvoiceSettings {
-  id: string;
-  teamId: string;
-  lastUpdated: string;
-  packageTypes: PackageType[];
-  cableLengths: CableLength[];
-  connectorTypes: ConnectorType[];
-  deviceModels: DeviceModel[];
-  maintenanceTypes: MaintenanceType[];
-}
+              <Text style={styles.label}>المواد المستخدمة</Text>
+              <View style={styles.checkboxGroupContainer}>
+                {invoiceSettings.connectorTypes
+                  .filter((ct: ConnectorType) => ct.isActive)
+                  .map((ct: ConnectorType) => (
+                    <View key={ct.id} style={styles.checkboxWrapper}>
+                      <Checkbox
+                        value={
+                          Array.isArray(currentItem.connectorType) &&
+                          currentItem.connectorType.includes(ct.name)
+                        }
+                        onValueChange={(checked) => {
+                          setCurrentItem((prev: Partial<InvoiceItem>) => ({
+                            ...prev,
+                            connectorType: checked
+                              ? [...(prev.connectorType || []), ct.name]
+                              : (prev.connectorType || []).filter(
+                                  (t: string) => t !== ct.name
+                                ),
+                          }));
+                        }}
+                        color={theme.primary}
+                        style={styles.checkboxBase}
+                      />
+                      <Text style={styles.checkboxLabel}>{ct.name}</Text>
+                    </View>
+                  ))}
+              </View>
 
-interface InvoiceItem {
-  id: string;
-  type:
-    | "newCustomerInstallation"
-    | "maintenance"
-    | "transportationFee"
-    | "expenseReimbursement"
-    | "subscriptionRenewal"
-    | "customItem";
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-  packageType?: string;
-  cableLength?: number | string; // Can be number or "custom"
-  connectorType?: string[];
-  receiverDevice?: string; // Appears in serializedItems, might be legacy or part of deviceModel
-  numHooks?: number;
-  numBags?: number;
-  maintenanceType?: string; // e.g., "cableReplacement", "connectorReplacement"
-  deviceModel?: string;
-  additionalNotes?: string;
-  subscriberId?: string | null;
-  isPaid?: boolean;
-}
+              <View style={styles.inlineInputContainer}>
+                <View style={styles.inlineInput}>
+                  <Text style={styles.label}>عدد الهوكات</Text>
+                  <TextInput
+                    style={styles.input}
+                    keyboardType="numeric"
+                    value={currentItem.numHooks?.toString() || "0"}
+                    onChangeText={(val) =>
+                      setCurrentItem({
+                        ...currentItem,
+                        numHooks: parseInt(val) || 0,
+                      })
+                    }
+                    placeholderTextColor={theme.placeholder}
+                  />
+                </View>
+                <View style={styles.inlineInput}>
+                  <Text style={styles.label}>عدد الشناطات</Text>
+                  <TextInput
+                    style={styles.input}
+                    keyboardType="numeric"
+                    value={currentItem.numBags?.toString() || "0"}
+                    onChangeText={(val) =>
+                      setCurrentItem({
+                        ...currentItem,
+                        numBags: parseInt(val) || 0,
+                      })
+                    }
+                    placeholderTextColor={theme.placeholder}
+                  />
+                </View>
+              </View>
+            </>
+          );
+        case "maintenance":
+          return (
+            <>
+              <Text style={styles.label}>نوع الصيانة</Text>
+              <CustomDropdown
+                selectedValue={currentItem.maintenanceType}
+                onValueChange={handleMaintenanceTypeChange}
+                placeholder="اختر نوع الصيانة..."
+                items={[
+                  { label: "استبدال كابل", value: "cableReplacement" },
+                  { label: "استبدال كونيكتر", value: "connectorReplacement" },
+                  { label: "استبدال جهاز", value: "deviceReplacement" },
+                ]}
+              />
 
-interface Invoice {
-  id: string;
-  linkedServiceRequestId: string;
-  createdBy: string;
-  createdAt: string;
-  lastUpdated: string;
-  items: InvoiceItem[];
-  totalAmount: number;
-  status: "draft" | "pending" | "paid" | "cancelled";
-  notes?: string;
-  customerName?: string;
-  creatorName?: string;
-  type: "invoice"; // Or other types if applicable
-  teamId?: string | null;
-  teamCreatorId?: string | null; // Assuming this might exist
-  subscriberId?: string | null;
-}
+              {currentItem.maintenanceType === "cableReplacement" && (
+                <>
+                  <Text style={styles.label}>طول الكيبل</Text>
+                  <CustomDropdown
+                    selectedValue={currentItem.cableLength?.toString()}
+                    onValueChange={handleCableLengthChange}
+                    placeholder="اختر طول الكيبل..."
+                    items={[
+                      ...invoiceSettings.cableLengths
+                        .filter((cl: CableLength) => cl.isActive && !cl.isCustom)
+                        .map((cl: CableLength) => ({
+                          label: `${
+                            cl.length
+                          } متر (${cl.price.toLocaleString()} د.ع)`,
+                          value: cl.length.toString(),
+                        })),
+                      ...(invoiceSettings.cableLengths.some(
+                        (cl: CableLength) => cl.isCustom && cl.isActive
+                      )
+                        ? [{ label: "طول مخصص", value: "custom" }]
+                        : []),
+                    ]}
+                  />
+                  {currentItem.cableLength === "custom" && (
+                    <TextInput
+                      style={styles.input}
+                      keyboardType="numeric"
+                      placeholder="أدخل الطول بالمتر"
+                      value={customCableLength}
+                      onChangeText={handleCustomCableLengthInputChange}
+                      placeholderTextColor={theme.placeholder}
+                    />
+                  )}
+                </>
+              )}
 
-interface Comment {
-  id: string;
-  userId: string;
-  userName: string;
-  content: string;
-  timestamp: string;
-}
+              {currentItem.maintenanceType === "connectorReplacement" && (
+                <>
+                  <Text style={styles.label}>نوع الكونيكتر</Text>
+                  <View style={styles.checkboxGroupContainer}>
+                    {invoiceSettings.connectorTypes
+                      .filter((ct: ConnectorType) => ct.isActive)
+                      .map((ct: ConnectorType) => (
+                        <View key={ct.id} style={styles.checkboxWrapper}>
+                          <Checkbox
+                            value={
+                              Array.isArray(currentItem.connectorType) &&
+                              currentItem.connectorType.includes(ct.name)
+                            }
+                            onValueChange={(checked) => {
+                              setCurrentItem((prev: Partial<InvoiceItem>) => ({
+                                ...prev,
+                                connectorType: checked
+                                  ? [...(prev.connectorType || []), ct.name]
+                                  : (prev.connectorType || []).filter(
+                                      (t: string) => t !== ct.name
+                                    ),
+                              }));
+                            }}
+                            color={theme.primary}
+                            style={styles.checkboxBase}
+                          />
+                          <Text style={styles.checkboxLabel}>{`${
+                            ct.name
+                          } (${ct.price.toLocaleString()} د.ع)`}</Text>
+                        </View>
+                      ))}
+                  </View>
+                </>
+              )}
 
-interface ServiceRequest {
-  id: string;
-  customerId: string;
-  customerName: string;
-  customerEmail?: string;
-  customerPhone?: string;
-  title: string;
-  description: string;
-  type: string; // e.g., "مشكلة", "طلب جديد"
-  status: string; // e.g., "مفتوح", "قيد المعالجة", "مغلق"
-  priority: string; // e.g., "عالية", "متوسطة", "منخفضة"
-  date: string; // Original date, might be ISO string
-  createdAt: string; // Firestore timestamp or ISO string
-  lastUpdated: string; // Firestore timestamp or ISO string
-  assignedTo?: string;
-  assignedUsers?: string[];
-  attachments?: string[]; // URLs or identifiers
-  comments?: Comment[];
-  creatorId: string;
-  creatorName: string;
-  subscribers?: string[]; // IDs of users subscribed to this request
-  subscriberId?: string | null;
-  invoiceIds?: string[];
-}
+              {currentItem.maintenanceType === "deviceReplacement" && (
+                <>
+                  <Text style={styles.label}>نوع الجهاز</Text>
+                  <CustomDropdown
+                    selectedValue={currentItem.deviceModel}
+                    onValueChange={handleDeviceModelChange}
+                    placeholder="اختر نوع الجهاز..."
+                    items={invoiceSettings.deviceModels
+                      .filter((dm: DeviceModel) => dm.isActive)
+                      .map((dm: DeviceModel) => ({
+                        label: `${
+                          dm.name
+                        } (${dm.price.toLocaleString()} د.ع)`,
+                        value: dm.name,
+                      }))}
+                  />
+                </>
+              )}
 
-interface UserStockItem {
-  id: string; // Unique ID for this stock item entry
-  itemType:
-    | "connectorType"
-    | "deviceModel"
-    | "cable"
-    | "hook"
-    | "bag"
-    | "maintenanceType"
-    | string; // Type of item from settings or general
-  itemId: string; // ID from InvoiceSettings (e.g., connectorType.id, deviceModel.id) or a generic ID
-  itemName: string;
-  quantity: number;
-  lastUpdated: string;
-}
+              {currentItem.maintenanceType === "customMaintenance" && (
+                <>
+                  <Text style={styles.label}>وصف الصيانة</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={currentItem.description}
+                    onChangeText={(text) =>
+                      setCurrentItem({ ...currentItem, description: text })
+                    }
+                    placeholder="أدخل وصف الصيانة..."
+                    placeholderTextColor={theme.placeholder}
+                  />
+                  <Text style={styles.label}>السعر (د.ع)</Text>
+                  <TextInput
+                    style={styles.input}
+                    keyboardType="numeric"
+                    value={currentItem.unitPrice?.toString() || "0"}
+                    onChangeText={(text) => {
+                      const price = parseFloat(text) || 0;
+                      setCurrentItem({
+                        ...currentItem,
+                        unitPrice: price,
+                        totalPrice: price * (currentItem.quantity || 1),
+                      });
+                    }}
+                    placeholder="0"
+                    placeholderTextColor={theme.placeholder}
+                  />
+                </>
+              )}
+            </>
+          );
+        case "subscriptionRenewal":
+          return (
+            <>
+              <Text style={styles.label}>نوع الاشتراك</Text>
+              <CustomDropdown
+                selectedValue={currentItem.packageType}
+                onValueChange={handlePackageTypeChange}
+                placeholder="اختر نوع الاشتراك..."
+                items={invoiceSettings.packageTypes
+                  .filter((pt: PackageType) => pt.isActive)
+                  .map((pt: PackageType) => ({
+                    label: `${pt.name} (${pt.price.toLocaleString()} د.ع)`,
+                    value: pt.name,
+                  }))}
+              />
+            </>
+          );
+        case "transportationFee":
+        case "expenseReimbursement":
+        case "customItem":
+          return (
+            <>
+              <Text style={styles.label}>الوصف</Text>
+              <TextInput
+                style={styles.input}
+                value={currentItem.description}
+                onChangeText={(text) =>
+                  setCurrentItem({ ...currentItem, description: text })
+                }
+                placeholder="أدخل وصف العنصر..."
+                placeholderTextColor={theme.placeholder}
+              />
+              <Text style={styles.label}>السعر (د.ع)</Text>
+              <TextInput
+                style={styles.input}
+                keyboardType="numeric"
+                value={currentItem.unitPrice?.toString() || "0"}
+                onChangeText={(text) => {
+                  const price = parseFloat(text) || 0;
+                  setCurrentItem({
+                    ...currentItem,
+                    unitPrice: price,
+                    totalPrice: price * (currentItem.quantity || 1),
+                  });
+                }}
+                placeholder="0"
+                placeholderTextColor={theme.placeholder}
+              />
+            </>
+          );
+        default:
+          return null;
+      }
+    }
+  );
 
-interface UserStock {
-  id: string; // User's UID
-  userId: string;
-  userName?: string | null;
-  items: UserStockItem[];
-  lastUpdated: string;
-}
-
-interface StockTransaction {
-  id: string;
-  userId: string;
-  userName: string;
-  itemType:
-    | "connectorType"
-    | "deviceModel"
-    | "cable"
-    | "hook"
-    | "bag"
-    | "maintenanceType"
-    | string;
-  itemId: string;
-  itemName: string;
-  quantity: number; // Amount transacted (positive for addition, negative for reduction but here it's absolute)
-  type: "invoice" | "adjustment" | "initial" | "transfer";
-  sourceId?: string; // e.g., invoice ID, adjustment ID
-  sourceName?: string;
-  timestamp: string;
-  notes?: string;
-}
-// --- END TYPE DEFINITIONS ---
+RenderItemSpecificFields.displayName = "RenderItemSpecificFields";
 
 interface InvoiceFormProps {
   ticketId: string;
@@ -794,9 +988,11 @@ function InvoiceForm({
   }, [user]);
 
   const checkStockForItem = useCallback(
-    (item: InvoiceItem): boolean => {
-      if (!userStock || !invoiceSettings) return false;
-      if (!item) return true;
+    (
+      item: InvoiceItem
+    ): { type: string; name: string; required: number; available: number }[] => {
+      if (!userStock || !invoiceSettings) return [];
+      if (!item) return [];
 
       let requiredStockItems: {
         type: string;
@@ -933,9 +1129,15 @@ function InvoiceForm({
           }
         }
       }
-      if (requiredStockItems.length === 0) return true;
 
-      const currentMissing: typeof missingItems = [];
+      if (requiredStockItems.length === 0) return [];
+
+      const currentMissing: {
+        type: string;
+        name: string;
+        required: number;
+        available: number;
+      }[] = [];
       for (const required of requiredStockItems) {
         const stockItem = userStock.items.find(
           (si) => si.itemType === required.type && si.itemId === required.id
@@ -951,20 +1153,20 @@ function InvoiceForm({
         }
       }
 
-      if (currentMissing.length > 0) {
-        setMissingItems((prev) => [...prev, ...currentMissing]); // This correctly appends to missingItems state
-      }
-      return currentMissing.length === 0;
+      return currentMissing;
     },
     [userStock, invoiceSettings, customCableLength]
   );
 
-  const validateUserStock = useCallback((): boolean => {
-    setMissingItems([]); // Reset missing items before validation
+  const validateUserStock = useCallback((): {
+    type: string;
+    name: string;
+    required: number;
+    available: number;
+  }[] => {
     if (!userStock || userStock.items.length === 0) {
       if (!loadingUserStock) {
-        // Create a temporary list for the modal, this should be set to state if we want to show it.
-        const tempMissing = [
+        return [
           {
             type: "general",
             name: "لا يوجد مخزون مخصص أو المستخدم لم يقم بتسجيل الدخول",
@@ -972,34 +1174,24 @@ function InvoiceForm({
             available: 0,
           },
         ];
-        setMissingItems(tempMissing);
-        setStockCheckFailed(true);
       }
-      return false; // Stock check fails if no user stock and not loading
+      return [];
     }
 
-    let allItemsSufficient = true;
-    const localMissingItems: typeof missingItems = []; // Accumulate missing items locally
-
+    const allMissingItems: {
+      type: string;
+      name: string;
+      required: number;
+      available: number;
+    }[] = [];
     for (const item of items) {
-      // Temporarily reset global missing items for checkStockForItem
-      setMissingItems([]);
-      if (!checkStockForItem(item)) {
-        allItemsSufficient = false;
-        // checkStockForItem updates global missingItems, so capture them here
-        localMissingItems.push(...missingItems);
+      const missingForThisItem = checkStockForItem(item);
+      if (missingForThisItem.length > 0) {
+        allMissingItems.push(...missingForThisItem);
       }
     }
-    // After checking all items, set the final list of missing items
-    setMissingItems(localMissingItems);
 
-    if (!allItemsSufficient || localMissingItems.length > 0) {
-      setStockCheckFailed(true);
-      return false; // Stock validation fails
-    } else {
-      setStockCheckFailed(false);
-      return true; // Stock validation passes
-    }
+    return allMissingItems;
   }, [items, userStock, checkStockForItem, loadingUserStock]);
 
   const reduceUserStock = async (invoice: Invoice): Promise<boolean> => {
@@ -1269,28 +1461,23 @@ function InvoiceForm({
       return;
     }
 
-    // Perform stock validation. If it fails (returns false), it means there are critical stock issues.
-    // The validateUserStock function now sets stockCheckFailed and missingItems state internally.
-    // If it returns false, it means we should not proceed.
-    if (!validateUserStock()) {
-      // stockCheckFailed is true, modal will show. Don't proceed with saving.
-      // It might be redundant to setSubmitting(false) here if it's not true yet,
-      // but ensure we don't proceed.
-      return;
+    const missingStockItems = validateUserStock();
+
+    if (missingStockItems.length > 0) {
+      setMissingItems(missingStockItems);
+      setStockCheckFailed(true);
+
+      const isFatalError = missingStockItems.some(
+        (item) => item.type === "general"
+      );
+      if (isFatalError) {
+        return; // Abort saving for fatal error (no stock at all)
+      }
+      // For non-fatal errors (insufficient stock), the modal will show, but we proceed.
+    } else {
+      setStockCheckFailed(false);
+      setMissingItems([]);
     }
-    // If validateUserStock returns true, it means either stock is sufficient,
-    // OR there are non-critical issues (e.g., general "no stock assigned") and stockCheckFailed is true,
-    // allowing the user to "understand" and proceed (current modal logic).
-    // The key is: does validateUserStock() returning true *always* mean it's okay to proceed,
-    // or does it mean "validation ran, check stockCheckFailed state"?
-    // Let's assume: if stockCheckFailed is true *after* validateUserStock, the modal *will* show,
-    // but the save process should continue if the user dismisses the modal.
-    // This implies that the initial `validateUserStock()` check above might be better as:
-    // `const isStockSufficient = validateUserStock();`
-    // `if (stockCheckFailed && !isStockSufficient) { /* don't submit yet, wait for modal interaction */ }`
-    // However, the current logic is: validate, if `stockCheckFailed` is true, show modal.
-    // The modal's "Fahimt" button just closes it. The form submission logic continues.
-    // This means the user can acknowledge stock issues and proceed.
 
     setSubmitting(true);
 
@@ -1400,345 +1587,6 @@ function InvoiceForm({
   const cancelItemForm = () => {
     resetItemForm();
     setShowItemForm(false);
-  };
-
-  // --- HELPER FUNCTION & CONSTANTS ---
-  // This function is part of the UI layer as it directly renders UI elements.
-  // It is modified to use the new design system styles and component structures.
-  interface RenderItemSpecificFieldsProps {
-    currentItem: Partial<InvoiceItem>;
-    setCurrentItem: React.Dispatch<React.SetStateAction<Partial<InvoiceItem>>>;
-    invoiceSettings: InvoiceSettings;
-    customCableLength: string;
-    handleCustomCableLengthInputChange: (text: string) => void;
-    handlePackageTypeChange: (value: string) => void;
-    handleCableLengthChange: (value: string) => void;
-    handleDeviceModelChange: (value: string) => void;
-    handleMaintenanceTypeChange: (value: string) => void;
-    styles: ReturnType<typeof getStyles>;
-    theme: Theme;
-  }
-
-  const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> = ({
-    currentItem,
-    setCurrentItem,
-    invoiceSettings,
-    customCableLength,
-    handleCustomCableLengthInputChange,
-    handlePackageTypeChange,
-    handleCableLengthChange,
-    handleDeviceModelChange,
-    handleMaintenanceTypeChange,
-    styles, // Pass styles down to use the new design system
-    theme, // Pass colors down for consistency
-  }) => {
-    if (!invoiceSettings) return null;
-
-    switch (currentItem.type) {
-      case "newCustomerInstallation":
-        return (
-          <>
-            <Text style={styles.label}>نوع الباقة</Text>
-            <CustomDropdown
-              selectedValue={currentItem.packageType}
-              onValueChange={(itemValue) => handlePackageTypeChange(itemValue)}
-              placeholder="اختر نوع الباقة..."
-              items={invoiceSettings.packageTypes
-                .filter((pt: PackageType) => pt.isActive)
-                .map((pt: PackageType) => ({
-                  label: `${pt.name} (${pt.price.toLocaleString()} د.ع)`,
-                  value: pt.name,
-                }))}
-            />
-
-            <Text style={styles.label}>طول الكيبل المستخدم</Text>
-            <CustomDropdown
-              selectedValue={currentItem.cableLength?.toString()}
-              onValueChange={handleCableLengthChange}
-              placeholder="اختر طول الكيبل..."
-              items={[
-                ...invoiceSettings.cableLengths
-                  .filter((cl: CableLength) => cl.isActive && !cl.isCustom)
-                  .map((cl: CableLength) => ({
-                    label: `${cl.length} متر`,
-                    value: cl.length.toString(),
-                  })),
-                ...(invoiceSettings.cableLengths.some(
-                  (cl: CableLength) => cl.isCustom && cl.isActive
-                )
-                  ? [{ label: "طول مخصص", value: "custom" }]
-                  : []),
-              ]}
-            />
-            {currentItem.cableLength === "custom" && (
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                placeholder="أدخل الطول بالمتر"
-                value={customCableLength}
-                onChangeText={handleCustomCableLengthInputChange}
-                placeholderTextColor={theme.placeholder}
-              />
-            )}
-
-            <Text style={styles.label}>جهاز الاستقبال</Text>
-            <CustomDropdown
-              selectedValue={currentItem.deviceModel}
-              onValueChange={handleDeviceModelChange}
-              placeholder="اختر نوع الجهاز..."
-              items={invoiceSettings.deviceModels
-                .filter((dm: DeviceModel) => dm.isActive)
-                .map((dm: DeviceModel) => ({
-                  label: dm.name,
-                  value: dm.name,
-                }))}
-            />
-
-            <Text style={styles.label}>المواد المستخدمة</Text>
-            <View style={styles.checkboxGroupContainer}>
-              {invoiceSettings.connectorTypes
-                .filter((ct: ConnectorType) => ct.isActive)
-                .map((ct: ConnectorType) => (
-                  <View key={ct.id} style={styles.checkboxWrapper}>
-                    <Checkbox
-                      value={
-                        Array.isArray(currentItem.connectorType) &&
-                        currentItem.connectorType.includes(ct.name)
-                      }
-                      onValueChange={(checked) => {
-                        setCurrentItem((prev: Partial<InvoiceItem>) => ({
-                          ...prev,
-                          connectorType: checked
-                            ? [...(prev.connectorType || []), ct.name]
-                            : (prev.connectorType || []).filter(
-                                (t: string) => t !== ct.name
-                              ),
-                        }));
-                      }}
-                      color={theme.primary}
-                      style={styles.checkboxBase}
-                    />
-                    <Text style={styles.checkboxLabel}>{ct.name}</Text>
-                  </View>
-                ))}
-            </View>
-
-            <View style={styles.inlineInputContainer}>
-              <View style={styles.inlineInput}>
-                <Text style={styles.label}>عدد الهوكات</Text>
-                <TextInput
-                  style={styles.input}
-                  keyboardType="numeric"
-                  value={currentItem.numHooks?.toString() || "0"}
-                  onChangeText={(val) =>
-                    setCurrentItem({ ...currentItem, numHooks: parseInt(val) || 0 })
-                  }
-                  placeholderTextColor={theme.placeholder}
-                />
-              </View>
-              <View style={styles.inlineInput}>
-                <Text style={styles.label}>عدد الشناطات</Text>
-                <TextInput
-                  style={styles.input}
-                  keyboardType="numeric"
-                  value={currentItem.numBags?.toString() || "0"}
-                  onChangeText={(val) =>
-                    setCurrentItem({ ...currentItem, numBags: parseInt(val) || 0 })
-                  }
-                  placeholderTextColor={theme.placeholder}
-                />
-              </View>
-            </View>
-          </>
-        );
-      case "maintenance":
-        return (
-          <>
-            <Text style={styles.label}>نوع الصيانة</Text>
-            <CustomDropdown
-              selectedValue={currentItem.maintenanceType}
-              onValueChange={handleMaintenanceTypeChange}
-              placeholder="اختر نوع الصيانة..."
-              items={[
-                { label: "استبدال كابل", value: "cableReplacement" },
-                { label: "استبدال كونيكتر", value: "connectorReplacement" },
-                { label: "استبدال جهاز", value: "deviceReplacement" },
-              ]}
-            />
-
-            {currentItem.maintenanceType === "cableReplacement" && (
-              <>
-                <Text style={styles.label}>طول الكيبل</Text>
-                <CustomDropdown
-                  selectedValue={currentItem.cableLength?.toString()}
-                  onValueChange={handleCableLengthChange}
-                  placeholder="اختر طول الكيبل..."
-                  items={[
-                    ...invoiceSettings.cableLengths
-                      .filter((cl: CableLength) => cl.isActive && !cl.isCustom)
-                      .map((cl: CableLength) => ({
-                        label: `${
-                          cl.length
-                        } متر (${cl.price.toLocaleString()} د.ع)`,
-                        value: cl.length.toString(),
-                      })),
-                    ...(invoiceSettings.cableLengths.some(
-                      (cl: CableLength) => cl.isCustom && cl.isActive
-                    )
-                      ? [{ label: "طول مخصص", value: "custom" }]
-                      : []),
-                  ]}
-                />
-                {currentItem.cableLength === "custom" && (
-                  <TextInput
-                    style={styles.input}
-                    keyboardType="numeric"
-                    placeholder="أدخل الطول بالمتر"
-                    value={customCableLength}
-                    onChangeText={handleCustomCableLengthInputChange}
-                    placeholderTextColor={theme.placeholder}
-                  />
-                )}
-              </>
-            )}
-
-            {currentItem.maintenanceType === "connectorReplacement" && (
-              <>
-                <Text style={styles.label}>نوع الكونيكتر</Text>
-                <View style={styles.checkboxGroupContainer}>
-                  {invoiceSettings.connectorTypes
-                    .filter((ct: ConnectorType) => ct.isActive)
-                    .map((ct: ConnectorType) => (
-                      <View key={ct.id} style={styles.checkboxWrapper}>
-                        <Checkbox
-                          value={
-                            Array.isArray(currentItem.connectorType) &&
-                            currentItem.connectorType.includes(ct.name)
-                          }
-                          onValueChange={(checked) => {
-                            setCurrentItem((prev: Partial<InvoiceItem>) => ({
-                              ...prev,
-                              connectorType: checked
-                                ? [...(prev.connectorType || []), ct.name]
-                                : (prev.connectorType || []).filter(
-                                    (t: string) => t !== ct.name
-                                  ),
-                            }));
-                          }}
-                          color={theme.primary}
-                          style={styles.checkboxBase}
-                        />
-                        <Text style={styles.checkboxLabel}>{`${
-                          ct.name
-                        } (${ct.price.toLocaleString()} د.ع)`}</Text>
-                      </View>
-                    ))}
-                </View>
-              </>
-            )}
-
-            {currentItem.maintenanceType === "deviceReplacement" && (
-              <>
-                <Text style={styles.label}>نوع الجهاز</Text>
-                <CustomDropdown
-                  selectedValue={currentItem.deviceModel}
-                  onValueChange={handleDeviceModelChange}
-                  placeholder="اختر نوع الجهاز..."
-                  items={invoiceSettings.deviceModels
-                    .filter((dm: DeviceModel) => dm.isActive)
-                    .map((dm: DeviceModel) => ({
-                      label: `${dm.name} (${dm.price.toLocaleString()} د.ع)`,
-                      value: dm.name,
-                    }))}
-                />
-              </>
-            )}
-
-            {currentItem.maintenanceType === "customMaintenance" && (
-              <>
-                <Text style={styles.label}>وصف الصيانة</Text>
-                <TextInput
-                  style={styles.input}
-                  value={currentItem.description}
-                  onChangeText={(text) =>
-                    setCurrentItem({ ...currentItem, description: text })
-                  }
-                  placeholder="أدخل وصف الصيانة..."
-                  placeholderTextColor={theme.placeholder}
-                />
-                <Text style={styles.label}>السعر (د.ع)</Text>
-                <TextInput
-                  style={styles.input}
-                  keyboardType="numeric"
-                  value={currentItem.unitPrice?.toString() || "0"}
-                  onChangeText={(text) => {
-                    const price = parseFloat(text) || 0;
-                    setCurrentItem({
-                      ...currentItem,
-                      unitPrice: price,
-                      totalPrice: price * (currentItem.quantity || 1),
-                    });
-                  }}
-                  placeholder="0"
-                  placeholderTextColor={theme.placeholder}
-                />
-              </>
-            )}
-          </>
-        );
-      case "subscriptionRenewal":
-        return (
-          <>
-            <Text style={styles.label}>نوع الاشتراك</Text>
-            <CustomDropdown
-              selectedValue={currentItem.packageType}
-              onValueChange={handlePackageTypeChange}
-              placeholder="اختر نوع الاشتراك..."
-              items={invoiceSettings.packageTypes
-                .filter((pt: PackageType) => pt.isActive)
-                .map((pt: PackageType) => ({
-                  label: `${pt.name} (${pt.price.toLocaleString()} د.ع)`,
-                  value: pt.name,
-                }))}
-            />
-          </>
-        );
-      case "transportationFee":
-      case "expenseReimbursement":
-      case "customItem":
-        return (
-          <>
-            <Text style={styles.label}>الوصف</Text>
-            <TextInput
-              style={styles.input}
-              value={currentItem.description}
-              onChangeText={(text) =>
-                setCurrentItem({ ...currentItem, description: text })
-              }
-              placeholder="أدخل وصف العنصر..."
-              placeholderTextColor={theme.placeholder}
-            />
-            <Text style={styles.label}>السعر (د.ع)</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="numeric"
-              value={currentItem.unitPrice?.toString() || "0"}
-              onChangeText={(text) => {
-                const price = parseFloat(text) || 0;
-                setCurrentItem({
-                  ...currentItem,
-                  unitPrice: price,
-                  totalPrice: price * (currentItem.quantity || 1),
-                });
-              }}
-              placeholder="0"
-              placeholderTextColor={theme.placeholder}
-            />
-          </>
-        );
-      default:
-        return null;
-    }
   };
 
   // --- REDESIGNED COMPONENT ---
@@ -1943,21 +1791,9 @@ function InvoiceForm({
           </View>
         )}
 
-        {/* --- Notes Card --- */}
-        <View style={styles.card}>
-          <Text style={styles.label}>ملاحظات الفاتورة (اختياري)</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="أدخل أي تفاصيل إضافية هنا..."
-            placeholderTextColor={theme.placeholder}
-            multiline
-          />
-        </View>
+
       </ScrollView>
 
-      {/* --- Floating Action Footer --- */}
       <View style={styles.footer}>
         <Pressable
           onPressIn={onCancel}
@@ -2477,6 +2313,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 
   useEffect(() => {
     const fetchInvoices = async () => {
@@ -2510,6 +2347,21 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
     };
     fetchInvoices();
   }, [invoiceIds]);
+
+  if (selectedInvoice) {
+    return (
+      <Modal
+        visible={!!selectedInvoice}
+        animationType="slide"
+        onRequestClose={() => setSelectedInvoice(null)}
+      >
+        <InvoiceDetails
+          invoice={selectedInvoice}
+          onClose={() => setSelectedInvoice(null)}
+        />
+      </Modal>
+    );
+  }
 
   if (showInvoiceForm) {
     return (
@@ -2601,7 +2453,14 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
         {invoices.map((invoice) => {
           const statusStyle = getStatusStyle(invoice.status, theme, themeName);
           return (
-            <View key={invoice.id} style={styles.card}>
+            <Pressable
+              key={invoice.id}
+              onPress={() => setSelectedInvoice(invoice)}
+              style={({ pressed }) => [
+                styles.card,
+                pressed && { opacity: 0.8 },
+              ]}
+            >
               <View
                 style={{
                   flexDirection: "row-reverse",
@@ -2701,7 +2560,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
                   </Text>
                 </>
               )}
-            </View>
+            </Pressable>
           );
         })}
       </ScrollView>

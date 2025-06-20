@@ -56,7 +56,11 @@
     "react-native-web": "~0.20.0",
     "react-native-webview": "13.13.5",
     "uuid": "^11.1.0",
-    "zod": "^3.25.64"
+    "zod": "^3.25.64",
+    "expo-print": "~14.1.4",
+    "expo-sharing": "~13.1.5",
+    "expo-clipboard": "~7.1.4",
+    "expo-video": "~2.2.2"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
