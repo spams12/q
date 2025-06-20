@@ -32,7 +32,7 @@ import {
 import { db } from "../../lib/firebase";
 
 // ICONS
-import { AlertCircle, CheckCircle, Clock, Inbox, ListChecks, Search, Zap } from "lucide-react-native";
+import { Clock, Inbox, ListChecks, Search, Zap } from "lucide-react-native";
 
 // CONTEXT & TYPES
 import { useTheme } from "../../context/ThemeContext";
@@ -189,24 +189,7 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
             <Text style={styles.ticketDate}>تاريخ الإنشاء: {formatTimestamp(ticket.date)}</Text>
           </View>
 
-          <View style={styles.ticketActions}>
-            {isCompleted ? (
-              <View style={[styles.actionBadge, styles.actionBadgeGreen]}>
-                <CheckCircle style={styles.actionBadgeIcon} color={theme.success} size={16} />
-                <Text style={styles.actionBadgeTextGreen}>مكتملة</Text>
-              </View>
-            ) : hasRejected ? (
-              <View style={[styles.actionBadge, styles.actionBadgeRed]}>
-                <AlertCircle style={styles.actionBadgeIcon} color={theme.destructive} size={16} />
-                <Text style={styles.actionBadgeTextRed}>مرفوضة</Text>
-              </View>
-            ) : hasAccepted ? (
-              <View style={[styles.actionBadge, styles.actionBadgeBlue]}>
-                <Clock style={styles.actionBadgeIcon} color={theme.primary} size={16} />
-                <Text style={styles.actionBadgeTextBlue}>قيد التنفيذ</Text>
-              </View>
-            ) : null}
-          </View>
+         
         </View>
       </TouchableOpacity>
     </Animated.View>

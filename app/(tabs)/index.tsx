@@ -2,9 +2,10 @@ import { usePermissions } from '@/context/PermissionsContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { arrayUnion, collection, doc, getDocs, orderBy, query, updateDoc, where } from 'firebase/firestore';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { arrayUnion, collection, doc, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, FlatList, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ViewToken } from 'react-native';
 import { useSharedValue, withSpring } from 'react-native-reanimated';
 import FilterDialog from '../../components/FilterDialog';
@@ -14,6 +15,8 @@ import { db } from '../../lib/firebase';
 import { Comment, ServiceRequest, UserResponse } from '../../lib/types';
 
 type TabKey = 'New' | 'Accepted' | 'Rejected';
+
+const LOCATION_TASK_NAME = 'background-location-task';
 
 interface CachedData {
   New: ServiceRequest[];
@@ -268,53 +271,30 @@ const TasksScreen: React.FC = () => {
   const { theme } = useTheme();
   
   // Refs for optimization
-  const dataCache = useRef<Map<TabKey | 'all', { data: ServiceRequest[]; timestamp: number }>>(new Map());
-  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
 
-  const fetchAndCategorizeTasks = useCallback(async (forceRefresh = false) => {
+  // Real-time data fetching
+  useEffect(() => {
     if (!userUid) {
-      return;
-    }
-
-    const cached = dataCache.current.get('all');
-    const now = Date.now();
-    if (!forceRefresh && cached && (now - cached.timestamp) < CACHE_DURATION) {
-      const allRequests = cached.data;
-      const newData: CachedData = { New: [], Accepted: [], Rejected: [] };
-      allRequests.forEach((req: ServiceRequest) => {
-        const userResponse = req.userResponses?.find(res => res.userId === userUid);
-        if (userResponse) {
-          if (userResponse.response === 'accepted') {
-            newData.Accepted.push(req);
-          } else if (userResponse.response === 'rejected') {
-            newData.Rejected.push(req);
-          }
-        } else {
-          newData.New.push(req);
-        }
-      });
-      setCachedData(newData);
+      setCachedData({ New: [], Accepted: [], Rejected: [] });
+      setLoadingStates({ New: false, Accepted: false, Rejected: false });
       return;
     }
 
     setLoadingStates({ New: true, Accepted: true, Rejected: true });
 
-    try {
-      const q = query(
-        collection(db, 'serviceRequests'),
-        where("assignedUsers", "array-contains", userUid),
-        where('status', '!=', 'مكتمل'),
-        orderBy('status'),
-        orderBy('createdAt', 'desc')
-      );
+    const q = query(
+      collection(db, 'serviceRequests'),
+      where("assignedUsers", "array-contains", userUid),
+      where('status', '!=', 'مكتمل'),
+      orderBy('status'),
+      orderBy('createdAt', 'desc')
+    );
 
-      const querySnapshot = await getDocs(q);
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const allRequests = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as ServiceRequest));
-
-      dataCache.current.set('all', { data: allRequests, timestamp: now });
 
       const newData: CachedData = { New: [], Accepted: [], Rejected: [] };
       allRequests.forEach(req => {
@@ -331,20 +311,15 @@ const TasksScreen: React.FC = () => {
       });
 
       setCachedData(newData);
-
-    } catch (error) {
-      console.error(`Error fetching all requests:`, error);
-      setCachedData({ New: [], Accepted: [], Rejected: [] });
-    } finally {
       setLoadingStates({ New: false, Accepted: false, Rejected: false });
-    }
-  }, [userUid, CACHE_DURATION]);
+    }, (error) => {
+      console.error(`Error fetching real-time requests:`, error);
+      setCachedData({ New: [], Accepted: [], Rejected: [] });
+      setLoadingStates({ New: false, Accepted: false, Rejected: false });
+    });
 
-  // Initial data loading with smart preloading
-  useEffect(() => {
-    if (!userUid) return;
-    fetchAndCategorizeTasks();
-  }, [userUid, fetchAndCategorizeTasks]);
+    return () => unsubscribe();
+  }, [userUid]);
 
   // Optimized tab switching with haptic feedback
   const handleTabPress = useCallback(async (tab: TabKey) => {
@@ -361,12 +336,7 @@ const TasksScreen: React.FC = () => {
     const tabIndex = ['New', 'Accepted', 'Rejected'].indexOf(tab);
     tabIndicatorX.value = withSpring(tabIndex * (Dimensions.get('window').width / 3 - 32));
 
-    const cached = dataCache.current.get('all');
-    const now = Date.now();
-    if (!cached || (now - cached.timestamp) > CACHE_DURATION) {
-        fetchAndCategorizeTasks();
-    }
-  }, [activeTab, fetchAndCategorizeTasks, CACHE_DURATION, tabIndicatorX]);
+  }, [activeTab, tabIndicatorX]);
 
   // Memoized filtered data
   const filteredServiceRequests = useMemo(() => {
@@ -396,6 +366,31 @@ const TasksScreen: React.FC = () => {
 
   const handleAcceptTask = async (ticketId: string) => {
     if (!userUid) return;
+
+    // Request permissions and start location tracking
+    const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
+    if (foregroundStatus !== 'granted') {
+      Alert.alert('Permission required', 'Please grant foreground location permission.');
+      return;
+    }
+
+    const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+    if (backgroundStatus !== 'granted') {
+      Alert.alert('Permission required', 'Please grant background location permission for tracking.');
+      return;
+    }
+
+    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+      accuracy: Location.Accuracy.Balanced,
+      timeInterval: 60000, // 1 minute
+      distanceInterval: 50, // 50 meters
+      showsBackgroundLocationIndicator: true,
+      foregroundService: {
+        notificationTitle: 'Tracking Your Location',
+        notificationBody: 'Your location is being tracked for the current task.',
+      },
+    });
+
     try {
       const requestRef = doc(db, "serviceRequests", ticketId);
       // Find the ticket in the 'notAccepted' tab specifically
@@ -425,8 +420,6 @@ const TasksScreen: React.FC = () => {
       };
       await updateDoc(requestRef, { comments: arrayUnion(acceptanceComment) });
       
-      fetchAndCategorizeTasks(true);
-
       router.push(`/tasks/${ticketId}`);
     } catch (error) {
       console.error("Error accepting task:", error);
@@ -436,6 +429,13 @@ const TasksScreen: React.FC = () => {
 
   const handleRejectTask = async (ticketId: string) => {
     if (!userUid) return;
+
+    // Stop location tracking if it was started for this task
+    const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+    if (isTracking) {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+    }
+
     try {
       const requestRef = doc(db, "serviceRequests", ticketId);
       // Find the ticket in its current tab
@@ -463,7 +463,6 @@ const TasksScreen: React.FC = () => {
       };
       await updateDoc(requestRef, { comments: arrayUnion(rejectionComment) });
 
-      fetchAndCategorizeTasks(true);
       Alert.alert("تم رفض المهمة بنجاح");
     } catch (error) {
       console.error("Error rejecting task:", error);
@@ -497,10 +496,6 @@ const TasksScreen: React.FC = () => {
     setSortOrder(prev => (prev === 'desc' ? 'asc' : 'desc'));
   }, []);
 
-  // Pull to refresh
-  const onRefresh = useCallback(() => {
-    fetchAndCategorizeTasks(true);
-  }, [fetchAndCategorizeTasks]);
 
   const isCurrentTabLoading = loadingStates[activeTab];
   const hasActiveFilters = !!(selectedPriority || selectedType);
@@ -539,8 +534,6 @@ const TasksScreen: React.FC = () => {
         maxToRenderPerBatch={10}
         updateCellsBatchingPeriod={50}
         windowSize={10}
-        refreshing={isCurrentTabLoading && cachedData[activeTab].length > 0}
-        onRefresh={onRefresh}
       />
 
      <FilterDialog

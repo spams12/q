@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   Image,
+  Keyboard,
   Linking,
   Modal,
   Platform,
@@ -64,7 +65,7 @@ interface CommentSectionProps {
   users: User[];
   currentUserId: string;
   ticketStatus: string;
-  userHasAccepted: boolean;
+  currentUserResponse: 'pending' | 'accepted' | 'rejected' | 'completed' | null;
   onAddComment: (comment: Partial<Comment>) => Promise<void>;
   ticketId: string;
 }
@@ -81,7 +82,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   users,
   currentUserId,
   ticketStatus,
-  userHasAccepted,
+  currentUserResponse,
   onAddComment,
   ticketId,
 }) => {
@@ -197,6 +198,8 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const handleCommentSubmit = async () => {
     if (!newComment.trim() && attachments.length === 0) return;
 
+    Keyboard.dismiss();
+
     const uploadedAttachments: {
       downloadURL: string;
       fileName: string;
@@ -239,7 +242,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
     setAttachments([]);
   };
 
-  const isDisabled = ticketStatus === 'مكتمل' || ticketStatus === 'مغلق' 
+  const isDisabled = ticketStatus === 'مكتمل' || ticketStatus === 'مغلق'  || currentUserResponse === 'completed' || currentUserResponse === 'rejected' || currentUserResponse !== 'accepted';
 
   const handleImagePress = (imageUrl: string, images: string[], index: number) => {
     // Validate inputs before setting state
@@ -362,7 +365,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
               ]}
             >
               {/* Avatar for other users */}
-              {!isCurrentUser && (
+              
                 <View style={styles.avatarContainer}>
                   {user?.photoURL ? (
                     <Image source={{ uri: user.photoURL }} style={styles.avatar} />
@@ -375,7 +378,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                   )}
                   <View style={[styles.avatarTail, !isCurrentUser && styles.avatarTailLeft]} />
                 </View>
-              )}
+              
 
               {/* Message bubble */}
               <View
@@ -385,9 +388,9 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                 ]}
               >
                 {/* User name (only for other users or in group chats) */}
-                {!isCurrentUser && (
+              
                   <Text style={styles.userName}>{userName}</Text>
-                )}
+             
                 
                 {/* Message content */}
                 {comment.content ? (
@@ -515,22 +518,23 @@ const CommentSection: React.FC<CommentSectionProps> = ({
           </View>
         )}
 
-        {/* Input container */}
         <View style={styles.inputContainer}>
           <TextInput
-            style={[styles.input, { textAlign: 'right' }]}
+            style={[styles.input, { textAlign: 'right' }, isDisabled && styles.disabledInput]}
             value={newComment}
             onChangeText={setNewComment}
-            placeholder="اكتب رسالتك هنا..."
+            placeholder={isDisabled ? 'المحادثة مغلقة' : 'اكتب رسالتك هنا...'}
             placeholderTextColor={theme.placeholder}
             multiline
             textAlignVertical="center"
+            blurOnSubmit={false}
+            editable={!isDisabled}
           />
           
-          <TouchableOpacity 
-            onPress={handlePickDocument} 
+          <TouchableOpacity
+            onPress={handlePickDocument}
+            disabled={isDisabled}
             style={[styles.iconButton, isDisabled && styles.disabledButton]}
-     
           >
             <Ionicons 
               name="attach" 
@@ -540,12 +544,14 @@ const CommentSection: React.FC<CommentSectionProps> = ({
           </TouchableOpacity>
           
           <TouchableOpacity 
-            onPress={handleCommentSubmit} 
+            onPress={handleCommentSubmit}
+            disabled={isDisabled || (!newComment.trim() && attachments.length === 0)}
             style={[
               styles.sendButton,
               isDisabled && styles.disabledSendButton,
               (newComment.trim() || attachments.length > 0) && !isDisabled && styles.activeSendButton
             ]}
+           
           >
             <Ionicons 
               name="send" 
@@ -636,6 +642,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   currentUserBubble: {
     backgroundColor: theme.blueTint,
     borderBottomRightRadius: 4,
+
   },
   otherUserBubble: {
     backgroundColor: theme.card,
@@ -646,16 +653,20 @@ const getStyles = (theme: any) => StyleSheet.create({
     fontSize: 12,
     color: theme.primary,
     marginBottom: 4,
+    textAlign: 'center',
   },
   messageText: {
     fontSize: 16,
     lineHeight: 22,
   },
   currentUserText: {
-    color: theme.primary,
+    color: theme.text,
+    textAlign: 'right',
+
   },
   otherUserText: {
     color: theme.text,
+
   },
   attachmentsContainer: {
     marginTop: 8,
@@ -770,6 +781,9 @@ const getStyles = (theme: any) => StyleSheet.create({
     maxHeight: 100,
     borderWidth: 1,
     borderColor: theme.border,
+  },
+  disabledInput: {
+    backgroundColor: theme.border,
   },
   iconButton: {
     padding: 8,

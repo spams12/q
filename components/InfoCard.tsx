@@ -1,9 +1,11 @@
 import { useTheme } from '@/context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Timestamp } from 'firebase/firestore';
 import React, { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View, ViewToken } from 'react-native';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { getStatusBadgeColor } from '../lib/styles';
 import { ServiceRequest } from '../lib/types';
 
 // Optimized AnimatedTaskItem component
@@ -11,13 +13,14 @@ interface InfoCardProps {
   item: ServiceRequest;
   viewableItems?: Animated.SharedValue<ViewToken[]>;
   hasResponded?: boolean;
-  handleAcceptTask: (ticketId: string) => void;
-  handleRejectTask: (ticketId: string) => void;
+  showActions?: boolean;
+  handleAcceptTask?: (ticketId: string) => void;
+  handleRejectTask?: (ticketId: string) => void;
 }
 
-const InfoCard: React.FC<InfoCardProps> = React.memo(({ item, viewableItems, hasResponded, handleAcceptTask, handleRejectTask }) => {
-  const { theme } = useTheme();
+const InfoCard: React.FC<InfoCardProps> = React.memo(({ item, viewableItems, hasResponded, handleAcceptTask, handleRejectTask, showActions = true }) => {
   const router = useRouter();
+  const { theme } = useTheme();
 
   const handleNavigate = () => {
     console.log('Navigating to task details:', item.id);
@@ -43,69 +46,50 @@ id: item.id,
     });
   }, []);
 
-  const getStatusPillStyle = useCallback((status: string) => {
-    switch (status) {
-      case "مفتوح": return { backgroundColor: '#3b82f6' }; // bg-blue-500
-      case "قيد المعالجة": return { backgroundColor: '#eab308' }; // bg-yellow-500
-      case "معلق": return { backgroundColor: '#8b5cf6' }; // bg-purple-500
-      case "مكتمل": return { backgroundColor: '#22c55e' }; // bg-green-500
-      case "مغلق": return { backgroundColor: '#6b7280' }; // bg-gray-500
-      default: return { backgroundColor: '#6b7280' };
-    }
-  }, []);
-
-  const getStatusPillTextStyle = useCallback((status: string) => {
-    switch (status) {
-      case "قيد المعالجة":
-        return { color: '#000' }; // text-black
-      default:
-        return { color: '#fff' }; // text-white
-    }
-  }, []);
 
   const getTypePillStyle = useCallback((type: string) => {
     switch (type?.toLowerCase()) {
       case 'request':
       case 'طلب':
-        return { 
-          backgroundColor: '#e3f2fd',
+        return {
+          backgroundColor: theme.blueTint,
           borderWidth: 1,
-          borderColor: '#2196f3',
+          borderColor: theme.primary,
         };
       case 'complaint':
       case 'شكوى':
-        return { 
-          backgroundColor: '#ffebee',
+        return {
+          backgroundColor: theme.redTint,
           borderWidth: 1,
-          borderColor: '#f44336',
+          borderColor: theme.destructive,
         };
       case 'suggestion':
       case 'اقتراح':
-        return { 
-          backgroundColor: '#e8f5e8',
+        return {
+          backgroundColor: theme.lightGray,
           borderWidth: 1,
-          borderColor: '#4caf50',
+          borderColor: theme.success,
         };
       default:
-        return { backgroundColor: '#6c757d' };
+        return { backgroundColor: theme.statusDefault };
     }
-  }, []);
+  }, [theme]);
 
   const getTypePillTextStyle = useCallback((type: string) => {
     switch (type?.toLowerCase()) {
       case 'request':
       case 'طلب':
-        return { color: '#2196f3' };
+        return { color: theme.primary };
       case 'complaint':
       case 'شكوى':
-        return { color: '#f44336' };
+        return { color: theme.destructive };
       case 'suggestion':
       case 'اقتراح':
-        return { color: '#4caf50' };
+        return { color: theme.success };
       default:
-        return { color: '#fff' };
+        return { color: theme.text };
     }
-  }, []);
+  }, [theme]);
 
 
   const rStyle = useAnimatedStyle(() => {
@@ -127,6 +111,19 @@ id: item.id,
       ],
     };
   }, [item.id, viewableItems]);
+
+  const acceptButtonStyle = {
+    backgroundColor: theme.success,
+  };
+  const acceptButtonTextStyle = {
+    color: theme.white,
+  };
+  const rejectButtonStyle = {
+    backgroundColor: theme.destructive,
+  };
+  const rejectButtonTextStyle = {
+    color: theme.white,
+  };
 
   return (
 
@@ -151,8 +148,8 @@ id: item.id,
               </Text>
             </View>
          
-            <View style={[styles.pill, getStatusPillStyle(item.status)]}>
-              <Text style={[styles.pillText, getStatusPillTextStyle(item.status)]}>{item.status}</Text>
+            <View style={[styles.pill, getStatusBadgeColor(item.status).view]}>
+              <Text style={[styles.pillText, getStatusBadgeColor(item.status).text]}>{item.status}</Text>
             </View>
           </View>
         </View>
@@ -175,19 +172,23 @@ id: item.id,
         
         
 
-        {!hasResponded && (
+        {showActions && !hasResponded && (
           <View style={styles.actionButtonsContainer}>
             <Pressable
-              style={[styles.actionButton, styles.acceptButton]}
-              onPress={() => handleAcceptTask(item.id)}
+              style={[styles.actionButton, acceptButtonStyle]}
+              onPress={() => handleAcceptTask?.(item.id)}
             >
-              <Text style={[styles.actionButtonText, styles.acceptButtonText]}>قبول</Text>
+               <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              <Text style={[styles.actionButtonText, acceptButtonTextStyle]}>قبول</Text>
+              
             </Pressable>
             <Pressable
-              style={[styles.actionButton, styles.rejectButton]}
-              onPress={() => handleRejectTask(item.id)}
+              style={[styles.actionButton, rejectButtonStyle]}
+              onPress={() => handleRejectTask?.(item.id)}
             >
-              <Text style={[styles.actionButtonText, styles.rejectButtonText]}>رفض</Text>
+             <Ionicons name="close-circle" size={20} color="#fff" />
+              <Text style={[styles.actionButtonText, rejectButtonTextStyle]}>رفض</Text>
+                 
             </Pressable>
           </View>
         )}
@@ -216,6 +217,8 @@ DetailRow.displayName = 'DetailRow';
 InfoCard.displayName = 'InfoCard';
 
 export default InfoCard;
+
+
 
 const styles = StyleSheet.create({
   itemContainer: {
@@ -307,26 +310,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     marginHorizontal: 6,
+    gap: 8,
   },
   actionButtonText: {
     fontSize: 16,
     fontFamily: 'Cairo',
     fontWeight: 'bold',
-  },
-  acceptButton: {
-    backgroundColor: '#e8f5e8',
-    borderWidth: 1,
-    borderColor: '#4caf50',
-  },
-  acceptButtonText: {
-    color: '#4caf50',
-  },
-  rejectButton: {
-    backgroundColor: '#ffebee',
-    borderWidth: 1,
-    borderColor: '#f44336',
-  },
-  rejectButtonText: {
-    color: '#f44336',
   },
 });

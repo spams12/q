@@ -5,9 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
+import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { arrayUnion, collection, doc, getDocs, onSnapshot, runTransaction, Timestamp, updateDoc } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import * as TaskManager from 'expo-task-manager';
+import { getAuth } from 'firebase/auth';
+import { arrayUnion, collection, doc, getDocs, onSnapshot, runTransaction, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Dimensions, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { InvoiceList } from '../../components/InvoiceList';
@@ -15,7 +18,9 @@ import { ThemedText } from '../../components/ThemedText';
 import { ThemedView } from '../../components/ThemedView';
 import useFirebaseAuth from '../../hooks/use-firebase-auth';
 import { db } from '../../lib/firebase';
+import { getPriorityBadgeColor, getStatusBadgeColor } from '../../lib/styles';
 import { Comment, Invoice, InvoiceItem, ServiceRequest, StockTransaction, User, UserStockItem } from '../../lib/types';
+
 
 const { width } = Dimensions.get('window');
 
@@ -42,11 +47,89 @@ interface Subscriber {
   isPaid: boolean;
 }
 
+const LOCATION_TASK_NAME = 'background-location-task';
+
+TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
+  if (error) {
+    console.error('Background location task error:', error);
+    return;
+  }
+  if (data) {
+    const { locations } = data as { locations: Location.LocationObject[] };
+    const auth = getAuth();
+    const user = auth.currentUser;
+
+    if (user && locations.length > 0) {
+      const location = locations[0];
+      const { latitude, longitude, speed, heading, accuracy } = location.coords;
+      const locationData = {
+        latitude,
+        longitude,
+        speed,
+        heading,
+        accuracy,
+        timestamp: Timestamp.fromMillis(location.timestamp),
+      };
+      try {
+        await setDoc(doc(db, 'userLocations', user.uid), {
+          ...locationData,
+          lastUpdated: Timestamp.now(),
+        }, { merge: true });
+        console.log(`Location updated for user: ${user.uid}`);
+      } catch (e) {
+        console.error("Failed to write location to Firestore from background task:", e);
+      }
+    }
+  }
+});
+
 const TicketDetailPage = () => {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { user } = useFirebaseAuth();
   const { theme, themeName } = useTheme();
+  const getTypePillTextStyle = useCallback((type: string) => {
+      switch (type?.toLowerCase()) {
+        case 'request':
+        case 'طلب':
+          return { color: theme.primary };
+        case 'complaint':
+        case 'شكوى':
+          return { color: theme.destructive };
+        case 'suggestion':
+        case 'اقتراح':
+          return { color: theme.success };
+        default:
+          return { color: theme.text };
+      }
+    }, [theme]);
+  const getTypePillStyle = useCallback((type: string) => {
+      switch (type?.toLowerCase()) {
+        case 'request':
+        case 'طلب':
+          return {
+            backgroundColor: theme.blueTint,
+            borderWidth: 1,
+            borderColor: theme.primary,
+          };
+        case 'complaint':
+        case 'شكوى':
+          return {
+            backgroundColor: theme.redTint,
+            borderWidth: 1,
+            borderColor: theme.destructive,
+          };
+        case 'suggestion':
+        case 'اقتراح':
+          return {
+            backgroundColor: theme.lightGray,
+            borderWidth: 1,
+            borderColor: theme.success,
+          };
+        default:
+          return { backgroundColor: theme.statusDefault };
+      }
+    }, [theme]);
 
   const copyToClipboard = (text: string) => {
     Clipboard.setStringAsync(text);
@@ -117,7 +200,7 @@ const TicketDetailPage = () => {
     });
 
     return () => unsubscribe();
-  }, [id, user]);
+  }, [id, user, userdoc]);
 
   const switchTab = (index: number) => {
     console.log(`Switching to tab ${index}`);
@@ -135,6 +218,34 @@ const TicketDetailPage = () => {
 
     setActionLoading('accept');
     try {
+      const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
+      if (foregroundStatus !== 'granted') {
+        Alert.alert('Permission Denied', 'Foreground location permission is required to accept the task.');
+        setActionLoading(null);
+        return;
+      }
+
+      const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+      if (backgroundStatus !== 'granted') {
+        Alert.alert('Permission Denied', 'Background location permission is required to track your progress.');
+        setActionLoading(null);
+        return;
+      }
+
+      const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+      if (!isTracking) {
+        await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 60000,
+          distanceInterval: 50,
+          showsBackgroundLocationIndicator: true,
+          foregroundService: {
+            notificationTitle: 'Tracking Your Location',
+            notificationBody: 'Your location is being tracked for the current task.',
+          },
+        });
+      }
+
       await runTransaction(db, async (transaction) => {
         const docRef = doc(db, 'serviceRequests', id as string);
         const sfDoc = await transaction.get(docRef);
@@ -173,6 +284,7 @@ const TicketDetailPage = () => {
       });
     } catch (e) {
       console.error("فشل في التعامل: ", e);
+      Alert.alert("خطأ", `فشل قبول المهمة: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setActionLoading(null);
     }
@@ -182,6 +294,11 @@ const TicketDetailPage = () => {
     if (!user || !id || !userdoc) return;
     setActionLoading('reject');
     try {
+        const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+        if (isTracking) {
+            await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+        }
+
         await runTransaction(db, async (transaction) => {
             const docRef = doc(db, 'serviceRequests', id as string);
             const sfDoc = await transaction.get(docRef);
@@ -235,7 +352,6 @@ const TicketDetailPage = () => {
           throw "المستند غير موجود!";
         }
 
-        const data = sfDoc.data() as ServiceRequest;
 
         const newComment: Partial<Comment> = {
           ...comment,
@@ -277,6 +393,7 @@ const TicketDetailPage = () => {
     return requiredStock;
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleSaveInvoice = async (items: InvoiceItem[]) => {
     if (!user || !serviceRequest) return;
 
@@ -339,7 +456,6 @@ const TicketDetailPage = () => {
           const stockItemIndex = stockToUpdate.findIndex(s => s.itemName === itemName);
 
           if (stockItemIndex > -1) {
-            const originalQty = stockToUpdate[stockItemIndex].quantity;
             stockToUpdate[stockItemIndex].quantity -= requiredQty;
             
             const newTransaction: Omit<StockTransaction, 'id'> = {
@@ -471,11 +587,16 @@ const TicketDetailPage = () => {
     if (!user || !id || !serviceRequest) return;
 
     const ticketId = id as string;
-    const currentUserDocId = user.uid;
+    if (!userdoc) return;
+    const currentUserDocId = userdoc.id;
     const userName = user.displayName || 'Unknown';
 
     setActionLoading('markAsDone');
     try {
+        const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+        if (isTracking) {
+            await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+        }
         await runTransaction(db, async (transaction) => {
             const docRef = doc(db, 'serviceRequests', ticketId);
             const sfDoc = await transaction.get(docRef);
@@ -656,7 +777,7 @@ const TicketDetailPage = () => {
                 <Ionicons name="location-outline" size={20} color={theme.textSecondary} style={styles.detailIcon} />
                 <ThemedText style={styles.detailText}>{serviceRequest.customerEmail}</ThemedText>
               </View>
-              <Pressable style={styles.detailItem} onPress={() => handlePhonePress(serviceRequest.customerPhone)}>
+              <Pressable style={styles.detailItem} onPress={() => serviceRequest.customerPhone && handlePhonePress(serviceRequest.customerPhone)}>
                 <Ionicons name="call-outline" size={20} color={theme.textSecondary} style={styles.detailIcon} />
                 <ThemedText style={styles.detailText}>{serviceRequest.customerPhone}</ThemedText>
                 <Ionicons name="call" size={20} color={theme.primary} style={{ marginHorizontal: 10 }}/>
@@ -672,77 +793,15 @@ const TicketDetailPage = () => {
               <CommentSection
                 comments={serviceRequest.comments || []}
                 users={users}
-                currentUserId={user?.uid || ''}
+                currentUserId={userdoc.id || ''}
                 ticketStatus={serviceRequest.status}
-                userHasAccepted={currentUserResponse === 'accepted'}
+                currentUserResponse={currentUserResponse}
                 onAddComment={handleAddComment}
                 ticketId={id as string}
               />
             </View>
 
-            {/* Action Buttons */}
-            {(currentUserResponse === 'pending' || currentUserResponse === 'accepted') && (
-              <View style={styles.actionsContainer}>
-                {currentUserResponse === 'pending' && (
-                  <View style={styles.buttonRow}>
-                    <Pressable
-                      style={[styles.button, styles.acceptButton, actionLoading === 'accept' && { opacity: 0.7 }]}
-                      onPress={handleAccept}
-                      disabled={!!actionLoading}
-                    >
-                      {actionLoading === 'accept' ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <>
-                          <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                          <ThemedText style={styles.buttonText}>قبول</ThemedText>
-                        </>
-                      )}
-                    </Pressable>
-                    <Pressable
-                      style={[styles.button, styles.rejectButton, actionLoading === 'reject' && { opacity: 0.7 }]}
-                      onPress={handleReject}
-                      disabled={!!actionLoading}
-                    >
-                      {actionLoading === 'reject' ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <>
-                          <Ionicons name="close-circle" size={20} color="#fff" />
-                          <ThemedText style={styles.buttonText}>رفض</ThemedText>
-                        </>
-                      )}
-                    </Pressable>
-                  </View>
-                )}
-                {currentUserResponse === 'accepted' && (
-                  <View style={{ gap: 8 }}>
-                    <Pressable
-                      style={[styles.button, { backgroundColor: theme.primary || '#007bff' }, styles.fullWidthButton, !!actionLoading && { opacity: 0.7 }]}
-                      onPress={() => setIsArrivalLogVisible(true)}
-                      disabled={!!actionLoading}
-                    >
-                      <Ionicons name="location-outline" size={20} color="#fff" />
-                      <ThemedText style={styles.buttonText}>تسجيل الوصول للموقع</ThemedText>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.button, styles.doneButton, styles.fullWidthButton, actionLoading === 'markAsDone' && { opacity: 0.7 }]}
-                      onPress={handleMarkAsDone}
-                      disabled={!!actionLoading}
-                    >
-                      {actionLoading === 'markAsDone' ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <>
-                          <Ionicons name="flag" size={20} color="#fff" />
-                          <ThemedText style={styles.buttonText}>تم إنجاز مهمتي</ThemedText>
-                        </>
-                      )}
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-            )}
+          
           </>
         );
       case 1:
@@ -870,7 +929,7 @@ const TicketDetailPage = () => {
             end={{ x: 1, y: 1 }}
           >
             <Pressable onPress={() => router.back()} style={styles.backButton}>
-              <Ionicons name="arrow-back-circle-sharp" size={32} color={theme.white} />
+              <Ionicons name="arrow-back-circle-sharp" size={40} color={theme.white} />
             </Pressable>
             <View style={styles.headerContent}>
               <View style={styles.headerTop}>
@@ -881,12 +940,90 @@ const TicketDetailPage = () => {
                 </Pressable>
               </View>
               <View style={styles.badgeContainer}>
-                <View style={[styles.badge, getStatusStyle(serviceRequest.status, theme)]}>
-                  <ThemedText style={styles.badgeText}>{serviceRequest.status}</ThemedText>
+                <View style={[styles.badge, getStatusBadgeColor(serviceRequest.status).view]}>
+                  <ThemedText style={[styles.badgeText, getStatusBadgeColor(serviceRequest.status).text]}>{serviceRequest.status}</ThemedText>
                 </View>
-                <View style={[styles.badge, getPriorityStyle(serviceRequest.priority, theme)]}>
+                <View style={[styles.badge, getPriorityBadgeColor(serviceRequest.priority)]}>
                   <ThemedText style={styles.badgeText}>{serviceRequest.priority}</ThemedText>
+                  
                 </View>
+            <View style={[styles.badge, getTypePillStyle(serviceRequest.type)]}>
+              <ThemedText style={[styles.badgeText, getTypePillTextStyle(serviceRequest.type)]}>
+                {serviceRequest.type}
+              </ThemedText>
+            </View>
+                {currentUserResponse !== 'completed' && (
+                  <View style={{ height: 1, backgroundColor: '#ccc' , width:"100%" , marginTop:15}} />
+                )}
+                {(currentUserResponse === 'pending' || currentUserResponse === 'accepted') && (
+              <View style={styles.actionsContainer}>
+                {currentUserResponse === 'pending' && (
+                  <View style={styles.buttonRow}>
+                    <Pressable
+                      style={[styles.button, styles.acceptButton, actionLoading === 'accept' && { opacity: 0.7 }]}
+                      onPress={handleAccept}
+                      disabled={!!actionLoading}
+                    >
+                      {actionLoading === 'accept' ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                          <ThemedText style={styles.buttonText}>قبول</ThemedText>
+                        </>
+                      )}
+                    </Pressable>
+                    <Pressable
+                      style={[styles.button, styles.rejectButton, actionLoading === 'reject' && { opacity: 0.7 }]}
+                      onPress={handleReject}
+                      disabled={!!actionLoading}
+                    >
+                      {actionLoading === 'reject' ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="close-circle" size={20} color="#fff" />
+                          <ThemedText style={styles.buttonText}>رفض</ThemedText>
+                        </>
+                      )}
+                    </Pressable>
+                  </View>
+                )}
+                {currentUserResponse === 'accepted' && (
+                  <View style={styles.buttonRow}>
+                    <Pressable
+                      style={[styles.button, { backgroundColor: theme.primary || '#007bff' } , !!actionLoading && { opacity: 0.7 }]}
+                      onPress={() => setIsArrivalLogVisible(true)}
+                      disabled={!!actionLoading}
+                    >
+                      <Ionicons name="location-outline" size={20} color="#fff" />
+                      <ThemedText style={styles.buttonText}>وصلت الموقع</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.button, styles.doneButton , actionLoading === 'markAsDone' && { opacity: 0.7 }]}
+                      onPress={handleMarkAsDone}
+                      disabled={!!actionLoading}
+                    >
+                      {actionLoading === 'markAsDone' ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="flag" size={20} color="#fff" />
+                          <ThemedText style={styles.buttonText}>تم إنجاز مهمتي</ThemedText>
+                        </>
+                      )}
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            
+
+
+                  
+                )}
+
+
+               
               </View>
             </View>
           </LinearGradient>
@@ -1013,26 +1150,6 @@ const TicketDetailPage = () => {
   );
 };
 
-const getStatusStyle = (status: string, theme: any) => {
-  switch (status) {
-    case 'مفتوح': return { backgroundColor: theme.statusOpen };
-    case 'قيد المعالجة': return { backgroundColor: theme.statusInProgress };
-    case 'مكتمل': return { backgroundColor: theme.statusCompleted };
-    case 'معلق': return { backgroundColor: theme.statusPending };
-    case 'ملغي': return { backgroundColor: theme.statusCancelled };
-    default: return { backgroundColor: theme.statusDefault };
-  }
-};
-
-const getPriorityStyle = (priority: string, theme: any) => {
-  switch (priority) {
-    case 'عاجل': return { backgroundColor: theme.priorityUrgent };
-    case 'مرتفع': return { backgroundColor: theme.priorityHigh };
-    case 'متوسط': return { backgroundColor: theme.priorityMedium };
-    case 'منخفض': return { backgroundColor: theme.priorityLow };
-    default: return { backgroundColor: theme.priorityDefault };
-  }
-};
 
 const getStyles = (theme: any, themeName: 'light' | 'dark') => {
   const shadowColor = theme.shadow || (themeName === 'dark' ? '#FFFFFF' : '#000000');
@@ -1082,6 +1199,7 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
     headerTop: {
       alignItems: 'flex-end',
       marginBottom: 16,
+      padding:15
     },
     headerTitle: {
       fontSize: 28,
@@ -1090,6 +1208,7 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       textAlign: 'right',
       fontFamily: 'Cairo',
       padding: 10,
+      lineHeight: 32,
     },
     headerSubtitle: {
       fontSize: 16,
@@ -1226,19 +1345,15 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
         fontFamily: 'Cairo',
     },
     actionsContainer: {
-      backgroundColor: theme.card,
       borderRadius: 12,
-      padding: 16,
-      marginBottom: 16,
-      shadowColor: shadowColor,
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.05,
-      shadowRadius: 4,
-      elevation: 2,
+      width: '100%',
+    
     },
     buttonRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
+      gap: 28,
+      marginTop: 16,
     },
     button: {
       flexDirection: 'row',
@@ -1253,13 +1368,13 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       shadowRadius: 4,
       elevation: 3,
       minWidth: 120,
+      flex: 1,
     },
     fullWidthButton: {
       width: '100%',
     },
     buttonText: {
       color: theme.white,
-      fontWeight: 'bold',
       fontSize: 16,
       marginLeft: 8,
       fontFamily: 'Cairo',
@@ -1271,7 +1386,7 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       backgroundColor: theme.destructive,
     },
     doneButton: {
-      backgroundColor: theme.primary,
+      backgroundColor: "green",
     },
     centeredView: {
       flex: 1,
