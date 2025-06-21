@@ -11,7 +11,7 @@ import * as TaskManager from 'expo-task-manager';
 import { getAuth } from 'firebase/auth';
 import { arrayUnion, collection, doc, getDocs, onSnapshot, runTransaction, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { InvoiceList } from '../../components/InvoiceList';
 import { ThemedText } from '../../components/ThemedText';
@@ -159,8 +159,9 @@ const TicketDetailPage = () => {
   const tabs = [
     { key: 'details', title: 'التفاصيل', icon: 'document-text-outline' },
     { key: 'invoices', title: 'الفواتير', icon: 'receipt-outline' },
-    ...(serviceRequest?.subscribers && serviceRequest.subscribers.length > 0 
-      ? [{ key: 'subscribers', title: 'المشتركون', icon: 'people-outline' }] 
+    { key: 'comments', title: 'التعليقات', icon: 'chatbubble-ellipses-outline' },
+    ...(serviceRequest?.subscribers && serviceRequest.subscribers.length > 0
+      ? [{ key: 'subscribers', title: 'المشتركون', icon: 'people-outline' }]
       : [])
   ];
 
@@ -763,8 +764,9 @@ const TicketDetailPage = () => {
 
   const renderTabContent = () => {
     const styles = getStyles(theme, themeName);
-    switch (activeTab) {
-      case 0:
+    const activeTabKey = tabs[activeTab]?.key;
+    switch (activeTabKey) {
+      case 'details':
         return (
           <>
             <View style={styles.detailsContainer}>
@@ -788,23 +790,10 @@ const TicketDetailPage = () => {
               <ThemedText style={styles.detailText}>{serviceRequest.description}</ThemedText>
             
             </View>
-            <View style={styles.detailsContainer}>
-              <ThemedText style={styles.detailsTitle}>التعليقات</ThemedText>
-              <CommentSection
-                comments={serviceRequest.comments || []}
-                users={users}
-                currentUserId={userdoc.id || ''}
-                ticketStatus={serviceRequest.status}
-                currentUserResponse={currentUserResponse}
-                onAddComment={handleAddComment}
-                ticketId={id as string}
-              />
-            </View>
-
           
           </>
         );
-      case 1:
+      case 'invoices':
         return (
           <>
             <InvoiceList
@@ -815,7 +804,19 @@ const TicketDetailPage = () => {
             />
           </>
         );
-      case 2: {
+      case 'comments':
+        return (
+              <CommentSection
+                comments={serviceRequest.comments || []}
+                users={users}
+                currentUserId={userdoc?.id || ''}
+                ticketStatus={serviceRequest.status}
+                currentUserResponse={currentUserResponse}
+                onAddComment={handleAddComment}
+                ticketId={id as string}
+              />
+        );
+      case 'subscribers': {
         const subscribers = serviceRequest?.subscribers as unknown as Subscriber[];
         const filteredSubscribers = subscribers
             ?.map((subscriber, index) => ({ ...subscriber, originalIndex: index }))
@@ -915,13 +916,16 @@ const TicketDetailPage = () => {
   return (
     <ThemedView style={styles.container}>
 
-        <KeyboardAwareScrollView
-
+      <KeyboardAwareScrollView
+          keyboardShouldPersistTaps ="always"
           style={styles.contentScrollView}
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[1]}
+          enableOnAndroid={true}
+          enableAutomaticScroll={true}
+          keyboardOpeningTime={0}
+          extraScrollHeight={Platform.OS === 'ios' ? 0 : 250} 
         >
-          {/* Header with gradient */}
           <LinearGradient
             colors={[theme.gradientStart, theme.gradientEnd]}
             style={styles.headerGradient}
@@ -1038,8 +1042,8 @@ const TicketDetailPage = () => {
                   {
                     transform: [{
                       translateX: slideAnim.interpolate({
-                        inputRange: [0, 1, 2],
-                        outputRange: [0, width / tabs.length, (width / tabs.length) * 2],
+                        inputRange: tabs.map((_, i) => i),
+                        outputRange: tabs.map((_, i) => (width / tabs.length) * i),
                         extrapolate: 'clamp',
                       })
                     }],
@@ -1375,7 +1379,7 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
     },
     buttonText: {
       color: theme.white,
-      fontSize: 16,
+      fontSize: 14,
       marginLeft: 8,
       fontFamily: 'Cairo',
     },

@@ -7,15 +7,16 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   Image,
-  Keyboard,
   Linking,
   Modal,
   Platform,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View
 } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -75,6 +76,46 @@ const AttachmentVideoPreview: React.FC<{ mediaUrl: string; style: any }> = ({ me
     p.muted = true;
   });
   return <VideoView player={player} style={style} />;
+};
+
+const AutoSizedImage: React.FC<{
+  uri: string;
+  style?: any;
+  resizeMode?: 'cover' | 'contain' | 'stretch' | 'repeat' | 'center';
+}> = ({ uri, style, resizeMode = 'contain' }) => {
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (uri) {
+      Image.getSize(
+        uri,
+        (width, height) => {
+          if (height > 0) {
+            setAspectRatio(width / height);
+          } else {
+            setAspectRatio(1);
+          }
+        },
+        (error) => {
+          console.warn(`Failed to get image size for ${uri}:`, error);
+          setAspectRatio(1); // Fallback to square on error
+        }
+      );
+    }
+  }, [uri]);
+
+  if (aspectRatio === null) {
+    // Render a placeholder with a fixed height while loading dimensions.
+    return <View style={[style, { height: 250, backgroundColor: '#f0f0f0', borderRadius: 12 }]} />;
+  }
+
+  return (
+    <Image
+      source={{ uri }}
+      style={[style, { aspectRatio }]}
+      resizeMode={resizeMode}
+    />
+  );
 };
 
 const CommentSection: React.FC<CommentSectionProps> = ({
@@ -198,7 +239,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const handleCommentSubmit = async () => {
     if (!newComment.trim() && attachments.length === 0) return;
 
-    Keyboard.dismiss();
 
     const uploadedAttachments: {
       downloadURL: string;
@@ -279,9 +319,9 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <TouchableWithoutFeedback onPress={() => {}} accessible={false}>
+      <View style={styles.container}>
       
-      {/* Enhanced Image Modal */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -334,7 +374,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
         </GestureHandlerRootView>
       </Modal>
 
-      <View style={styles.commentsList}>
+      <ScrollView style={styles.commentsList} keyboardShouldPersistTaps="always">
         {filteredAndSortedComments.length === 0 ? (
           <View style={styles.emptyCommentsContainer}>
             <Ionicons name="chatbubbles-outline" size={48} color={theme.textSecondary} style={{ opacity: 0.5 }} />
@@ -349,6 +389,17 @@ const CommentSection: React.FC<CommentSectionProps> = ({
           const userName = user?.name || comment.userName || 'مستخدم غير معروف';
           const isCurrentUser = comment.userId === currentUserId;
           const commentDate = getCommentDate(comment.timestamp);
+
+          const isImageOnlyComment =
+            !comment.content?.trim() &&
+            comment.attachments &&
+            comment.attachments.length > 0 &&
+            comment.attachments.every(att => {
+              const isImage =
+                att.fileType === 'image' ||
+                (att.mimeType ? att.mimeType.startsWith('image/') : /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
+              return isImage;
+            });
 
           // Collect all images in this comment for modal navigation
           const commentImages = comment.attachments?.filter(att => {
@@ -376,7 +427,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                       </Text>
                     </View>
                   )}
-                  <View style={[styles.avatarTail, !isCurrentUser && styles.avatarTailLeft]} />
+                  {!isImageOnlyComment && <View style={[styles.avatarTail, !isCurrentUser && styles.avatarTailLeft]} />}
                 </View>
               
 
@@ -385,6 +436,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                 style={[
                   styles.commentBubble,
                   isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble,
+                  isImageOnlyComment && styles.imageOnlyBubble,
                 ]}
               >
                 {/* User name (only for other users or in group chats) */}
@@ -404,7 +456,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 
                 {/* Attachments */}
                 {comment.attachments && comment.attachments.length > 0 && (
-                  <View style={styles.attachmentsContainer}>
+                  <View style={[styles.attachmentsContainer, isImageOnlyComment && { marginTop: 0, gap: 2 }]}>
                     {comment.attachments.map((att, index) => {
                       const isImage = att.fileType === 'image' || (att.mimeType ? att.mimeType.startsWith('image/') : /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
                       const isVideo = att.fileType === 'video' || (att.mimeType ? att.mimeType.startsWith('video/') : /\.(mp4|mov|avi|mkv)$/i.test(att.fileName));
@@ -424,19 +476,29 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                               Linking.openURL(mediaUrl);
                             }
                           }}
-                          style={styles.attachmentItem}
+                          style={[styles.attachmentItem, isImageOnlyComment && { borderRadius: 12, overflow: 'hidden' }]}
                           activeOpacity={0.8}
                         >
                           {isImage && mediaUrl ? (
                             <View style={styles.imageAttachmentContainer}>
-                              <Image
-                                source={{ uri: mediaUrl }}
-                                style={styles.attachmentImage}
-                                resizeMode="contain"
-                              />
-                              <View style={styles.imageOverlay}>
-                                <Ionicons name="expand-outline" size={20} color="white" />
-                              </View>
+                              {isImageOnlyComment ? (
+                                <AutoSizedImage
+                                  uri={mediaUrl}
+                                  style={styles.fullWidthImage}
+                                  resizeMode="contain"
+                                />
+                              ) : (
+                                <>
+                                  <Image
+                                    source={{ uri: mediaUrl }}
+                                    style={styles.attachmentImage}
+                                    resizeMode="contain"
+                                  />
+                                  <View style={styles.imageOverlay}>
+                                    <Ionicons name="expand-outline" size={20} color="white" />
+                                  </View>
+                                </>
+                              )}
                             </View>
                           ) : isVideo && mediaUrl ? (
                             <View style={styles.imageAttachmentContainer}>
@@ -472,23 +534,24 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                 {/* Timestamp */}
                 <Text style={[
                   styles.timestamp,
-                  isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp
+                  isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp,
+                  isImageOnlyComment && styles.imageOnlyTimestamp,
                 ]}>
-                  {format(commentDate, 'yyyy/MM/dd hh:mm a', { locale: enGB })}
+                  {format(commentDate, isImageOnlyComment ? 'hh:mm a' : 'yyyy/MM/dd hh:mm a', { locale: enGB })}
                 </Text>
               </View>
 
               {/* Tail for current user */}
               {isCurrentUser && (
                 <View style={styles.avatarContainer}>
-                  <View style={[styles.avatarTail, styles.avatarTailRight]} />
+                  {!isImageOnlyComment && <View style={[styles.avatarTail, styles.avatarTailRight]} />}
                 </View>
               )}
             </View>
           );
           })
         )}
-      </View>
+      </ScrollView>
 
       {/* Input section */}
       <View style={styles.inputSection}>
@@ -528,6 +591,8 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             multiline
             textAlignVertical="center"
             blurOnSubmit={false}
+            returnKeyType="default"
+            onSubmitEditing={() => {}}
             editable={!isDisabled}
           />
           
@@ -561,12 +626,14 @@ const CommentSection: React.FC<CommentSectionProps> = ({
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+      </View>
+    </TouchableWithoutFeedback>
   );
 };
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
+    flex: 1,
     backgroundColor: theme.background,
     borderRadius: 12,
   },
@@ -638,6 +705,16 @@ const getStyles = (theme: any) => StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    position: 'relative',
+  },
+  imageOnlyBubble: {
+    padding: 0,
+    backgroundColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
+    borderRadius: 12,
+    borderBottomRightRadius: 12,
+    borderBottomLeftRadius: 12,
   },
   currentUserBubble: {
     backgroundColor: theme.blueTint,
@@ -681,10 +758,15 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   attachmentImage: {
     width: screenWidth * 0.6,
-    height: 180,
+    height: 250,
     borderRadius: 12,
     backgroundColor: theme.inputBackground,
-    objectFit: 'contain',
+  },
+  fullWidthImage: {
+    width: screenWidth * 0.7,
+    // height is now determined by the image's aspect ratio
+    backgroundColor: 'transparent',
+    borderRadius: 12,
   },
   imageOverlay: {
     position: 'absolute',
@@ -729,6 +811,18 @@ const getStyles = (theme: any) => StyleSheet.create({
     fontSize: 11,
     marginTop: 4,
     alignSelf: 'flex-end',
+  },
+  imageOnlyTimestamp: {
+    position: 'absolute',
+    bottom: 5,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    color: 'white',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    fontSize: 10,
+    zIndex: 1,
   },
   currentUserTimestamp: {
     color: theme.primary,
@@ -845,7 +939,6 @@ const getStyles = (theme: any) => StyleSheet.create({
   fullscreenImage: {
     width: screenWidth,
     height: screenHeight,
-    objectFit: 'contain',
   },
   imageCounter: {
     position: 'absolute',

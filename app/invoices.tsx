@@ -9,14 +9,13 @@ import {
   ActivityIndicator,
   FlatList,
   I18nManager,
-  Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // This forces RTL for demonstration purposes.
 // In a real app, this is usually handled globally.
@@ -222,7 +221,12 @@ useEffect(() => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.headerTitle}>الفواتير</Text>
+      <View style={styles.headerContainer}>
+        <Text style={styles.headerTitle}>الفواتير</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Feather name="arrow-right" size={24} color={themeName === 'dark' ? '#e2e8f0' : '#1a2533'} />
+        </TouchableOpacity>
+      </View>
 
       {/* Date Filter */}
       <View>
@@ -276,14 +280,21 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
     backgroundColor: theme === 'dark' ? '#1a202c' : '#f4f6f8',
     writingDirection: 'rtl',
   },
+  headerContainer: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+  },
   headerTitle: {
     fontSize: 32,
     fontWeight: 'bold',
     color: theme === 'dark' ? '#e2e8f0' : '#1a2533',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 20 : 0,
-    paddingBottom: 10,
     textAlign: 'right',
+  },
+  backButton: {
+    padding: 5,
   },
   filterContainer: {
     paddingHorizontal: 15,

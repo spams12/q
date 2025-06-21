@@ -66,7 +66,8 @@ function RootLayoutNav() {
             headerTitleAlign: 'center',
           }}/>
         <Stack.Screen name="+not-found" />
-  
+        <Stack.Screen name="invoices" options={{ headerShown: false }}/>
+
       </Stack>
     </View>
   );
