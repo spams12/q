@@ -10,7 +10,6 @@ import {
   Linking,
   Modal,
   Platform,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -127,6 +126,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   onAddComment,
   ticketId,
 }) => {
+  const [commentsState, setCommentsState] = useState(comments);
   const [newComment, setNewComment] = useState('');
   const [attachments, setAttachments] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -136,6 +136,10 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const [allImages, setAllImages] = useState<string[]>([]);
   const { theme } = useTheme();
   const styles = getStyles(theme);
+
+  useEffect(() => {
+    setCommentsState(comments);
+  }, [comments]);
 
   const modalPlayer = useVideoPlayer(selectedVideo || '', (player) => {
     if (selectedVideo) {
@@ -207,7 +211,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   console.log('Current User ID:', currentUserId);
   
   // Filter and sort comments
-  const filteredAndSortedComments = comments
+  const filteredAndSortedComments = commentsState
     .filter(comment => {
       const content = comment.content || '';
       if (comment.isStatusChange || (content.startsWith('قام') && content.includes('بتغيير حالة التكت من'))) {
@@ -239,47 +243,72 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const handleCommentSubmit = async () => {
     if (!newComment.trim() && attachments.length === 0) return;
 
+    const tempId = `optimistic-${Date.now()}`;
+    const optimisticComment: any = {
+      id: tempId,
+      content: newComment.trim(),
+      userId: currentUserId,
+      userName: users.find(u => u.uid === currentUserId)?.name || 'مستخدم غير معروف',
+      timestamp: new Date().toISOString(),
+      attachments: attachments.map(a => ({
+        downloadURL: a.uri, // Use local URI for immediate display
+        fileName: a.name,
+        mimeType: a.mimeType,
+        size: a.size,
+        fileUrl: a.uri,
+      })),
+      isOptimistic: true,
+    };
 
-    const uploadedAttachments: {
-      downloadURL: string;
-      fileName: string;
-      mimeType?: string;
-      size?: number;
-    }[] = [];
+    setCommentsState(prev => [...prev, optimisticComment]);
 
-    if (attachments.length > 0) {
-      for (const asset of attachments) {
-        try {
+    const commentToSave = newComment;
+    const attachmentsToSave = attachments;
+
+    setNewComment('');
+    setAttachments([]);
+
+    try {
+      const uploadedAttachments: {
+        downloadURL: string;
+        fileName: string;
+        mimeType?: string;
+        size?: number;
+      }[] = [];
+
+      if (attachmentsToSave.length > 0) {
+        for (const asset of attachmentsToSave) {
           const response = await fetch(asset.uri);
           const blob = await response.blob();
           const storageRef = ref(storage, `attachments/${ticketId}/${Date.now()}-${asset.name}`);
-
           await uploadBytes(storageRef, blob);
           const downloadURL = await getDownloadURL(storageRef);
-
           uploadedAttachments.push({
             downloadURL,
             fileName: asset.name,
             mimeType: asset.mimeType,
             size: asset.size,
           });
-        } catch (error) {
-          console.error(`Failed to upload ${asset.name}:`, error);
         }
       }
-    }
 
-    const newCommentData: Partial<Comment> = {
-      id: `${Date.now()}`,
-      content: newComment.trim(),
-      userId: currentUserId,
-      userName: users.find(u => u.uid === currentUserId)?.name || 'مستخدم غير معروف',
-      timestamp: new Date().toISOString(),
-      attachments: uploadedAttachments,
-    };
-    await onAddComment(newCommentData);
-    setNewComment('');
-    setAttachments([]);
+      const newCommentData: Partial<Comment> = {
+        content: commentToSave.trim(),
+        userId: currentUserId,
+        userName: users.find(u => u.uid === currentUserId)?.name || 'مستخدم غير معروف',
+        timestamp: new Date().toISOString(),
+        attachments: uploadedAttachments,
+      };
+
+      await onAddComment(newCommentData);
+    } catch (error) {
+      console.error('Failed to submit comment:', error);
+      // Revert optimistic update
+      setCommentsState(prev => prev.filter(c => c.id !== tempId));
+      // Restore user input
+      setNewComment(commentToSave);
+      setAttachments(attachmentsToSave);
+    }
   };
 
   const isDisabled = ticketStatus === 'مكتمل' || ticketStatus === 'مغلق'  || currentUserResponse === 'completed' || currentUserResponse === 'rejected' || currentUserResponse !== 'accepted';
@@ -374,7 +403,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
         </GestureHandlerRootView>
       </Modal>
 
-      <ScrollView style={styles.commentsList} keyboardShouldPersistTaps="always">
+      <View style={styles.commentsList}>
         {filteredAndSortedComments.length === 0 ? (
           <View style={styles.emptyCommentsContainer}>
             <Ionicons name="chatbubbles-outline" size={48} color={theme.textSecondary} style={{ opacity: 0.5 }} />
@@ -413,6 +442,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
               style={[
                 styles.messageRow,
                 isCurrentUser ? styles.messageRowRight : styles.messageRowLeft,
+                (comment as any).isOptimistic && { opacity: 0.6 },
               ]}
             >
               {/* Avatar for other users */}
@@ -537,11 +567,11 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                   isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp,
                   isImageOnlyComment && styles.imageOnlyTimestamp,
                 ]}>
-                  {format(commentDate, isImageOnlyComment ? 'hh:mm a' : 'yyyy/MM/dd hh:mm a', { locale: enGB })}
-                </Text>
-              </View>
+                 {(comment as any).isOptimistic ? "Sending..." : format(commentDate, isImageOnlyComment ? 'hh:mm a' : 'yyyy/MM/dd hh:mm a', { locale: enGB })}
+               </Text>
+             </View>
 
-              {/* Tail for current user */}
+             {/* Tail for current user */}
               {isCurrentUser && (
                 <View style={styles.avatarContainer}>
                   {!isImageOnlyComment && <View style={[styles.avatarTail, styles.avatarTailRight]} />}
@@ -551,7 +581,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
           );
           })
         )}
-      </ScrollView>
+      </View>
 
       {/* Input section */}
       <View style={styles.inputSection}>
@@ -633,12 +663,10 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: theme.background,
     borderRadius: 12,
   },
   commentsList: {
-    flexGrow: 1,
     paddingVertical: 12,
     paddingHorizontal:8,
     paddingBottom: 20,

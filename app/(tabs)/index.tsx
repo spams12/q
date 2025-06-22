@@ -260,7 +260,6 @@ const TasksScreen: React.FC = () => {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-
   const { userUid } = usePermissions();
   const { user } = useFirebaseAuth();
   const router = useRouter();

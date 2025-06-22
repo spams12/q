@@ -10,9 +10,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as TaskManager from 'expo-task-manager';
 import { getAuth } from 'firebase/auth';
 import { arrayUnion, collection, doc, getDocs, onSnapshot, runTransaction, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Animated, Dimensions, KeyboardAvoidingView, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { InvoiceList } from '../../components/InvoiceList';
 import { ThemedText } from '../../components/ThemedText';
 import { ThemedView } from '../../components/ThemedView';
@@ -149,6 +148,7 @@ const TicketDetailPage = () => {
   const [currentUserResponse, setCurrentUserResponse] = useState<'pending' | 'accepted' | 'rejected' | 'completed' | null>(null);
   const [slideAnim] = useState(new Animated.Value(0));
   const { userdoc } = usePermissions();
+  const scrollViewRef = useRef<ScrollView>(null);
   const [subscriberSearch, setSubscriberSearch] = useState("");
   const [subscriberIndexBeingProcessed, setSubscriberIndexBeingProcessed] = useState<number | null>(null);
   const [isArrivalLogVisible, setIsArrivalLogVisible] = useState(false);
@@ -202,6 +202,12 @@ const TicketDetailPage = () => {
 
     return () => unsubscribe();
   }, [id, user, userdoc]);
+
+  useEffect(() => {
+    if (activeTab === tabs.findIndex(t => t.key === 'comments')) {
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 200);
+    }
+  }, [serviceRequest?.comments, activeTab]);
 
   const switchTab = (index: number) => {
     console.log(`Switching to tab ${index}`);
@@ -893,7 +899,7 @@ const TicketDetailPage = () => {
                                         {subscriberIndexBeingProcessed === subscriber.originalIndex ? (
                                             <ActivityIndicator color="#fff" />
                                         ) : (
-                                            <ThemedText style={styles.buttonText}>تسجيل كمدفوع</ThemedText>
+                                            <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>تسجيل كمدفوع</ThemedText>
                                         )}
                                     </Pressable>
                                 </View>
@@ -915,17 +921,18 @@ const TicketDetailPage = () => {
 
   return (
     <ThemedView style={styles.container}>
-
-      <KeyboardAwareScrollView
-          keyboardShouldPersistTaps ="always"
-          style={styles.contentScrollView}
-          showsVerticalScrollIndicator={false}
-          stickyHeaderIndices={[1]}
-          enableOnAndroid={true}
-          enableAutomaticScroll={true}
-          keyboardOpeningTime={0}
-          extraScrollHeight={Platform.OS === 'ios' ? 0 : 250} 
+      <SafeAreaView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
         >
+        <ScrollView
+            ref={scrollViewRef}
+            keyboardShouldPersistTaps="always"
+            style={styles.contentScrollView}
+            showsVerticalScrollIndicator={false}
+            stickyHeaderIndices={[1]}
+          >
           <LinearGradient
             colors={[theme.gradientStart, theme.gradientEnd]}
             style={styles.headerGradient}
@@ -973,7 +980,7 @@ const TicketDetailPage = () => {
                       ) : (
                         <>
                           <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                          <ThemedText style={styles.buttonText}>قبول</ThemedText>
+                          <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>قبول</ThemedText>
                         </>
                       )}
                     </Pressable>
@@ -987,7 +994,7 @@ const TicketDetailPage = () => {
                       ) : (
                         <>
                           <Ionicons name="close-circle" size={20} color="#fff" />
-                          <ThemedText style={styles.buttonText}>رفض</ThemedText>
+                          <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>رفض</ThemedText>
                         </>
                       )}
                     </Pressable>
@@ -1001,7 +1008,7 @@ const TicketDetailPage = () => {
                       disabled={!!actionLoading}
                     >
                       <Ionicons name="location-outline" size={20} color="#fff" />
-                      <ThemedText style={styles.buttonText}>وصلت الموقع</ThemedText>
+                      <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>وصلت الموقع</ThemedText>
                     </Pressable>
                     <Pressable
                       style={[styles.button, styles.doneButton , actionLoading === 'markAsDone' && { opacity: 0.7 }]}
@@ -1013,7 +1020,7 @@ const TicketDetailPage = () => {
                       ) : (
                         <>
                           <Ionicons name="flag" size={20} color="#fff" />
-                          <ThemedText style={styles.buttonText}>تم إنجاز مهمتي</ThemedText>
+                          <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>تم إنجاز مهمتي</ThemedText>
                         </>
                       )}
                     </Pressable>
@@ -1084,7 +1091,9 @@ const TicketDetailPage = () => {
           <View style={styles.contentContainer}>
             {renderTabContent()}
           </View>
-        </KeyboardAwareScrollView>
+        </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
 
 
       <Modal
@@ -1126,7 +1135,7 @@ const TicketDetailPage = () => {
                         style={[styles.button, styles.rejectButton, {flex: 1, marginHorizontal: 4}]}
                         onPress={() => setIsArrivalLogVisible(false)}
                     >
-                        <ThemedText style={styles.buttonText}>إلغاء</ThemedText>
+                        <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>إلغاء</ThemedText>
                     </Pressable>
                     <Pressable
                         style={[styles.button, styles.acceptButton, {flex: 1, marginHorizontal: 4}, actionLoading === 'logArrival' && { opacity: 0.7 }]}
@@ -1143,7 +1152,7 @@ const TicketDetailPage = () => {
                         {actionLoading === 'logArrival' ? (
                             <ActivityIndicator color="#fff" />
                         ) : (
-                            <ThemedText style={styles.buttonText}>تأكيد</ThemedText>
+                            <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>تأكيد</ThemedText>
                         )}
                     </Pressable>
                 </View>
@@ -1382,6 +1391,7 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       fontSize: 14,
       marginLeft: 8,
       fontFamily: 'Cairo',
+      flexShrink: 1,
     },
     acceptButton: {
       backgroundColor: theme.success,
