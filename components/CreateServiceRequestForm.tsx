@@ -154,7 +154,7 @@ const Select = ({ label, options, selectedValue, onValueChange, placeholder, dis
             {label && <FormLabel>{label}</FormLabel>}
             <TouchableOpacity
                 style={[styles.selectTrigger, disabled && styles.disabledInput]}
-                onPress={handleOpen}
+                onPressIn={handleOpen}
                 disabled={disabled || isLoading}
             >
                 <Text style={[styles.selectValueText, !selectedValue && { color: colors.placeholder }]}>{selectedLabel}</Text>
@@ -166,15 +166,9 @@ const Select = ({ label, options, selectedValue, onValueChange, placeholder, dis
                 onRequestClose={handleClose}
                 animationType="fade"
             >
-                <Pressable style={styles.modalOverlay} onPress={handleClose}>
+                <Pressable style={styles.modalOverlay} onPressIn={handleClose}>
                     <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
-                        <TextInput
-                            style={styles.searchInput}
-                            placeholder="بحث..."
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            placeholderTextColor={colors.placeholder}
-                        />
+                        
                         <ScrollView keyboardShouldPersistTaps="handled">
                             {filteredOptions.map(option => (
                                 <TouchableOpacity
@@ -243,7 +237,7 @@ const handlePackageChange = useCallback((packageName: string) => {
             <View style={styles.subscriberHeader}>
                 <Text style={styles.subscriberTitle}>مشترك {index + 1}</Text>
                 {!isOnlySubscriber && (
-                    <TouchableOpacity style={styles.removeButton} onPress={handleRemove}>
+                    <TouchableOpacity style={styles.removeButton} onPressIn={handleRemove}>
                         <X color={styles.removeButtonIcon.color} size={18} />
                     </TouchableOpacity>
                 )}
@@ -476,40 +470,7 @@ export default function CreateServiceRequestForm({
                 </FormItem>
             )}
         />
-        <View style={styles.card}>
-            <Controller control={control} name="title" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>عنوان التكت</FormLabel>
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder="أدخل عنوان التكت" 
-                      value={field.value || ''} 
-                      onChangeText={field.onChange} 
-                      onBlur={field.onBlur}
-                      placeholderTextColor={colors.placeholder}
-                      returnKeyType="next"
-                    />
-                    <FormMessage message={errors.title?.message} />
-                </FormItem>
-            )} />
-            <Controller control={control} name="description" render={({ field }) => (
-                <FormItem style={{ marginBottom: 0 }}>
-                    <FormLabel>وصف التكت</FormLabel>
-                    <TextInput 
-                      style={[styles.input, styles.textArea]} 
-                      placeholder="أدخل تفاصيل التكت" 
-                      value={field.value || ''} 
-                      onChangeText={field.onChange} 
-                      onBlur={field.onBlur}
-                      multiline
-                      placeholderTextColor={colors.placeholder}
-                      returnKeyType="default"
-                     />
-                    <FormMessage message={errors.description?.message} />
-                </FormItem>
-            )} />
-        </View>
-        {ticketType !== "جباية" && (
+         {ticketType !== "جباية" && (
             <View style={styles.card}>
                 <Controller control={control} name="customerName" render={({ field }) => (
                     <FormItem>
@@ -545,10 +506,10 @@ export default function CreateServiceRequestForm({
                 )} />
                 <Controller control={control} name="customerEmail" render={({ field }) => (
                     <FormItem style={{ marginBottom: 0 }}>
-                        <FormLabel>العنوان التفصيلي (اختياري)</FormLabel>
+                        <FormLabel>العنوان او رقم الزون</FormLabel>
                         <TextInput 
                           style={styles.input} 
-                          placeholder="أدخل العنوان التفصيلي" 
+                          placeholder="أدخل العنوان او رقم الزون" 
                           value={field.value || ''} 
                           onChangeText={field.onChange} 
                           onBlur={field.onBlur}
@@ -560,6 +521,41 @@ export default function CreateServiceRequestForm({
                 )} />
             </View>
         )}
+        <View style={styles.card}>
+          
+            <Controller control={control} name="title" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>عنوان التكت</FormLabel>
+                    <TextInput 
+                      style={styles.input} 
+                      placeholder="أدخل عنوان التكت" 
+                      value={field.value || ''} 
+                      onChangeText={field.onChange} 
+                      onBlur={field.onBlur}
+                      placeholderTextColor={colors.placeholder}
+                      returnKeyType="next"
+                    />
+                    <FormMessage message={errors.title?.message} />
+                </FormItem>
+            )} />
+            <Controller control={control} name="description" render={({ field }) => (
+                <FormItem style={{ marginBottom: 0 }}>
+                    <FormLabel>وصف التكت</FormLabel>
+                    <TextInput 
+                      style={[styles.input, styles.textArea]} 
+                      placeholder="أدخل تفاصيل التكت" 
+                      value={field.value || ''} 
+                      onChangeText={field.onChange} 
+                      onBlur={field.onBlur}
+                      multiline
+                      placeholderTextColor={colors.placeholder}
+                      returnKeyType="default"
+                     />
+                    <FormMessage message={errors.description?.message} />
+                </FormItem>
+            )} />
+        </View>
+       
 
         
 
@@ -589,7 +585,7 @@ export default function CreateServiceRequestForm({
                         return user ? (
                             <View key={userId} style={styles.badge}>
                                 <Text style={styles.badgeText}>{user.name}</Text>
-                                <TouchableOpacity onPress={() => setSelectedUserIds(prev => prev.filter(id => id !== userId))}>
+                                <TouchableOpacity onPressIn={() => setSelectedUserIds(prev => prev.filter(id => id !== userId))}>
                                     <X color={styles.badgeIcon.color} size={14} />
                                 </TouchableOpacity>
                             </View>
@@ -627,7 +623,7 @@ export default function CreateServiceRequestForm({
                         isOnlySubscriber={subscribers.length === 1}
                     />
                  ))}
-                 <TouchableOpacity style={styles.addButton} onPress={addSubscriber}>
+                 <TouchableOpacity style={styles.addButton} onPressIn={addSubscriber}>
                      <Plus color={styles.addButtonText.color} size={18} />
                      <Text style={styles.addButtonText}>إضافة مشترك جديد</Text>
                  </TouchableOpacity>
@@ -635,10 +631,10 @@ export default function CreateServiceRequestForm({
         )}
         
         <View style={styles.buttonContainer}>
-             <TouchableOpacity style={styles.secondaryButton} onPress={onSuccess} disabled={isSubmitting}>
+             <TouchableOpacity style={styles.secondaryButton} onPressIn={() => router.back()} disabled={isSubmitting}>
                 <Text style={styles.secondaryButtonText}>إلغاء</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit(handleAddTicket)} disabled={isSubmitting}>
+            <TouchableOpacity style={styles.primaryButton} onPressIn={handleSubmit(handleAddTicket)} disabled={isSubmitting}>
                 {isSubmitting ? <ActivityIndicator color={styles.primaryButtonText.color} /> : <Text style={styles.primaryButtonText}>إنشاء</Text>}
             </TouchableOpacity>
         </View>
@@ -676,7 +672,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     color: colors.text,
     marginBottom: 8,
     textAlign: 'right',
-    writingDirection: 'rtl',
+    writingDirection: 'ltr',
   },
   input: {
     backgroundColor: colors.inputBackground,
@@ -689,7 +685,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontFamily: FONT_FAMILY,
     color: colors.text,
     textAlign: 'right',
-    writingDirection: 'rtl',
+    writingDirection: 'ltr',
   },
   disabledInput: {
       backgroundColor: colors.background,
@@ -706,7 +702,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontFamily: FONT_FAMILY,
     marginTop: 6,
     textAlign: 'right',
-    writingDirection: 'rtl',
+    writingDirection: 'ltr',
   },
   // --- Custom Select Styles ---
   selectTrigger: {
@@ -805,7 +801,7 @@ const getStyles = (colors: any) => StyleSheet.create({
       color: colors.text,
       marginBottom: 12,
       textAlign: 'right',
-      writingDirection: 'rtl',
+      writingDirection: 'ltr',
   },
   subscriberCard: {
       borderColor: colors.primary,

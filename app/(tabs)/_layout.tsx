@@ -7,6 +7,7 @@ import { LayoutAnimation, Platform, UIManager } from 'react-native';
 import { HapticTab } from '@/components/HapticTab';
 import { useTheme } from '@/context/ThemeContext';
 
+
 if (Platform.OS === 'android') {
   if (UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);

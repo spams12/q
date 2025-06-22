@@ -14,20 +14,20 @@ import useFirebaseAuth from '../../hooks/use-firebase-auth';
 import { db } from '../../lib/firebase';
 import { Comment, ServiceRequest, UserResponse } from '../../lib/types';
 
-type TabKey = 'New' | 'Accepted' | 'Rejected';
+type TabKey = 'New' | 'Accepted' | 'Completed';
 
 const LOCATION_TASK_NAME = 'background-location-task';
 
 interface CachedData {
   New: ServiceRequest[];
   Accepted: ServiceRequest[];
-  Rejected: ServiceRequest[];
+  Completed: ServiceRequest[];
 }
 
 interface LoadingStates {
   New: boolean;
   Accepted: boolean;
-  Rejected: boolean;
+  Completed: boolean;
 }
 
 // Extracted Components
@@ -177,7 +177,7 @@ const ListHeader = React.memo(({
     <View style={[styles.tabsContainer, { backgroundColor: theme.header }]}>
       <TabButton tabKey="New" label="جديدة" isActive={activeTab === 'New'} isLoading={loadingStates.New} onPress={handleTabPress} theme={theme} />
       <TabButton tabKey="Accepted" label="مقبولة" isActive={activeTab === 'Accepted'} isLoading={loadingStates.Accepted} onPress={handleTabPress} theme={theme} />
-      <TabButton tabKey="Rejected" label="مرفوضة" isActive={activeTab === 'Rejected'} isLoading={loadingStates.Rejected} onPress={handleTabPress} theme={theme} />
+      <TabButton tabKey="Completed" label="مكتمله" isActive={activeTab === 'Completed'} isLoading={loadingStates.Completed} onPress={handleTabPress} theme={theme} />
     </View>
 
     {hasActiveFilters && (
@@ -244,13 +244,13 @@ const TasksScreen: React.FC = () => {
   const [cachedData, setCachedData] = useState<CachedData>({
     New: [],
     Accepted: [],
-    Rejected: [],
+    Completed: [],
   });
   
   const [loadingStates, setLoadingStates] = useState<LoadingStates>({
     New: true,
     Accepted: true,
-    Rejected: true,
+    Completed: true,
   });
 
   // UI states
@@ -274,18 +274,16 @@ const TasksScreen: React.FC = () => {
   // Real-time data fetching
   useEffect(() => {
     if (!userUid) {
-      setCachedData({ New: [], Accepted: [], Rejected: [] });
-      setLoadingStates({ New: false, Accepted: false, Rejected: false });
+      setCachedData({ New: [], Accepted: [], Completed: [] });
+      setLoadingStates({ New: false, Accepted: false, Completed: false });
       return;
     }
 
-    setLoadingStates({ New: true, Accepted: true, Rejected: true });
+    setLoadingStates({ New: true, Accepted: true, Completed: true });
 
     const q = query(
       collection(db, 'serviceRequests'),
       where("assignedUsers", "array-contains", userUid),
-      where('status', '!=', 'مكتمل'),
-      orderBy('status'),
       orderBy('createdAt', 'desc')
     );
 
@@ -295,26 +293,29 @@ const TasksScreen: React.FC = () => {
         ...doc.data()
       } as ServiceRequest));
 
-      const newData: CachedData = { New: [], Accepted: [], Rejected: [] };
+      const newData: CachedData = { New: [], Accepted: [], Completed: [] };
       allRequests.forEach(req => {
-        const userResponse = req.userResponses?.find(res => res.userId === userUid);
-        if (userResponse) {
-          if (userResponse.response === 'accepted') {
-            newData.Accepted.push(req);
-          } else if (userResponse.response === 'rejected') {
-            newData.Rejected.push(req);
-          }
+        if (req.status === 'مكتمل') {
+          newData.Completed.push(req);
         } else {
-          newData.New.push(req);
+          const userResponse = req.userResponses?.find(res => res.userId === userUid);
+          if (userResponse) {
+            if (userResponse.response === 'accepted') {
+              newData.Accepted.push(req);
+            }
+            // Rejected tasks are ignored as there's no tab for them now
+          } else {
+            newData.New.push(req);
+          }
         }
       });
 
       setCachedData(newData);
-      setLoadingStates({ New: false, Accepted: false, Rejected: false });
+      setLoadingStates({ New: false, Accepted: false, Completed: false });
     }, (error) => {
       console.error(`Error fetching real-time requests:`, error);
-      setCachedData({ New: [], Accepted: [], Rejected: [] });
-      setLoadingStates({ New: false, Accepted: false, Rejected: false });
+      setCachedData({ New: [], Accepted: [], Completed: [] });
+      setLoadingStates({ New: false, Accepted: false, Completed: false });
     });
 
     return () => unsubscribe();
@@ -332,7 +333,7 @@ const TasksScreen: React.FC = () => {
 
     setActiveTab(tab);
     
-    const tabIndex = ['New', 'Accepted', 'Rejected'].indexOf(tab);
+    const tabIndex = ['New', 'Accepted', 'Completed'].indexOf(tab);
     tabIndicatorX.value = withSpring(tabIndex * (Dimensions.get('window').width / 3 - 32));
 
   }, [activeTab, tabIndicatorX]);

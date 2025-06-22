@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   Image,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -348,8 +349,12 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   };
 
   return (
-    <TouchableWithoutFeedback onPress={() => {}} accessible={false}>
-      <View style={styles.container}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={100}
+    >
+      <TouchableWithoutFeedback onPress={() => {}} accessible={false}>
+        <View style={styles.container}>
       
       <Modal
         animationType="fade"
@@ -494,7 +499,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 
                       return (
                         <TouchableOpacity
-                          key={index}
+                          key={mediaUrl || index}
                           onPress={() => {
                             if (isImage && mediaUrl) {
                               const currentImageIndex = commentImages.indexOf(mediaUrl);
@@ -590,7 +595,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
           <View style={styles.attachmentPreviewContainer}>
             <View>
               {attachments.map((file, index) => (
-                <View key={index} style={styles.attachmentPill}>
+                <View key={file.uri} style={styles.attachmentPill}>
                   <Ionicons 
                     name={file.mimeType?.startsWith('image/') ? 'image-outline' : 'document-outline'} 
                     size={16} 
@@ -600,7 +605,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                     {file.name}
                   </Text>
                   <TouchableOpacity 
-                    onPress={() => setAttachments(prev => prev.filter((_, i) => i !== index))}
+                    onPress={() => setAttachments(prev => prev.filter(p => p.uri !== file.uri))}
                     style={styles.removeAttachment}
                   >
                     <Ionicons name="close" size={16} color="white" />
@@ -658,6 +663,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
       </View>
       </View>
     </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 };
 

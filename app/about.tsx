@@ -1,11 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import React from 'react';
-import { I18nManager, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-// Enable RTL for Arabic
-I18nManager.allowRTL(true);
-I18nManager.forceRTL(true);
 
 const AboutPage: React.FC = () => {
   return (
@@ -13,14 +10,14 @@ const AboutPage: React.FC = () => {
       <Stack.Screen options={{ title: 'حول التطبيق' }} />
       <View style={styles.header}>
         <Ionicons name="information-circle-outline" size={60} color="#4A90E2" />
-        <Text style={styles.appName}>تطبيق QMC</Text>
+        <Text style={styles.appName}>تطبيق QTM</Text>
         <Text style={styles.version}>الإصدار 1.0.0</Text>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>ما هو تطبيق QMC؟</Text>
+        <Text style={styles.sectionTitle}>ما هو تطبيق QTM؟</Text>
         <Text style={styles.sectionContent}>
-          QMC هو تطبيق محمول شامل مصمم لتبسيط طلبات الخدمة وإدارة المهام ومراقبة المخزون للفرق. يمكّن المستخدمين من إنشاء وتتبع طلبات الخدمة بكفاءة وإدارة المهام الجارية والحفاظ على مخزون منظم.
+          QTM هو تطبيق محمول شامل مصمم لتبسيط طلبات الخدمة وإدارة المهام ومراقبة المخزون للفرق. يمكّن المستخدمين من إنشاء وتتبع طلبات الخدمة بكفاءة وإدارة المهام الجارية والحفاظ على مخزون منظم.
         </Text>
       </View>
 

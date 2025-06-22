@@ -103,7 +103,7 @@ export default function CompleteProfileScreen() {
       flex: 1,
       justifyContent: 'center',
       padding: 24,
-      writingDirection: 'rtl',
+      writingDirection: 'ltr',
     },
     title: {
       textAlign: 'center',

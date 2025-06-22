@@ -10,7 +10,6 @@ import React, { Children, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  I18nManager,
   Image,
   ScrollView,
   StyleSheet,
@@ -23,8 +22,6 @@ import UpdatePhoneModal from '../../components/UpdatePhoneModal';
 import { auth, db } from '../../lib/firebase';
 import { User } from '../../lib/types';
 
-// --- Theming and Constants ---
-// No longer needed here, will be managed by getStyles
 
 const SPACING = {
   s: 8,
@@ -32,11 +29,6 @@ const SPACING = {
   l: 24,
 };
 
-// Enable RTL for Arabic
-I18nManager.allowRTL(true);
-I18nManager.forceRTL(true);
-
-// --- Type Definitions ---
 
 interface ProfileHeaderProps {
   user: Partial<User>;
@@ -458,7 +450,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   settingTextContainer: {
     flex: 1,
     marginHorizontal: SPACING.m,
-    alignItems: 'flex-end', // For RTL
+    alignItems: 'flex-end',
   },
   settingTitle: {
     fontSize: 17,

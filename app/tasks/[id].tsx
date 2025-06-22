@@ -18,7 +18,7 @@ import { ThemedView } from '../../components/ThemedView';
 import useFirebaseAuth from '../../hooks/use-firebase-auth';
 import { db } from '../../lib/firebase';
 import { getPriorityBadgeColor, getStatusBadgeColor } from '../../lib/styles';
-import { Comment, Invoice, InvoiceItem, ServiceRequest, StockTransaction, User, UserStockItem } from '../../lib/types';
+import { Comment, Invoice, InvoiceItem, ServiceRequest, User } from '../../lib/types';
 
 
 const { width } = Dimensions.get('window');
@@ -149,12 +149,14 @@ const TicketDetailPage = () => {
   const [slideAnim] = useState(new Animated.Value(0));
   const { userdoc } = usePermissions();
   const scrollViewRef = useRef<ScrollView>(null);
+  const scrollIsAtBottom = useRef(true);
   const [subscriberSearch, setSubscriberSearch] = useState("");
   const [subscriberIndexBeingProcessed, setSubscriberIndexBeingProcessed] = useState<number | null>(null);
   const [isArrivalLogVisible, setIsArrivalLogVisible] = useState(false);
   const [estimatedDuration, setEstimatedDuration] = useState('');
   const [timeUnit, setTimeUnit] = useState<'minutes' | 'hours'>('minutes');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [isAssignedToCurrentUser, setIsAssignedToCurrentUser] = useState(false);
 
   const tabs = [
     { key: 'details', title: 'التفاصيل', icon: 'document-text-outline' },
@@ -182,11 +184,15 @@ const TicketDetailPage = () => {
       if (doc.exists()) {
         const data = { id: doc.id, ...doc.data() } as ServiceRequest;
         setServiceRequest(data);
-
-        if (user && data.userResponses) {
-          const response = userdoc ? data.userResponses.find(r => r.userId === userdoc.id) : undefined;
-          console.log("Current user response:", response);
-          setCurrentUserResponse(response ? response.response : 'pending');
+        
+        if (userdoc) {
+          setIsAssignedToCurrentUser(data.assignedUsers?.includes(userdoc.id) ?? false);
+          const response = data.userResponses?.find(r => r.userId === userdoc.id);
+          if (data.creatorId === userdoc.uid) {
+            setCurrentUserResponse('accepted');
+          } else {
+            setCurrentUserResponse(response ? response.response : 'pending');
+          }
         } else {
           setCurrentUserResponse('pending');
         }
@@ -204,10 +210,10 @@ const TicketDetailPage = () => {
   }, [id, user, userdoc]);
 
   useEffect(() => {
-    if (activeTab === tabs.findIndex(t => t.key === 'comments')) {
+    if (scrollIsAtBottom.current && activeTab === tabs.findIndex(t => t.key === 'comments')) {
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 200);
     }
-  }, [serviceRequest?.comments, activeTab]);
+  }, [serviceRequest?.comments]);
 
   const switchTab = (index: number) => {
     console.log(`Switching to tab ${index}`);
@@ -400,115 +406,7 @@ const TicketDetailPage = () => {
     return requiredStock;
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleSaveInvoice = async (items: InvoiceItem[]) => {
-    if (!user || !serviceRequest) return;
 
-    try {
-      await runTransaction(db, async (transaction) => {
-        const userDocRef = doc(db, 'users', user.uid);
-        const serviceRequestDocRef = doc(db, 'serviceRequests', serviceRequest.id);
-
-        const [userDoc, serviceRequestDoc] = await Promise.all([
-          transaction.get(userDocRef),
-          transaction.get(serviceRequestDocRef)
-        ]);
-
-        if (!userDoc.exists() || !serviceRequestDoc.exists()) {
-          throw new Error("لم يتم العثور على مستند المستخدم أو طلب الخدمة!");
-        }
-
-        const currentUserData = userDoc.data() as User;
-        const currentServiceRequest = serviceRequestDoc.data() as ServiceRequest;
-        const userStock = currentUserData.stockItems || [];
-        const requiredStock = getRequiredStock(items);
-        const stockToUpdate: UserStockItem[] = JSON.parse(JSON.stringify(userStock));
-        const stockTransactions: Omit<StockTransaction, 'id'>[] = [];
-
-        const insufficientStock: string[] = [];
-        for (const itemName in requiredStock) {
-          const stockItem = stockToUpdate.find(s => s.itemName === itemName);
-          if (!stockItem || stockItem.quantity < requiredStock[itemName]) {
-            insufficientStock.push(`${itemName} (مطلوب: ${requiredStock[itemName]}, متوفر: ${stockItem?.quantity || 0})`);
-          }
-        }
-
-        if (insufficientStock.length > 0) {
-          Alert.alert(
-            "مخزون غير كافي",
-            `العناصر التالية منخفضة المخزون، لكن يمكنك المتابعة:\n${insufficientStock.join('\n')}`,
-            [{ text: "موافق" }]
-          );
-        }
-
-        const totalAmount = items.reduce((sum, item) => sum + item.totalPrice, 0);
-        const newInvoiceRef = doc(collection(db, 'invoices'));
-        const newInvoice: Invoice = {
-          id: newInvoiceRef.id,
-          linkedServiceRequestId: serviceRequest.id,
-          customerName: currentServiceRequest.customerName,
-          totalAmount,
-          status: 'draft',
-          items,
-          createdAt: Timestamp.now().toDate().toISOString(),
-          lastUpdated: Timestamp.now().toDate().toISOString(),
-          createdBy: user.uid,
-          creatorName: user.displayName || 'Unknown',
-          type: 'invoice',
-        };
-        transaction.set(newInvoiceRef, newInvoice);
-
-        for (const itemName in requiredStock) {
-          const requiredQty = requiredStock[itemName];
-          const stockItemIndex = stockToUpdate.findIndex(s => s.itemName === itemName);
-
-          if (stockItemIndex > -1) {
-            stockToUpdate[stockItemIndex].quantity -= requiredQty;
-            
-            const newTransaction: Omit<StockTransaction, 'id'> = {
-              itemId: stockToUpdate[stockItemIndex].itemId,
-              itemName: itemName,
-              userId: user.uid,
-              userName: user.displayName || 'غير محدد',
-              type: 'reduction',
-              quantity: -requiredQty,
-              timestamp: Timestamp.now(),
-              itemType: stockToUpdate[stockItemIndex].itemType,
-              sourceId: serviceRequest.id,
-            };
-            stockTransactions.push(newTransaction);
-          }
-        }
-        
-        stockTransactions.forEach(tx => {
-            const newTransactionRef = doc(collection(db, 'stockTransactions'));
-            transaction.set(newTransactionRef, tx);
-        });
-
-        transaction.update(userDocRef, { stockItems: stockToUpdate });
-
-        const newComment: Comment = {
-          id: `${Date.now()}`,
-          content: `تم إنشاء الفاتورة ${newInvoice.id} من قبل ${user.displayName}.`,
-          userId: user.uid,
-          userName: user.displayName || 'النظام',
-          createdAt: Timestamp.now(),
-          timestamp: Timestamp.now(),
-          isStatusChange: true,
-        };
-
-        transaction.update(serviceRequestDocRef, {
-          invoiceIds: arrayUnion(newInvoice.id),
-          comments: arrayUnion(newComment),
-          lastUpdated: Timestamp.now(),
-        });
-      });
-      Alert.alert("نجح", "تم حفظ الفاتورة بنجاح!");
-    } catch (e) {
-      console.error("فشل في حفظ الفاتورة: ", e);
-      Alert.alert("خطأ", "فشل في حفظ الفاتورة. حاول مرة أخرى.");
-    }
-  };
 
   const handleMarkSubscriberAsPaid = async (subscriberIndex: number) => {
     if (!id || !user || !userdoc?.teamId) {
@@ -932,6 +830,14 @@ const TicketDetailPage = () => {
             style={styles.contentScrollView}
             showsVerticalScrollIndicator={false}
             stickyHeaderIndices={[1]}
+            onScroll={({ nativeEvent }) => {
+                const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+                const isAtBottom =
+                    layoutMeasurement.height + contentOffset.y >=
+                    contentSize.height - 20;
+                scrollIsAtBottom.current = isAtBottom;
+            }}
+            scrollEventThrottle={16}
           >
           <LinearGradient
             colors={[theme.gradientStart, theme.gradientEnd]}
@@ -963,11 +869,10 @@ const TicketDetailPage = () => {
                 {serviceRequest.type}
               </ThemedText>
             </View>
-                {currentUserResponse !== 'completed' && (
-                  <View style={{ height: 1, backgroundColor: '#ccc' , width:"100%" , marginTop:15}} />
-                )}
-                {(currentUserResponse === 'pending' || currentUserResponse === 'accepted') && (
-              <View style={styles.actionsContainer}>
+                {isAssignedToCurrentUser && (currentUserResponse === 'pending' || currentUserResponse === 'accepted') && (
+              <>
+                <View style={{ height: 1, backgroundColor: '#ccc' , width:"100%" , marginTop:15}} />
+                <View style={styles.actionsContainer}>
                 {currentUserResponse === 'pending' && (
                   <View style={styles.buttonRow}>
                     <Pressable
@@ -1030,9 +935,10 @@ const TicketDetailPage = () => {
             
 
 
-                  
-                )}
 
+                  
+                </>
+                )}
 
                
               </View>

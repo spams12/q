@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter, useSegments } from 'expo-router';
@@ -6,12 +5,13 @@ import * as SplashScreen from 'expo-splash-screen';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { I18nManager, StyleSheet, View } from 'react-native';
 import 'react-native-get-random-values';
 import 'react-native-reanimated';
 import { PermissionsProvider } from '../context/PermissionsContext';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import { auth, db } from '../lib/firebase';
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -25,10 +25,13 @@ Notifications.setNotificationHandler({
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
+
 function RootLayoutNav() {
   const { theme } = useTheme();
   const router = useRouter();
-
+    useEffect(() => {
+    console.log(I18nManager.isRTL ? 'RTL mode enabled' : 'LTR mode enabled');
+  }, []);
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <Stack
@@ -47,18 +50,7 @@ function RootLayoutNav() {
           options={{
             title: 'إنشاء تكت',
             headerTitleAlign: 'center',
-            headerLeft: () => (
-              <Pressable
-                onPress={() => router.back()}
-                style={styles.backButton}
-              >
-                <Ionicons
-                  name="arrow-back-circle-sharp"
-                  size={32}
-                  color={theme.text}
-                />
-              </Pressable>
-            ),
+            headerBackTitle: "رجوع",
           }}
         />
         <Stack.Screen name="notifications" options={{
@@ -66,7 +58,8 @@ function RootLayoutNav() {
             headerTitleAlign: 'center',
           }}/>
         <Stack.Screen name="+not-found" />
-        <Stack.Screen name="invoices" options={{ headerShown: false }}/>
+        <Stack.Screen name="family" options={{ headerBackTitle: "رجوع", }}/>
+        <Stack.Screen name="about" options={{ headerBackTitle: "رجوع",}}/>
 
       </Stack>
     </View>

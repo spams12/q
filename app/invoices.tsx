@@ -8,7 +8,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  I18nManager,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,16 +16,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// This forces RTL for demonstration purposes.
-// In a real app, this is usually handled globally.
-if (I18nManager.isRTL === false) {
-    I18nManager.forceRTL(true);
-    I18nManager.allowRTL(true);
-    // You might need to reload the app for this to take effect in a real scenario
-}
 
 
-// InvoiceItem interface (as it's part of Invoice)
+
 interface InvoiceItem {
   name: string;
   price: number;
@@ -278,7 +270,7 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme === 'dark' ? '#1a202c' : '#f4f6f8',
-    writingDirection: 'rtl',
+    writingDirection: 'ltr',
   },
   headerContainer: {
     flexDirection: 'row-reverse',
