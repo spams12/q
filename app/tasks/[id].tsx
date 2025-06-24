@@ -3,6 +3,8 @@ import { usePermissions } from '@/context/PermissionsContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker'; // Added for image picking
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import * as Location from 'expo-location';
@@ -10,16 +12,16 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as TaskManager from 'expo-task-manager';
 import { getAuth } from 'firebase/auth';
 import { arrayUnion, collection, doc, getDocs, onSnapshot, runTransaction, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, KeyboardAvoidingView, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { InvoiceList } from '../../components/InvoiceList';
 import { ThemedText } from '../../components/ThemedText';
 import { ThemedView } from '../../components/ThemedView';
 import useFirebaseAuth from '../../hooks/use-firebase-auth';
-import { db } from '../../lib/firebase';
+import { db, storage } from '../../lib/firebase';
 import { getPriorityBadgeColor, getStatusBadgeColor } from '../../lib/styles';
 import { Comment, Invoice, InvoiceItem, ServiceRequest, User } from '../../lib/types';
-
 
 const { width } = Dimensions.get('window');
 
@@ -44,6 +46,14 @@ interface Subscriber {
   price: string;
   zoneNumber: string;
   isPaid: boolean;
+}
+
+// A more generic type for attachments from different sources
+interface AttachmentAsset {
+    uri: string;
+    name: string;
+    size?: number;
+    mimeType?: string;
 }
 
 const LOCATION_TASK_NAME = 'background-location-task';
@@ -87,11 +97,20 @@ const TicketDetailPage = () => {
   const router = useRouter();
   const { user } = useFirebaseAuth();
   const { theme, themeName } = useTheme();
+    const getTypePriaroityTextStyle = useCallback((type: string) => {
+      switch (type?.toLowerCase()) {
+        case 'request':
+        case 'متوسطة':
+          return { color: theme.text };
+        default:
+          return { color: theme.text };
+      }
+    }, [theme]);
   const getTypePillTextStyle = useCallback((type: string) => {
       switch (type?.toLowerCase()) {
         case 'request':
         case 'طلب':
-          return { color: theme.primary };
+          return { color: theme.text };
         case 'complaint':
         case 'شكوى':
           return { color: theme.destructive };
@@ -107,22 +126,19 @@ const TicketDetailPage = () => {
         case 'request':
         case 'طلب':
           return {
-            backgroundColor: theme.blueTint,
-            borderWidth: 1,
+            backgroundColor: theme.statusDefault,
             borderColor: theme.primary,
           };
         case 'complaint':
         case 'شكوى':
           return {
             backgroundColor: theme.redTint,
-            borderWidth: 1,
             borderColor: theme.destructive,
           };
         case 'suggestion':
         case 'اقتراح':
           return {
             backgroundColor: theme.lightGray,
-            borderWidth: 1,
             borderColor: theme.success,
           };
         default:
@@ -149,7 +165,7 @@ const TicketDetailPage = () => {
   const [slideAnim] = useState(new Animated.Value(0));
   const { userdoc } = usePermissions();
   const scrollViewRef = useRef<ScrollView>(null);
-  const scrollIsAtBottom = useRef(true);
+  const scrollIsAtBottom = useRef(false);
   const [subscriberSearch, setSubscriberSearch] = useState("");
   const [subscriberIndexBeingProcessed, setSubscriberIndexBeingProcessed] = useState<number | null>(null);
   const [isArrivalLogVisible, setIsArrivalLogVisible] = useState(false);
@@ -157,6 +173,16 @@ const TicketDetailPage = () => {
   const [timeUnit, setTimeUnit] = useState<'minutes' | 'hours'>('minutes');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [isAssignedToCurrentUser, setIsAssignedToCurrentUser] = useState(false);
+
+  // State for the comment input
+  const [newComment, setNewComment] = useState('');
+  const [attachments, setAttachments] = useState<AttachmentAsset[]>([]);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [isAttachmentMenuVisible, setIsAttachmentMenuVisible] = useState(false);
+  
+  // --- NEW ---
+  // State to flag that we should scroll to the bottom after the user submits a comment.
+  const [shouldScrollAfterSubmit, setShouldScrollAfterSubmit] = useState(false);
 
   const tabs = [
     { key: 'details', title: 'التفاصيل', icon: 'document-text-outline' },
@@ -166,6 +192,8 @@ const TicketDetailPage = () => {
       ? [{ key: 'subscribers', title: 'المشتركون', icon: 'people-outline' }]
       : [])
   ];
+
+  const activeTabKey = tabs[activeTab]?.key;
 
   useEffect(() => {
     if (!id) return;
@@ -209,14 +237,34 @@ const TicketDetailPage = () => {
     return () => unsubscribe();
   }, [id, user, userdoc]);
 
+  // --- NEW ---
+  // This effect watches for the start of a comment submission.
+  // When it detects it, it sets a flag indicating that a scroll should happen
+  // once the new comment data arrives.
   useEffect(() => {
-    if (scrollIsAtBottom.current && activeTab === tabs.findIndex(t => t.key === 'comments')) {
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 200);
+    if (isSubmittingComment) {
+      setShouldScrollAfterSubmit(true);
     }
-  }, [serviceRequest?.comments]);
+  }, [isSubmittingComment]);
+
+  // --- MODIFIED ---
+  // This effect handles all scrolling logic for the comments list.
+  useEffect(() => {
+    if (activeTabKey !== 'comments') return;
+
+    // If the flag is set, it means the user just sent a comment.
+    // We scroll to the bottom to show them their new comment and then reset the flag.
+    if (shouldScrollAfterSubmit) {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+      setShouldScrollAfterSubmit(false);
+    }
+    // This handles scrolling for new messages from others, but only if the user is already at the bottom.
+    else if (scrollIsAtBottom.current) {
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 300);
+    }
+  }, [serviceRequest?.comments, activeTabKey, shouldScrollAfterSubmit]);
 
   const switchTab = (index: number) => {
-    console.log(`Switching to tab ${index}`);
     setActiveTab(index);
     Animated.spring(slideAnim, {
       toValue: index,
@@ -355,32 +403,119 @@ const TicketDetailPage = () => {
   };
 
   const handleAddComment = async (comment: Partial<Comment>) => {
-    if (!id || !user) return;
-
+    if (!id || !user || !userdoc) return;
     try {
-      await runTransaction(db, async (transaction) => {
-        const docRef = doc(db, 'serviceRequests', id as string);
-        const sfDoc = await transaction.get(docRef);
-        if (!sfDoc.exists()) {
-          throw "المستند غير موجود!";
-        }
-
-
-        const newComment: Partial<Comment> = {
-          ...comment,
-          timestamp: Timestamp.now(),
+        const newCommentData: Comment = {
+            id: `${Date.now()}-${userdoc.id}`,
+            userId: userdoc.id,
+            userName: userdoc.name || 'Unknown',
+            createdAt: Timestamp.now(),
+            timestamp: Timestamp.now(),
+            ...comment,
         };
-
-
-        transaction.update(docRef, {
-          comments: arrayUnion(newComment),
-          lastUpdated: Timestamp.now(),
+        await updateDoc(doc(db, 'serviceRequests', id as string), {
+            comments: arrayUnion(newCommentData),
+            lastUpdated: Timestamp.now(),
         });
-      });
     } catch (e) {
-      console.error("فشل في التعامل: ", e);
+        console.error("Failed to add comment: ", e);
+        Alert.alert("خطأ", "فشل في إرسال التعليق.");
     }
   };
+
+const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+        Alert.alert('Permission required', 'Please grant permission to access your photo library.');
+        return;
+    }
+
+    try {
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.All, // Use enum instead of array
+            quality: 1,
+        });
+
+        if (!result.canceled && result.assets) {
+            const newAssets: AttachmentAsset[] = result.assets.map(asset => ({
+                uri: asset.uri,
+                name: asset.fileName || `image_${Date.now()}.jpg`,
+                size: asset.fileSize,
+                mimeType: asset.mimeType,
+            }));
+            setAttachments(prev => [...prev, ...newAssets]);
+            setIsAttachmentMenuVisible(false);
+        }
+    } catch (err) {
+        console.error('Error picking image:', err);
+        Alert.alert('Error', `Could not pick image: ${err}`);
+    }
+};
+
+  const handlePickDocument = async () => {
+      try {
+          const result = await DocumentPicker.getDocumentAsync({
+              type: '*/*',
+              multiple: true,
+          });
+          if (!result.canceled && result.assets) {
+              setAttachments(prev => [...prev, ...result.assets]);
+              setIsAttachmentMenuVisible(false); // Hide menu after selection
+          }
+      } catch (err) {
+          console.error('Error picking document:', err);
+      }
+  };
+
+  const handleCommentSubmit = async () => {
+    if ((!newComment.trim() && attachments.length === 0) || !userdoc) return;
+
+    setIsSubmittingComment(true);
+    const commentToSave = newComment;
+    const attachmentsToSave = attachments;
+
+    setNewComment('');
+    setAttachments([]);
+
+    try {
+        const uploadedAttachments: {
+            downloadURL: string;
+            fileName: string;
+            mimeType?: string;
+            size?: number;
+        }[] = [];
+
+        if (attachmentsToSave.length > 0) {
+            for (const asset of attachmentsToSave) {
+                const response = await fetch(asset.uri);
+                const blob = await response.blob();
+                const storageRef = ref(storage, `attachments/${id}/${Date.now()}-${asset.name}`);
+                await uploadBytes(storageRef, blob);
+                const downloadURL = await getDownloadURL(storageRef);
+                uploadedAttachments.push({
+                    downloadURL,
+                    fileName: asset.name,
+                    mimeType: asset.mimeType,
+                    size: asset.size,
+                });
+            }
+        }
+
+        await handleAddComment({
+            content: commentToSave.trim(),
+            attachments: uploadedAttachments,
+        });
+    } catch (error) {
+        console.error('Failed to submit comment:', error);
+        Alert.alert("خطأ", "فشل في إرسال التعليق.");
+        // Restore user input on failure
+        setNewComment(commentToSave);
+        setAttachments(attachmentsToSave);
+    } finally {
+        setIsSubmittingComment(false);
+    }
+  };
+
 
   const getRequiredStock = (items: InvoiceItem[]): Record<string, number> => {
     const requiredStock: Record<string, number> = {};
@@ -405,8 +540,6 @@ const TicketDetailPage = () => {
 
     return requiredStock;
   };
-
-
 
   const handleMarkSubscriberAsPaid = async (subscriberIndex: number) => {
     if (!id || !user || !userdoc?.teamId) {
@@ -631,7 +764,9 @@ const TicketDetailPage = () => {
     }
   };
 
- const styles = getStyles(theme, themeName);
+
+  const styles = getStyles(theme, themeName);
+  
   if (loading) {
     return (
       <ThemedView style={styles.container}>
@@ -664,11 +799,9 @@ const TicketDetailPage = () => {
     );
   }
 
-  
+  const isDisabled = isSubmittingComment || serviceRequest.status === 'مكتمل' || serviceRequest.status === 'مغلق' || currentUserResponse === 'completed' || currentUserResponse === 'rejected' || currentUserResponse !== 'accepted';
 
   const renderTabContent = () => {
-    const styles = getStyles(theme, themeName);
-    const activeTabKey = tabs[activeTab]?.key;
     switch (activeTabKey) {
       case 'details':
         return (
@@ -710,15 +843,11 @@ const TicketDetailPage = () => {
         );
       case 'comments':
         return (
-              <CommentSection
-                comments={serviceRequest.comments || []}
-                users={users}
-                currentUserId={userdoc?.id || ''}
-                ticketStatus={serviceRequest.status}
-                currentUserResponse={currentUserResponse}
-                onAddComment={handleAddComment}
-                ticketId={id as string}
-              />
+            <CommentSection
+              comments={serviceRequest.comments || []}
+              users={users}
+              currentUserId={userdoc?.id || ''}
+            />
         );
       case 'subscribers': {
         const subscribers = serviceRequest?.subscribers as unknown as Subscriber[];
@@ -729,7 +858,6 @@ const TicketDetailPage = () => {
                 subscriber.name.toLowerCase().includes(subscriberSearch.toLowerCase()) ||
                 (subscriber.phone && subscriber.phone.includes(subscriberSearch))
             );
-        console.log("Filtered Subscribers:", filteredSubscribers);
         const isCurrentUserTaskCompleted = currentUserResponse === 'completed';
         const overallTaskIsCompleted = serviceRequest.status === 'مكتمل';
 
@@ -753,57 +881,46 @@ const TicketDetailPage = () => {
                     placeholderTextColor={theme.textSecondary}
                 />
                 {filteredSubscribers && filteredSubscribers.length > 0 ? (
-                    filteredSubscribers.map((subscriber) => {
-                        const isButtonDisabled = {
-                            "subscriberIndexBeingProcessed !== null": subscriberIndexBeingProcessed !== null,
-                            "subscriber.isPaid": subscriber.isPaid,
-                            "currentUserResponse !== 'accepted'": currentUserResponse !== "accepted",
-                            isCurrentUserTaskCompleted,
-                            overallTaskIsCompleted,
-                        };
-                        console.log(`Button disabled states for ${subscriber.name}:`, isButtonDisabled);
-
-                        return (
-                            <View key={subscriber.originalIndex} style={styles.detailsContainer}>
-                                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                    <ThemedText style={styles.detailsTitle}>{subscriber.name}</ThemedText>
-                                    <View style={[styles.badge, { backgroundColor: subscriber.isPaid ? theme.success : theme.destructive }]}>
-                                        <ThemedText style={styles.badgeText}>
-                                            {subscriber.isPaid ? "مدفوع" : "غير مدفوع"}
-                                        </ThemedText>
-                                    </View>
-                                </View>
-                                <View style={{gap: 4, alignItems: 'flex-end'}}>
-                                    <ThemedText style={styles.detailText}>نوع الباقة: {subscriber.packageType}</ThemedText>
-                                    <Pressable style={{flexDirection: 'row-reverse', alignItems: 'center', gap: 8}} onPress={() => handlePhonePress(subscriber.phone)}>
-                                      <ThemedText style={styles.detailText}>الهاتف: {subscriber.phone}</ThemedText>
-                                      <Ionicons name="call-outline" size={18} color={theme.primary} />
-                                    </Pressable>
-                                    <ThemedText style={styles.detailText}>السعر: {subscriber.price} د.ع</ThemedText>
-                                    <ThemedText style={styles.detailText}>المنطقة: {subscriber.zoneNumber}</ThemedText>
-                                </View>
-                                <View style={{marginTop: 16}}>
-                                    <Pressable
-                                        style={[styles.button, styles.fullWidthButton, { backgroundColor: theme.primary }, (subscriberIndexBeingProcessed !== null || subscriber.isPaid || currentUserResponse !== "accepted" || isCurrentUserTaskCompleted || overallTaskIsCompleted) && { opacity: 0.5 }]}
-                                        onPress={() => handleMarkSubscriberAsPaid(subscriber.originalIndex)}
-                                        disabled={
-                                            subscriberIndexBeingProcessed !== null ||
-                                            subscriber.isPaid ||
-                                            currentUserResponse !== "accepted" ||
-                                            isCurrentUserTaskCompleted ||
-                                            overallTaskIsCompleted
-                                        }
-                                    >
-                                        {subscriberIndexBeingProcessed === subscriber.originalIndex ? (
-                                            <ActivityIndicator color="#fff" />
-                                        ) : (
-                                            <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>تسجيل كمدفوع</ThemedText>
-                                        )}
-                                    </Pressable>
+                    filteredSubscribers.map((subscriber) => (
+                        <View key={subscriber.originalIndex} style={styles.detailsContainer}>
+                            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                <ThemedText style={styles.detailsTitle}>{subscriber.name}</ThemedText>
+                                <View style={[styles.badge, { backgroundColor: subscriber.isPaid ? theme.success : theme.destructive }]}>
+                                    <ThemedText style={styles.badgeText}>
+                                        {subscriber.isPaid ? "مدفوع" : "غير مدفوع"}
+                                    </ThemedText>
                                 </View>
                             </View>
-                        );
-                    })
+                            <View style={{gap: 4, alignItems: 'flex-end'}}>
+                                <ThemedText style={styles.detailText}>نوع الباقة: {subscriber.packageType}</ThemedText>
+                                <Pressable style={{flexDirection: 'row-reverse', alignItems: 'center', gap: 8}} onPress={() => handlePhonePress(subscriber.phone)}>
+                                    <ThemedText style={styles.detailText}>الهاتف: {subscriber.phone}</ThemedText>
+                                    <Ionicons name="call-outline" size={18} color={theme.primary} />
+                                </Pressable>
+                                <ThemedText style={styles.detailText}>السعر: {subscriber.price} د.ع</ThemedText>
+                                <ThemedText style={styles.detailText}>المنطقة: {subscriber.zoneNumber}</ThemedText>
+                            </View>
+                            <View style={{marginTop: 16}}>
+                                <Pressable
+                                    style={[styles.button, styles.fullWidthButton, { backgroundColor: theme.primary }, (subscriberIndexBeingProcessed !== null || subscriber.isPaid || currentUserResponse !== "accepted" || isCurrentUserTaskCompleted || overallTaskIsCompleted) && { opacity: 0.5 }]}
+                                    onPress={() => handleMarkSubscriberAsPaid(subscriber.originalIndex)}
+                                    disabled={
+                                        subscriberIndexBeingProcessed !== null ||
+                                        subscriber.isPaid ||
+                                        currentUserResponse !== "accepted" ||
+                                        isCurrentUserTaskCompleted ||
+                                        overallTaskIsCompleted
+                                    }
+                                >
+                                    {subscriberIndexBeingProcessed === subscriber.originalIndex ? (
+                                        <ActivityIndicator color="#fff" />
+                                    ) : (
+                                        <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>تسجيل كمدفوع</ThemedText>
+                                    )}
+                                </Pressable>
+                            </View>
+                        </View>
+                    ))
                 ) : (
                     <ThemedText style={{ textAlign: 'center', color: theme.textSecondary, marginTop: 20 }}>
                         لا توجد نتائج مطابقة للبحث.
@@ -819,189 +936,227 @@ const TicketDetailPage = () => {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={{ flex: 1 }}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
-        <ScrollView
-            ref={scrollViewRef}
-            keyboardShouldPersistTaps="always"
-            style={styles.contentScrollView}
-            showsVerticalScrollIndicator={false}
-            stickyHeaderIndices={[1]}
-            onScroll={({ nativeEvent }) => {
-                const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-                const isAtBottom =
-                    layoutMeasurement.height + contentOffset.y >=
-                    contentSize.height - 20;
-                scrollIsAtBottom.current = isAtBottom;
-            }}
-            scrollEventThrottle={16}
-          >
-          <LinearGradient
+      <ScrollView
+        ref={scrollViewRef}
+        style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[1]}
+        keyboardShouldPersistTaps="handled"
+        onScroll={({ nativeEvent }) => {
+            const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+            const isAtBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 20;
+            scrollIsAtBottom.current = isAtBottom;
+        }}
+        scrollEventThrottle={16}
+        
+      >
+        <LinearGradient
             colors={[theme.gradientStart, theme.gradientEnd]}
             style={styles.headerGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-          >
+        >
             <Pressable onPress={() => router.back()} style={styles.backButton}>
-              <Ionicons name="arrow-back-circle-sharp" size={40} color={theme.white} />
+                <Ionicons name="arrow-back-circle-sharp" size={40} color={theme.white} />
             </Pressable>
             <View style={styles.headerContent}>
-              <View style={styles.headerTop}>
-                <ThemedText style={styles.headerTitle}>{serviceRequest.title}</ThemedText>
-                <Pressable style={{flexDirection: 'row-reverse', alignItems: 'center', gap: 4}} onPress={() => copyToClipboard(id as string)}>
-                  <ThemedText style={styles.headerSubtitle}>#{id}</ThemedText>
-                  <Ionicons name="copy-outline" size={22} color={theme.white} style={{ opacity: 0.8 }} />
-                </Pressable>
-              </View>
-              <View style={styles.badgeContainer}>
-                <View style={[styles.badge, getStatusBadgeColor(serviceRequest.status).view]}>
-                  <ThemedText style={[styles.badgeText, getStatusBadgeColor(serviceRequest.status).text]}>{serviceRequest.status}</ThemedText>
+                <View style={styles.headerTop}>
+                    <ThemedText style={styles.headerTitle}>{serviceRequest.title}</ThemedText>
+                    <Pressable style={{flexDirection: 'row-reverse', alignItems: 'center', gap: 4}} onPress={() => copyToClipboard(id as string)}>
+                        <ThemedText style={styles.headerSubtitle}>#{id}</ThemedText>
+                        <Ionicons name="copy-outline" size={22} color={theme.white} style={{ opacity: 0.8 }} />
+                    </Pressable>
                 </View>
-                <View style={[styles.badge, getPriorityBadgeColor(serviceRequest.priority)]}>
-                  <ThemedText style={styles.badgeText}>{serviceRequest.priority}</ThemedText>
-                  
+                <View style={styles.badgeContainer}>
+                    <View style={[styles.badge, getStatusBadgeColor(serviceRequest.status).view]}>
+                        <ThemedText style={[styles.badgeText, getStatusBadgeColor(serviceRequest.status).text]}>{serviceRequest.status}</ThemedText>
+                    </View>
+                    <View style={[styles.badge, getPriorityBadgeColor(serviceRequest.priority)]}>
+                        <ThemedText style={[styles.badgeText , getTypePriaroityTextStyle(serviceRequest.priority)]}>{serviceRequest.priority}</ThemedText>
+                    </View>
+                    <View style={[styles.badge, getTypePillStyle(serviceRequest.type)]}>
+                        <ThemedText style={[styles.badgeText, getTypePillTextStyle(serviceRequest.type)]}>
+                            {serviceRequest.type}
+                        </ThemedText>
+                    </View>
+                    {isAssignedToCurrentUser && (currentUserResponse === 'pending' || currentUserResponse === 'accepted') && (
+                    <>
+                        <View style={{ height: 1, backgroundColor: '#ccc' , width:"100%" , marginTop:15}} />
+                        <View style={styles.actionsContainer}>
+                        {currentUserResponse === 'pending' && (
+                        <View style={styles.buttonRow}>
+                            <Pressable
+                            style={[styles.button, styles.acceptButton, actionLoading === 'accept' && { opacity: 0.7 }]}
+                            onPress={handleAccept}
+                            disabled={!!actionLoading}
+                            >
+                            {actionLoading === 'accept' ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <>
+                                <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                                <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>قبول</ThemedText>
+                                </>
+                            )}
+                            </Pressable>
+                            <Pressable
+                            style={[styles.button, styles.rejectButton, actionLoading === 'reject' && { opacity: 0.7 }]}
+                            onPress={handleReject}
+                            disabled={!!actionLoading}
+                            >
+                            {actionLoading === 'reject' ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <>
+                                <Ionicons name="close-circle" size={20} color="#fff" />
+                                <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>رفض</ThemedText>
+                                </>
+                            )}
+                            </Pressable>
+                        </View>
+                        )}
+                        {currentUserResponse === 'accepted' && (
+                        <View style={styles.buttonRow}>
+                            <Pressable
+                            style={[styles.button, { backgroundColor: theme.primary || '#007bff' } , !!actionLoading && { opacity: 0.7 }]}
+                            onPress={() => setIsArrivalLogVisible(true)}
+                            disabled={!!actionLoading}
+                            >
+                            <Ionicons name="location-outline" size={20} color="#fff" />
+                            <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>وصلت الموقع</ThemedText>
+                            </Pressable>
+                            <Pressable
+                            style={[styles.button, styles.doneButton , actionLoading === 'markAsDone' && { opacity: 0.7 }]}
+                            onPress={handleMarkAsDone}
+                            disabled={!!actionLoading}
+                            >
+                            {actionLoading === 'markAsDone' ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <>
+                                <Ionicons name="flag" size={20} color="#fff" />
+                                <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>تم إنجاز مهمتي</ThemedText>
+                                </>
+                            )}
+                            </Pressable>
+                        </View>
+                        )}
+                    </View>
+                    </>
+                )}
                 </View>
-            <View style={[styles.badge, getTypePillStyle(serviceRequest.type)]}>
-              <ThemedText style={[styles.badgeText, getTypePillTextStyle(serviceRequest.type)]}>
-                {serviceRequest.type}
-              </ThemedText>
             </View>
-                {isAssignedToCurrentUser && (currentUserResponse === 'pending' || currentUserResponse === 'accepted') && (
-              <>
-                <View style={{ height: 1, backgroundColor: '#ccc' , width:"100%" , marginTop:15}} />
-                <View style={styles.actionsContainer}>
-                {currentUserResponse === 'pending' && (
-                  <View style={styles.buttonRow}>
-                    <Pressable
-                      style={[styles.button, styles.acceptButton, actionLoading === 'accept' && { opacity: 0.7 }]}
-                      onPress={handleAccept}
-                      disabled={!!actionLoading}
-                    >
-                      {actionLoading === 'accept' ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <>
-                          <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                          <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>قبول</ThemedText>
-                        </>
-                      )}
-                    </Pressable>
-                    <Pressable
-                      style={[styles.button, styles.rejectButton, actionLoading === 'reject' && { opacity: 0.7 }]}
-                      onPress={handleReject}
-                      disabled={!!actionLoading}
-                    >
-                      {actionLoading === 'reject' ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <>
-                          <Ionicons name="close-circle" size={20} color="#fff" />
-                          <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>رفض</ThemedText>
-                        </>
-                      )}
-                    </Pressable>
-                  </View>
-                )}
-                {currentUserResponse === 'accepted' && (
-                  <View style={styles.buttonRow}>
-                    <Pressable
-                      style={[styles.button, { backgroundColor: theme.primary || '#007bff' } , !!actionLoading && { opacity: 0.7 }]}
-                      onPress={() => setIsArrivalLogVisible(true)}
-                      disabled={!!actionLoading}
-                    >
-                      <Ionicons name="location-outline" size={20} color="#fff" />
-                      <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>وصلت الموقع</ThemedText>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.button, styles.doneButton , actionLoading === 'markAsDone' && { opacity: 0.7 }]}
-                      onPress={handleMarkAsDone}
-                      disabled={!!actionLoading}
-                    >
-                      {actionLoading === 'markAsDone' ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <>
-                          <Ionicons name="flag" size={20} color="#fff" />
-                          <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>تم إنجاز مهمتي</ThemedText>
-                        </>
-                      )}
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-            
-
-
-
-                  
-                </>
-                )}
-
-               
-              </View>
-            </View>
-          </LinearGradient>
-
-          {/* Modern Tab Bar */}
-          <View style={styles.tabBarContainer}>
+        </LinearGradient>
+        
+        <View style={styles.tabBarContainer}>
             <View style={styles.tabBar}>
-              {/* Animated indicator - with pointerEvents="none" to prevent touch blocking */}
-              <Animated.View
-                style={[
-                  styles.tabIndicator,
-                  {
-                    transform: [{
-                      translateX: slideAnim.interpolate({
-                        inputRange: tabs.map((_, i) => i),
-                        outputRange: tabs.map((_, i) => (width / tabs.length) * i),
-                        extrapolate: 'clamp',
-                      })
-                    }],
-                    width: width / tabs.length - 20,
-                  }
-                ]}
-                pointerEvents="none" // Prevents blocking touch events
-              />
-              
-              {tabs.map((tab, index) => (
-                <Pressable
-                  key={tab.key}
-                  style={styles.tab}
-                  onPressIn={() => {
-                    console.log(`Tab ${index} pressed: ${tab.title}`);
-                    switchTab(index);
-                  }}
-                  hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
-                >
-                  <Ionicons
-                    name={tab.icon as any}
-                    size={20}
-                    color={activeTab === index ? theme.primary : theme.textSecondary}
-                  />
-                  <ThemedText
+                <Animated.View
                     style={[
-                      styles.tabText,
-                      activeTab === index && styles.activeTabText
+                        styles.tabIndicator,
+                        {
+                        transform: [{
+                            translateX: slideAnim.interpolate({
+                                inputRange: tabs.map((_, i) => i),
+                                outputRange: tabs.map((_, i) => (width / tabs.length) * i),
+                                extrapolate: 'clamp',
+                            })
+                        }],
+                        width: width / tabs.length - 20,
+                        }
                     ]}
-                  >
-                    {tab.title}
-                  </ThemedText>
-                </Pressable>
-              ))}
+                    pointerEvents="none"
+                />
+                {tabs.map((tab, index) => (
+                    <Pressable
+                    key={tab.key}
+                    style={styles.tab}
+                    onPress={() => switchTab(index)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                    <Ionicons
+                        name={tab.icon as any}
+                        size={20}
+                        color={activeTab === index ? theme.primary : theme.textSecondary}
+                    />
+                    <ThemedText
+                        style={[
+                        styles.tabText,
+                        activeTab === index && styles.activeTabText
+                        ]}
+                    >
+                        {tab.title}
+                    </ThemedText>
+                    </Pressable>
+                ))}
+            </View>
+        </View>
+
+        <View style={styles.contentContainer}>
+            {renderTabContent()}
+        </View>
+      </ScrollView>
+
+      {activeTabKey === 'comments' && (
+        <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        >
+          <View style={styles.inputSection}>
+            {attachments.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.attachmentPreviewContainer}>
+                  {attachments.map((file, index) => (
+                    <View key={index} style={styles.attachmentPill}>
+                      <Ionicons name={file.mimeType?.startsWith('image/') ? 'image-outline' : 'document-outline'} size={16} color="white" />
+                      <Text style={styles.attachmentText} numberOfLines={1}>{file.name}</Text>
+                      <TouchableOpacity onPress={() => setAttachments(prev => prev.filter((_, i) => i !== index))} style={styles.removeAttachment}>
+                        <Ionicons name="close" size={16} color="white" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+              </ScrollView>
+            )}
+            <View style={styles.inputContainer}>
+                {/* START: Modified Attachment Section */}
+                <TouchableOpacity onPress={() => setIsAttachmentMenuVisible(p => !p)} disabled={isDisabled} style={[styles.iconButton, isDisabled && styles.disabledButton]}>
+                    <Ionicons name={isAttachmentMenuVisible ? "close" : "add"} size={24} color={isDisabled ? theme.placeholder : theme.primary}/>
+                </TouchableOpacity>
+                
+                {isAttachmentMenuVisible && (
+                  <>
+                    <TouchableOpacity onPress={handlePickImage} disabled={isDisabled} style={[styles.iconButton, isDisabled && styles.disabledButton]}>
+                      <Ionicons name="image-outline" size={24} color={isDisabled ? theme.placeholder : theme.primary}/>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handlePickDocument} disabled={isDisabled} style={[styles.iconButton, isDisabled && styles.disabledButton]}>
+                      <Ionicons name="document-attach-outline" size={24} color={isDisabled ? theme.placeholder : theme.primary}/>
+                    </TouchableOpacity>
+                  </>
+                )}
+                {/* END: Modified Attachment Section */}
+
+              <TextInput
+                style={[styles.input, { textAlign: 'right' }, isDisabled && styles.disabledInput]}
+                value={newComment}
+                onChangeText={setNewComment}
+                placeholder={isDisabled ? 'المحادثة مغلقة' : ''}
+                placeholderTextColor={theme.placeholder}
+                multiline
+              />
+              <TouchableOpacity
+                onPress={handleCommentSubmit}
+                disabled={isDisabled || (!newComment.trim() && attachments.length === 0)}
+                style={[styles.sendButton, (isDisabled || (!newComment.trim() && attachments.length === 0)) && styles.disabledSendButton]}
+              >
+                {isSubmittingComment ? (
+                  <ActivityIndicator size="small" color={theme.white} />
+                ) : (
+                  <Ionicons name="send" size={20} color={theme.white} />
+                )}
+              </TouchableOpacity>
             </View>
           </View>
-
-          <View style={styles.contentContainer}>
-            {renderTabContent()}
-          </View>
-        </ScrollView>
         </KeyboardAvoidingView>
-      </SafeAreaView>
-
-
+      )}
+      
       <Modal
         animationType="slide"
         transparent={true}
@@ -1199,22 +1354,20 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
     activeTabText: {
       color: theme.primary,
     },
-    contentScrollView: {
-      flex: 1,
-    },
     contentContainer: {
-      paddingBottom: 0,
+      padding: 10,
+      
     },
     detailsContainer: {
       backgroundColor: theme.card,
       borderRadius: 12,
-      padding: 8,
       marginBottom: 16,
       shadowColor: shadowColor,
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.05,
       shadowRadius: 4,
       elevation: 2,
+      padding: 15
     },
     detailsTitle: {
       fontSize: 18,
@@ -1236,20 +1389,6 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       color: theme.textSecondary,
       textAlign: 'right',
       flex: 1,
-    },
-    loadingUserText: {
-      textAlign: 'center',
-      color: theme.textSecondary,
-      fontSize: 16,
-      marginTop: 20,
-      fontFamily: 'Cairo',
-    },
-    subscribersText: {
-      textAlign: 'center',
-      color: theme.textSecondary,
-      fontSize: 16,
-      marginTop: 20,
-      fontFamily: 'Cairo',
     },
     searchInput: {
         height: 50,
@@ -1360,7 +1499,81 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
     timeUnitButtonTextSelected: {
       color: theme.white,
       fontWeight: 'bold',
-    }
+    },
+    // Styles for the new input bar section
+    inputSection: {
+        backgroundColor: theme.card,
+        borderTopWidth: 1,
+        borderTopColor: theme.border,
+        paddingBottom: Platform.OS === 'ios' ? 20 : 20, 
+    },
+    attachmentPreviewContainer: {
+        paddingHorizontal: 16,
+        paddingTop: 8,
+        maxHeight: 60
+    },
+    attachmentPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.primary,
+        borderRadius: 20,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        marginRight: 8,
+        maxWidth: 200,
+    },
+    attachmentText: {
+        color: theme.white,
+        fontSize: 12,
+        marginHorizontal: 6,
+        flex: 1,
+    },
+    removeAttachment: {
+        padding: 2,
+    },
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        paddingHorizontal: 16,
+        paddingTop: 8,
+        paddingBottom: 8,
+        gap: 8,
+    },
+    input: {
+        flex: 1,
+        backgroundColor: theme.inputBackground,
+        borderRadius: 20,
+        paddingHorizontal: 16,
+        paddingTop: Platform.OS === 'ios' ? 12 : 8,
+        paddingBottom: Platform.OS === 'ios' ? 12 : 8,
+        fontSize: 16,
+        color: theme.text,
+        maxHeight: 100,
+        borderWidth: 1,
+        borderColor: theme.border,
+    },
+    disabledInput: {
+        backgroundColor: theme.border,
+    },
+    iconButton: {
+        padding: 8,
+        marginBottom: 4,
+    },
+    sendButton: {
+        backgroundColor: theme.primary,
+        borderRadius: 20,
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    disabledButton: {
+        opacity: 0.5,
+    },
+    disabledSendButton: {
+        backgroundColor: theme.border,
+    },
   });
 };
 

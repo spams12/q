@@ -5,6 +5,9 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
   SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -44,6 +47,10 @@ const LoginScreen: React.FC = () => {
   };
 
   return (
+    <KeyboardAvoidingView
+    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={{ flex: 1 }}
+    >
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.content}>
@@ -54,10 +61,8 @@ const LoginScreen: React.FC = () => {
 
         <View style={styles.imageContainer}>
           {/* Placeholder for illustration */}
-          <View style={styles.imagePlaceholder} />
-          {/* When you have the image, you can use:
-          <Image source={require('@/assets/images/your-login-image.png')} style={styles.image} /> 
-          */}
+            <Image source={require('@/assets/images/logo.png')} style={styles.image} /> 
+         
         </View>
 
         <View style={styles.formContainer}>
@@ -98,6 +103,7 @@ const LoginScreen: React.FC = () => {
         </View>
       </View>
     </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 };
 

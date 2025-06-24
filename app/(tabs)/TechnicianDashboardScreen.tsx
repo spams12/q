@@ -32,7 +32,7 @@ import {
 import { db } from "../../lib/firebase";
 
 // ICONS
-import { Clock, Inbox, ListChecks, Search, Zap } from "lucide-react-native";
+import { CheckCircle, Clock, Inbox, ListChecks, Search, TrendingDown, TrendingUp } from "lucide-react-native";
 
 // CONTEXT & TYPES
 import { useTheme } from "../../context/ThemeContext";
@@ -157,6 +157,16 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
     };
     return [styles.badge, statusStyles[status] || styles.badgeGray];
   };
+    const getStatusBadgeTextStyle = (status: string) => {
+    const statusStyles: { [key: string]: object } = {
+      "مفتوح": styles.badgeBlue,
+      "قيد المعالجة": styles.textbadgeYellow,
+      "مكتمل": styles.badgeGreen,
+      "مغلق": styles.badgeGray,
+      "معلق": styles.badgePurple
+    };
+    return [ statusStyles[status]];
+  };
 
   return (
     <Animated.View
@@ -182,7 +192,7 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
             <View style={styles.ticketTitleContainer}>
               <Text style={styles.ticketTitle} numberOfLines={1}>{ticket.title}</Text>
               <View style={getStatusBadgeStyle(ticket.status)}>
-                <Text style={styles.badgeText}>{ticket.status}</Text>
+                <Text style={[styles.badgeText,getStatusBadgeTextStyle(ticket.status)]}>{ticket.status}</Text>
               </View>
             </View>
             <Text style={styles.ticketCustomer}>العميل: {ticket.customerName}</Text>
@@ -252,38 +262,67 @@ const PerformanceSummaryCard = ({ tasks, styles }: { tasks: ServiceRequest[], st
     const { onTimePercentage, latePercentage, onTimeCount, lateCount, averageCompletionTime } = performanceStats;
 
     return (
-        <View style={styles.card}>
-            <View style={styles.performanceHeader}>
-                <View style={styles.performanceIconContainer}>
-                    <Zap size={22} color="#F59E0B" />
-                </View>
-                <Text style={styles.performanceTitle}>مؤشر الأداء (SLA)</Text>
-            </View>
-            <View style={styles.avgTimeContainer}>
-                <Text style={styles.avgTimeText}>متوسط وقت الإنجاز</Text>
-                <Text style={styles.avgTimeValue}>{averageCompletionTime} دقيقة</Text>
-            </View>
-            <View style={styles.progressBarsContainer}>
-                <View style={styles.progressBarContainer}>
-                    <View style={styles.progressBarHeader}>
-                        <Text style={styles.progressBarTitle}>الإنجاز في الوقت المحدد</Text>
-                        <Text style={styles.progressBarCount}>{onTimeCount} ({onTimePercentage}%)</Text>
-                    </View>
-                    <View style={styles.progressBarTrack}>
-                        <View style={[styles.progressBarFill, { width: `${onTimePercentage}%`, backgroundColor: '#10B981' }]} />
-                    </View>
-                </View>
-                <View style={styles.progressBarContainer}>
-                    <View style={styles.progressBarHeader}>
-                        <Text style={styles.progressBarTitle}>المهام المتأخرة</Text>
-                        <Text style={styles.progressBarCount}>{lateCount} ({latePercentage}%)</Text>
-                    </View>
-                    <View style={styles.progressBarTrack}>
-                        <View style={[styles.progressBarFill, { width: `${latePercentage}%`, backgroundColor: '#EF4444' }]} />
-                    </View>
-                </View>
-            </View>
+        <View style={styles.container}>
+  <View style={styles.header}>
+    <Text style={styles.headerTitle}>مؤشر الأداء (SLA)</Text>
+    <Text style={styles.viewAll}>عرض الكل</Text>
+  </View>
+  
+  <View style={styles.avgTimeSection}>
+    <View style={styles.avgTimeContainer}>
+      <Text style={styles.avgTimeText}>متوسط وقت الإنجاز</Text>
+      <Text style={styles.avgTimeValue}>{averageCompletionTime} دقيقة</Text>
+    </View>
+  </View>
+  
+  <View style={styles.cardsContainer}>
+    <View style={[styles.card, styles.onTimeCard]}>
+      <View style={styles.cardContent}>
+        <View style={styles.cardIcon}>
+          <CheckCircle size={24} color="#FFFFFF" />
         </View>
+        <Text style={styles.cardTitle}>الإنجاز في الوقت المحدد</Text>
+        <Text style={styles.projectCount}>{onTimeCount} مهمة</Text>
+      </View>
+      <View style={styles.bottomSection}>
+        <View style={styles.progressSection}>
+          <Text style={styles.percentage}>{onTimePercentage}%</Text>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${onTimePercentage}%` }]} />
+          </View>
+        </View>
+        <View style={styles.iconSection}>
+          <View style={styles.successIcon}>
+            <TrendingUp size={20} color="#10B981" />
+          </View>
+        </View>
+      </View>
+    </View>
+
+    <View style={[styles.card, styles.lateCard]}>
+      <View style={styles.cardContent}>
+        <View style={styles.cardIcon}>
+          <Clock size={24} color="#FFFFFF" />
+        </View>
+        <Text style={styles.cardTitle}>المهام المتأخرة</Text>
+        <Text style={styles.projectCount}>{lateCount} مهمة</Text>
+      </View>
+      <View style={styles.bottomSection}>
+        <View style={styles.progressSection}>
+          <Text style={styles.percentage}>{latePercentage}%</Text>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${latePercentage}%` }]} />
+          </View>
+        </View>
+        <View style={styles.iconSection}>
+          <View style={styles.warningIcon}>
+            <TrendingDown size={20} color="#EF4444" />
+          </View>
+        </View>
+      </View>
+    </View>
+  </View>
+</View>
     );
 };
 
@@ -664,93 +703,147 @@ const getStyles = (theme: any, width: number) => {
       opacity: 0.08,
     },
     // PerformanceSummaryCard styles
-    card: {
-      backgroundColor: theme.card,
-      borderRadius: 16,
-      padding: 20,
-      marginBottom: 24,
-      shadowColor: theme.shadow,
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.05,
-      shadowRadius: 12,
-      elevation: 3,
-    },
-    performanceHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 20,
-      justifyContent: 'flex-start',
-    },
-    performanceIconContainer: {
-      backgroundColor: 'rgba(255, 193, 7, 0.1)',
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginRight: 12,
-    },
-    performanceTitle: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      color: theme.text,
-      fontFamily: 'Cairo',
-    },
-    avgTimeContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 12,
-        borderTopWidth: 1,
-        borderBottomWidth: 1,
-        borderColor: theme.border,
-        marginTop: 20,
-        marginBottom: 20,
-    },
-    avgTimeText: {
-        fontSize: 16,
-        color: theme.textSecondary,
-        fontFamily: 'Cairo',
-    },
-    avgTimeValue: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: theme.text,
-        fontFamily: 'Cairo',
-    },
-    progressBarsContainer: {
-      gap: 18,
-    },
-    progressBarContainer: {
-      width: '100%',
-    },
-    progressBarHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 8,
-      alignItems: 'center',
-    },
-    progressBarTitle: {
-      fontSize: 14,
-      color: theme.textSecondary,
-      fontFamily: 'Cairo',
-    },
-    progressBarCount: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: theme.text,
-      fontFamily: 'Cairo',
-    },
-    progressBarTrack: {
-      height: 8,
-      backgroundColor: theme.border,
-      borderRadius: 4,
-      overflow: 'hidden',
-    },
-    progressBarFill: {
-      height: '100%',
-      borderRadius: 4,
-    },
+   container: {
+    backgroundColor: theme.card,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    shadowColor: theme.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme.text,
+    fontFamily: 'Cairo',
+  },
+  viewAll: {
+    fontSize: 14,
+    color: theme.textSecondary,
+    fontFamily: 'Cairo',
+  },
+  avgTimeSection: {
+    marginBottom: 20,
+  },
+  avgTimeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: theme.border,
+  },
+  avgTimeText: {
+    fontSize: 16,
+    color: theme.textSecondary,
+    fontFamily: 'Cairo',
+  },
+  avgTimeValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: theme.text,
+    fontFamily: 'Cairo',
+  },
+  cardsContainer: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  card: {
+    flex: 1,
+    borderRadius: 16,
+    padding: 16,
+    minHeight: 160,
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  onTimeCard: {
+    backgroundColor: '#10B981', // Green for on-time tasks
+  },
+  lateCard: {
+    backgroundColor: '#EF4444', // Red for late tasks
+  },
+  cardContent: {
+    marginBottom: 'auto',
+  },
+  cardIcon: {
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 4,
+    fontFamily: 'Cairo',
+    textAlign: 'right',
+  },
+  projectCount: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontFamily: 'Cairo',
+    textAlign: 'right',
+  },
+  bottomSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginTop: 16,
+  },
+  progressSection: {
+    flex: 1,
+    marginRight: 12,
+  },
+  percentage: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 6,
+    fontFamily: 'Cairo',
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 2,
+  },
+  iconSection: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  warningIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
     // TaskList styles
     taskListContainer: {
       backgroundColor: theme.card,
@@ -920,6 +1013,7 @@ const getStyles = (theme: any, width: number) => {
       color: '#FFFFFF',
       fontFamily: 'Cairo',
     },
+    textbadgeYellow: {color:"black"},
     badgeBlue: { backgroundColor: '#3B82F6' },
     badgeYellow: { backgroundColor: '#F59E0B' },
     badgeGreen: { backgroundColor: '#10B981' },

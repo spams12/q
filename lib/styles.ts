@@ -12,7 +12,7 @@ export const getStatusBadgeColor = (status: string) => {
 export const getPriorityBadgeColor = (priority: string) => {
     switch (priority) {
       case "منخفضة": return { backgroundColor: "#22c55e" };
-      case "متوسطة": return { backgroundColor: "#eab308" };
+      case "متوسطة": return { backgroundColor: "#019EBF" };
       case "عالية": return { backgroundColor: "#f97316" };
       case "حرجة": return { backgroundColor: "#ef4444" };
       default: return { backgroundColor: "#6b7280" };

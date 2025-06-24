@@ -27,10 +27,10 @@ const CustomHeader = (props: CustomHeaderProps) => {
     <View style={[styles.container, { backgroundColor: theme.header, borderBottomColor: theme.border }]}>
       {/* Left side: Avatar */}
       <View style={styles.leftContainer}>
-        <Image
-          source={{ uri: userdoc?.photoURL }}
-          style={styles.avatar}
-        />
+        
+         <TouchableOpacity onPress={() => router.push('/notifications')} style={styles.iconButton}>
+          <Ionicons name="notifications-outline" size={24} color={theme.icon} />
+        </TouchableOpacity>
       </View>
 
       {/* Center: Title */}
@@ -40,11 +40,13 @@ const CustomHeader = (props: CustomHeaderProps) => {
 
       {/* Right side: Icons */}
       <View style={styles.rightContainer}>
+        <Image
+          source={{ uri: userdoc?.photoURL }}
+          style={styles.avatar}
+        />
 
 
-        <TouchableOpacity onPress={() => router.push('/notifications')} style={styles.iconButton}>
-          <Ionicons name="notifications-outline" size={24} color={theme.icon} />
-        </TouchableOpacity>
+       
       </View>
     </View>
   );

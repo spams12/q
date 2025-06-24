@@ -1616,7 +1616,7 @@ function InvoiceForm({
             styles.buttonSecondary,
             pressed && styles.buttonSecondaryPressed,
           ]}
-          onPressIn={onCancel}
+          onPress={onCancel}
         >
           <Feather name="arrow-right" size={18} color={theme.white} />
           <Text style={styles.buttonText}>العودة</Text>
@@ -1646,20 +1646,15 @@ function InvoiceForm({
         contentContainerStyle={styles.contentContainer}
         keyboardShouldPersistTaps="handled"
       >
+       
         <View style={styles.header}>
           <Text style={styles.headerTitle}>إنشاء فاتورة</Text>
           <Text style={styles.headerSubtitle}>
             للتذكرة #{ticketId.substring(0, 6)}
           </Text>
-        </View>
-
-        {/* --- Items Card --- */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>عناصر الفاتورة</Text>
             {!showItemForm && (
               <Pressable
-                onPressIn={() => setShowItemForm(true)}
+                onPress={() => setShowItemForm(true)}
                 style={({ pressed }) => [
                   styles.button,
                   styles.buttonPrimary,
@@ -1670,7 +1665,49 @@ function InvoiceForm({
                 <Text style={styles.buttonText}>إضافة عنصر</Text>
               </Pressable>
             )}
-          </View>
+        </View>
+             <View style={styles.footer}>
+        <Pressable
+          onPress={onCancel}
+          style={({ pressed }) => [
+            styles.button,
+            styles.buttonSecondary,
+            pressed && styles.buttonSecondaryPressed,
+          ]}
+        >
+          <Text style={styles.buttonText}>إلغاء</Text>
+        </Pressable>
+        <Pressable
+          onPress={handleSaveInvoice}
+          disabled={items.length === 0 || submitting}
+          style={({ pressed }) => [
+            styles.button,
+            styles.buttonPrimary,
+            styles.buttonLarge,
+            (items.length === 0 || submitting) && styles.buttonDisabled,
+            pressed &&
+              !(items.length === 0 || submitting) &&
+              styles.buttonPrimaryPressed,
+          ]}
+        >
+          {submitting ? (
+            <ActivityIndicator color={theme.white} />
+          ) : (
+            <>
+              <Feather name="save" size={20} color={theme.white} />
+              <Text style={styles.buttonText}>حفظ الفاتورة</Text>
+            </>
+          )}
+        </Pressable>
+      </View>
+
+        {/* --- Items Card --- */}
+  <View style={styles.card}>
+    
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>عناصر الفاتورة</Text>
+          
+          </View> 
 
           {items.length > 0 ? (
             <View style={styles.itemListContainer}>
@@ -1696,7 +1733,7 @@ function InvoiceForm({
                     {item.totalPrice.toLocaleString()} د.ع
                   </Text>
                   <Pressable
-                    onPressIn={() => removeItem(item.id)}
+                    onPress={() => removeItem(item.id)}
                     style={styles.deleteButton}
                   >
                     <Feather name="x" size={20} color={theme.placeholder} />
@@ -1724,14 +1761,13 @@ function InvoiceForm({
               </Text>
             </View>
           )}
-        </View>
+        </View>}
 
-        {/* --- Add Item Form (appears inside a card) --- */}
         {showItemForm && (
           <View style={[styles.card, styles.itemFormCard]}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>إضافة عنصر جديد</Text>
-              <Pressable onPressIn={cancelItemForm} style={styles.cancelButton}>
+              <Pressable onPress={cancelItemForm} style={styles.cancelButton}>
                 <Feather name="x" size={22} color={theme.placeholder} />
               </Pressable>
             </View>
@@ -1768,7 +1804,7 @@ function InvoiceForm({
 
             <View style={styles.formActions}>
               <Pressable
-                onPressIn={addItem}
+                onPress={addItem}
                 disabled={isAddItemDisabled}
                 style={({ pressed }) => [
                   styles.button,
@@ -1790,44 +1826,12 @@ function InvoiceForm({
             </View>
           </View>
         )}
+     
 
 
       </ScrollView>
 
-      <View style={styles.footer}>
-        <Pressable
-          onPressIn={onCancel}
-          style={({ pressed }) => [
-            styles.button,
-            styles.buttonSecondary,
-            pressed && styles.buttonSecondaryPressed,
-          ]}
-        >
-          <Text style={styles.buttonText}>إلغاء</Text>
-        </Pressable>
-        <Pressable
-          onPressIn={handleSaveInvoice}
-          disabled={items.length === 0 || submitting}
-          style={({ pressed }) => [
-            styles.button,
-            styles.buttonPrimary,
-            styles.buttonLarge,
-            (items.length === 0 || submitting) && styles.buttonDisabled,
-            pressed &&
-              !(items.length === 0 || submitting) &&
-              styles.buttonPrimaryPressed,
-          ]}
-        >
-          {submitting ? (
-            <ActivityIndicator color={theme.white} />
-          ) : (
-            <>
-              <Feather name="save" size={20} color={theme.white} />
-              <Text style={styles.buttonText}>حفظ الفاتورة</Text>
-            </>
-          )}
-        </Pressable>
-      </View>
+     
 
       {/* --- Stock Check Modal --- */}
       <Modal
@@ -1879,7 +1883,7 @@ function InvoiceForm({
                 missingItems.some((item) => item.type === "general") &&
                   styles.buttonDisabled,
               ]}
-              onPressIn={closeMissingItemsDialog}
+              onPress={closeMissingItemsDialog}
               disabled={missingItems.some((item) => item.type === "general")}
             >
               <Text style={styles.buttonText}>فهمت</Text>
@@ -1911,23 +1915,17 @@ const getStyles = (theme: Theme, themeName: "light" | "dark") =>
       backgroundColor: theme.background,
     },
     footer: {
-      position: "absolute",
-      bottom: 0,
-      left: 0,
-      right: 0,
       flexDirection: "row-reverse",
       justifyContent: "space-between",
       alignItems: "center",
-      padding: 16,
-      paddingBottom: Platform.OS === "ios" ? 32 : 16,
-      backgroundColor: theme.card,
-      borderTopWidth: 1,
       borderTopColor: theme.border,
+      gap:20,
+      marginBottom:15
     },
 
     // --- Header ---
     header: {
-      marginBottom: 24,
+      marginBottom: 5,
       paddingHorizontal: 8,
     },
     headerTitle: {
@@ -2408,7 +2406,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
         { marginVertical: 16, alignSelf: "flex-end" },
         pressed && styles.buttonPrimaryPressed,
       ]}
-      onPressIn={() => setShowInvoiceForm(true)}
+      onPress={() => setShowInvoiceForm(true)}
     >
       <Feather
         name="plus-circle"

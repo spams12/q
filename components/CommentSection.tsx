@@ -1,30 +1,23 @@
 import { format } from 'date-fns';
 import { enGB } from 'date-fns/locale';
-import * as DocumentPicker from 'expo-document-picker';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   Image,
-  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
-  StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
-  View
+  View,
 } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '../context/ThemeContext';
-import { storage } from '../lib/firebase';
 import { Comment, User } from '../lib/types';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -65,10 +58,6 @@ interface CommentSectionProps {
   comments: Comment[];
   users: User[];
   currentUserId: string;
-  ticketStatus: string;
-  currentUserResponse: 'pending' | 'accepted' | 'rejected' | 'completed' | null;
-  onAddComment: (comment: Partial<Comment>) => Promise<void>;
-  ticketId: string;
 }
 
 const AttachmentVideoPreview: React.FC<{ mediaUrl: string; style: any }> = ({ mediaUrl, style }) => {
@@ -96,8 +85,7 @@ const AutoSizedImage: React.FC<{
             setAspectRatio(1);
           }
         },
-        (error) => {
-          console.warn(`Failed to get image size for ${uri}:`, error);
+        () => {
           setAspectRatio(1); // Fallback to square on error
         }
       );
@@ -105,7 +93,6 @@ const AutoSizedImage: React.FC<{
   }, [uri]);
 
   if (aspectRatio === null) {
-    // Render a placeholder with a fixed height while loading dimensions.
     return <View style={[style, { height: 250, backgroundColor: '#f0f0f0', borderRadius: 12 }]} />;
   }
 
@@ -122,14 +109,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   comments,
   users,
   currentUserId,
-  ticketStatus,
-  currentUserResponse,
-  onAddComment,
-  ticketId,
 }) => {
-  const [commentsState, setCommentsState] = useState(comments);
-  const [newComment, setNewComment] = useState('');
-  const [attachments, setAttachments] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
@@ -138,10 +118,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const { theme } = useTheme();
   const styles = getStyles(theme);
 
-  useEffect(() => {
-    setCommentsState(comments);
-  }, [comments]);
-
   const modalPlayer = useVideoPlayer(selectedVideo || '', (player) => {
     if (selectedVideo) {
       player.play();
@@ -149,7 +125,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({
     }
   });
 
-  // Reset modal state when modal closes
   useEffect(() => {
     if (!modalVisible) {
       setSelectedImage(null);
@@ -161,7 +136,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 
   const navigateImage = useCallback(
     (direction: 'next' | 'prev') => {
-      // Add bounds checking to prevent crashes
       if (!allImages.length) return;
       
       let newIndex = selectedImageIndex;
@@ -171,11 +145,9 @@ const CommentSection: React.FC<CommentSectionProps> = ({
       } else if (direction === 'prev' && selectedImageIndex > 0) {
         newIndex = selectedImageIndex - 1;
       } else {
-        // If at bounds, do nothing
         return;
       }
 
-      // Ensure the new index is valid
       if (newIndex >= 0 && newIndex < allImages.length && allImages[newIndex]) {
         setSelectedImageIndex(newIndex);
         setSelectedImage(allImages[newIndex]);
@@ -188,7 +160,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({
     () =>
       Gesture.Pan()
         .onEnd(event => {
-          // Add checks to prevent crashes
           if (!modalVisible || !selectedImage || allImages.length <= 1) {
             return;
           }
@@ -196,131 +167,36 @@ const CommentSection: React.FC<CommentSectionProps> = ({
           const threshold = 50;
           if (Math.abs(event.translationX) > threshold) {
             if (event.translationX < -threshold) {
-              // Swipe left (next image)
               navigateImage('next');
             } else if (event.translationX > threshold) {
-              // Swipe right (previous image)
               navigateImage('prev');
             }
           }
         })
-        .failOffsetY([-50, 50]), // Prevent conflict with vertical scrolling
+        .failOffsetY([-50, 50]),
     [modalVisible, selectedImage, allImages.length, navigateImage]
   );
 
   const getUser = (userId: string) => users.find(u => u.id === userId);
-  console.log('Current User ID:', currentUserId);
   
-  // Filter and sort comments
-  const filteredAndSortedComments = commentsState
+  const filteredAndSortedComments = useMemo(() => comments
     .filter(comment => {
       const content = comment.content || '';
       if (comment.isStatusChange || (content.startsWith('قام') && content.includes('بتغيير حالة التكت من'))) {
         return false;
       }
-      const keywordsToHide = ['قبلت المهمة', 'رفضت المهمة', 'بتغيير عنوان التذكرة', 'بإلغاء إسناد التذكرة', 'بإسناد التذكرة إلى'];
+      const keywordsToHide = ['قبلت المهمة', 'رفضت المهمة', 'بتغيير عنوان التذكرة', 'بإلغاء إسناد التذكرة', 'بإسناد التذكرة إلى', 'قبل المستخدم', 'رفض المستخدم'];
       if (keywordsToHide.some(keyword => content.includes(keyword))) {
         return false;
       }
       return true;
     })
-    .sort((a, b) => getCommentDate(a.timestamp).getTime() - getCommentDate(b.timestamp).getTime());
-
-  const handlePickDocument = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
-        multiple: true,
-      });
-
-      if (!result.canceled && result.assets) {
-        setAttachments(prev => [...prev, ...result.assets]);
-      }
-    } catch (err) {
-      console.error('Error picking document:', err);
-    }
-  };
-
-  const handleCommentSubmit = async () => {
-    if (!newComment.trim() && attachments.length === 0) return;
-
-    const tempId = `optimistic-${Date.now()}`;
-    const optimisticComment: any = {
-      id: tempId,
-      content: newComment.trim(),
-      userId: currentUserId,
-      userName: users.find(u => u.uid === currentUserId)?.name || 'مستخدم غير معروف',
-      timestamp: new Date().toISOString(),
-      attachments: attachments.map(a => ({
-        downloadURL: a.uri, // Use local URI for immediate display
-        fileName: a.name,
-        mimeType: a.mimeType,
-        size: a.size,
-        fileUrl: a.uri,
-      })),
-      isOptimistic: true,
-    };
-
-    setCommentsState(prev => [...prev, optimisticComment]);
-
-    const commentToSave = newComment;
-    const attachmentsToSave = attachments;
-
-    setNewComment('');
-    setAttachments([]);
-
-    try {
-      const uploadedAttachments: {
-        downloadURL: string;
-        fileName: string;
-        mimeType?: string;
-        size?: number;
-      }[] = [];
-
-      if (attachmentsToSave.length > 0) {
-        for (const asset of attachmentsToSave) {
-          const response = await fetch(asset.uri);
-          const blob = await response.blob();
-          const storageRef = ref(storage, `attachments/${ticketId}/${Date.now()}-${asset.name}`);
-          await uploadBytes(storageRef, blob);
-          const downloadURL = await getDownloadURL(storageRef);
-          uploadedAttachments.push({
-            downloadURL,
-            fileName: asset.name,
-            mimeType: asset.mimeType,
-            size: asset.size,
-          });
-        }
-      }
-
-      const newCommentData: Partial<Comment> = {
-        content: commentToSave.trim(),
-        userId: currentUserId,
-        userName: users.find(u => u.uid === currentUserId)?.name || 'مستخدم غير معروف',
-        timestamp: new Date().toISOString(),
-        attachments: uploadedAttachments,
-      };
-
-      await onAddComment(newCommentData);
-    } catch (error) {
-      console.error('Failed to submit comment:', error);
-      // Revert optimistic update
-      setCommentsState(prev => prev.filter(c => c.id !== tempId));
-      // Restore user input
-      setNewComment(commentToSave);
-      setAttachments(attachmentsToSave);
-    }
-  };
-
-  const isDisabled = ticketStatus === 'مكتمل' || ticketStatus === 'مغلق'  || currentUserResponse === 'completed' || currentUserResponse === 'rejected' || currentUserResponse !== 'accepted';
+    .sort((a, b) => getCommentDate(a.timestamp).getTime() - getCommentDate(b.timestamp).getTime()),
+    [comments]
+  );
 
   const handleImagePress = (imageUrl: string, images: string[], index: number) => {
-    // Validate inputs before setting state
-    if (!imageUrl || !Array.isArray(images) || images.length === 0) {
-      console.warn('Invalid image data provided to handleImagePress');
-      return;
-    }
-
+    if (!imageUrl || !Array.isArray(images) || images.length === 0) return;
     const validIndex = Math.max(0, Math.min(index, images.length - 1));
     
     setSelectedImage(imageUrl);
@@ -331,10 +207,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   };
 
   const handleVideoPress = (videoUrl: string) => {
-    if (!videoUrl) {
-      console.warn('Invalid video URL provided to handleVideoPress');
-      return;
-    }
+    if (!videoUrl) return;
     
     setSelectedVideo(videoUrl);
     setSelectedImage(null);
@@ -345,17 +218,10 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 
   const closeModal = () => {
     setModalVisible(false);
-    // Let useEffect handle the cleanup
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={100}
-    >
-      <TouchableWithoutFeedback onPress={() => {}} accessible={false}>
-        <View style={styles.container}>
-      
+    <View style={styles.container}>
       <Modal
         animationType="fade"
         transparent={true}
@@ -364,17 +230,12 @@ const CommentSection: React.FC<CommentSectionProps> = ({
       >
         <GestureHandlerRootView style={{ flex: 1 }}>
           <View style={styles.modalOverlay}>
-            <StatusBar barStyle="light-content" backgroundColor="black" />
-
             {selectedImage ? (
               <GestureDetector gesture={pan}>
                 <Image
                   source={{ uri: selectedImage }}
                   style={styles.fullscreenImage}
                   resizeMode="contain"
-                  onError={() => {
-                    console.warn('Failed to load image:', selectedImage);
-                  }}
                 />
               </GestureDetector>
             ) : selectedVideo ? (
@@ -386,7 +247,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({
               />
             ) : null}
 
-            {/* Header with close button */}
             <View style={styles.modalHeader}>
               <TouchableOpacity
                 style={styles.modalButton}
@@ -396,7 +256,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({
               </TouchableOpacity>
             </View>
 
-            {/* Image navigation indicators */}
             {selectedImage && allImages.length > 1 && (
               <View style={styles.imageCounter}>
                 <Text style={styles.imageCounterText}>
@@ -414,7 +273,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             <Ionicons name="chatbubbles-outline" size={48} color={theme.textSecondary} style={{ opacity: 0.5 }} />
             <Text style={styles.emptyCommentsText}>لا توجد تعليقات بعد</Text>
             <Text style={styles.emptyCommentsSubText}>
-              {isDisabled ? 'المحادثة مغلقة.' : 'كن أول من يضيف تعليقًا!'}
+              كن أول من يضيف تعليقًا!
             </Text>
           </View>
         ) : (
@@ -435,23 +294,20 @@ const CommentSection: React.FC<CommentSectionProps> = ({
               return isImage;
             });
 
-          // Collect all images in this comment for modal navigation
           const commentImages = comment.attachments?.filter(att => {
             const isImage = att.fileType === 'image' || (att.mimeType && att.mimeType.startsWith('image/'));
             return isImage || /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName);
-          }).map(att => att.fileUrl || att.downloadURL).filter((url): url is string => !!url) || [];
+          }).map(att => att.downloadURL).filter((url): url is string => !!url) || [];
 
           return (
             <View
               key={comment.id}
               style={[
                 styles.messageRow,
-                isCurrentUser ? styles.messageRowRight : styles.messageRowLeft,
-                (comment as any).isOptimistic && { opacity: 0.6 },
+                isCurrentUser ? styles.messageRowRight : styles.messageRowLeft
               ]}
             >
-              {/* Avatar for other users */}
-              
+              {!isCurrentUser && (
                 <View style={styles.avatarContainer}>
                   {user?.photoURL ? (
                     <Image source={{ uri: user.photoURL }} style={styles.avatar} />
@@ -464,9 +320,8 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                   )}
                   {!isImageOnlyComment && <View style={[styles.avatarTail, !isCurrentUser && styles.avatarTailLeft]} />}
                 </View>
-              
+              )}
 
-              {/* Message bubble */}
               <View
                 style={[
                   styles.commentBubble,
@@ -474,12 +329,10 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                   isImageOnlyComment && styles.imageOnlyBubble,
                 ]}
               >
-                {/* User name (only for other users or in group chats) */}
-              
+                {!isCurrentUser && (
                   <Text style={styles.userName}>{userName}</Text>
-             
+                )}
                 
-                {/* Message content */}
                 {comment.content ? (
                   <Text style={[
                     styles.messageText,
@@ -489,17 +342,16 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                   </Text>
                 ) : null}
 
-                {/* Attachments */}
                 {comment.attachments && comment.attachments.length > 0 && (
                   <View style={[styles.attachmentsContainer, isImageOnlyComment && { marginTop: 0, gap: 2 }]}>
                     {comment.attachments.map((att, index) => {
                       const isImage = att.fileType === 'image' || (att.mimeType ? att.mimeType.startsWith('image/') : /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
                       const isVideo = att.fileType === 'video' || (att.mimeType ? att.mimeType.startsWith('video/') : /\.(mp4|mov|avi|mkv)$/i.test(att.fileName));
-                      const mediaUrl = att.fileUrl || att.downloadURL;
+                      const mediaUrl = att.downloadURL;
 
                       return (
                         <TouchableOpacity
-                          key={mediaUrl || index}
+                          key={index}
                           onPress={() => {
                             if (isImage && mediaUrl) {
                               const currentImageIndex = commentImages.indexOf(mediaUrl);
@@ -527,7 +379,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                                   <Image
                                     source={{ uri: mediaUrl }}
                                     style={styles.attachmentImage}
-                                    resizeMode="contain"
+                                    resizeMode="cover"
                                   />
                                   <View style={styles.imageOverlay}>
                                     <Ionicons name="expand-outline" size={20} color="white" />
@@ -551,9 +403,9 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                                 <Text style={styles.fileName} numberOfLines={1}>
                                   {att.fileName}
                                 </Text>
-                                {(att.fileSize || att.size) && (
+                                {(att.size) && (
                                   <Text style={styles.fileSize}>
-                                    {(((att.fileSize || att.size) ?? 0) / 1024).toFixed(1)} كيلوبايت
+                                    {((att.size) / 1024).toFixed(1)} كيلوبايت
                                   </Text>
                                 )}
                               </View>
@@ -565,19 +417,15 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                     })}
                   </View>
                 )}
-
-                {/* Timestamp */}
                 <Text style={[
                   styles.timestamp,
                   isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp,
                   isImageOnlyComment && styles.imageOnlyTimestamp,
                 ]}>
-                 {(comment as any).isOptimistic ? "Sending..." : format(commentDate, isImageOnlyComment ? 'hh:mm a' : 'yyyy/MM/dd hh:mm a', { locale: enGB })}
+                 {format(commentDate, isImageOnlyComment ? 'hh:mm a' : 'yyyy/MM/dd hh:mm a', { locale: enGB })}
                </Text>
              </View>
-
-             {/* Tail for current user */}
-              {isCurrentUser && (
+             {isCurrentUser && (
                 <View style={styles.avatarContainer}>
                   {!isImageOnlyComment && <View style={[styles.avatarTail, styles.avatarTailRight]} />}
                 </View>
@@ -587,95 +435,19 @@ const CommentSection: React.FC<CommentSectionProps> = ({
           })
         )}
       </View>
-
-      {/* Input section */}
-      <View style={styles.inputSection}>
-        {/* Attachment preview */}
-        {attachments.length > 0 && (
-          <View style={styles.attachmentPreviewContainer}>
-            <View>
-              {attachments.map((file, index) => (
-                <View key={file.uri} style={styles.attachmentPill}>
-                  <Ionicons 
-                    name={file.mimeType?.startsWith('image/') ? 'image-outline' : 'document-outline'} 
-                    size={16} 
-                    color="white" 
-                  />
-                  <Text style={styles.attachmentText} numberOfLines={1}>
-                    {file.name}
-                  </Text>
-                  <TouchableOpacity 
-                    onPress={() => setAttachments(prev => prev.filter(p => p.uri !== file.uri))}
-                    style={styles.removeAttachment}
-                  >
-                    <Ionicons name="close" size={16} color="white" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={[styles.input, { textAlign: 'right' }, isDisabled && styles.disabledInput]}
-            value={newComment}
-            onChangeText={setNewComment}
-            placeholder={isDisabled ? 'المحادثة مغلقة' : 'اكتب رسالتك هنا...'}
-            placeholderTextColor={theme.placeholder}
-            multiline
-            textAlignVertical="center"
-            blurOnSubmit={false}
-            returnKeyType="default"
-            onSubmitEditing={() => {}}
-            editable={!isDisabled}
-          />
-          
-          <TouchableOpacity
-            onPress={handlePickDocument}
-            disabled={isDisabled}
-            style={[styles.iconButton, isDisabled && styles.disabledButton]}
-          >
-            <Ionicons 
-              name="attach" 
-              size={24} 
-              color={isDisabled ? theme.placeholder : theme.primary}
-            />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            onPress={handleCommentSubmit}
-            disabled={isDisabled || (!newComment.trim() && attachments.length === 0)}
-            style={[
-              styles.sendButton,
-              isDisabled && styles.disabledSendButton,
-              (newComment.trim() || attachments.length > 0) && !isDisabled && styles.activeSendButton
-            ]}
-           
-          >
-            <Ionicons 
-              name="send" 
-              size={20} 
-              color={isDisabled ? theme.placeholder : theme.white}
-            />
-          </TouchableOpacity>
-        </View>
-      </View>
-      </View>
-    </TouchableWithoutFeedback>
-    </KeyboardAvoidingView>
+    </View>
   );
 };
 
 const getStyles = (theme: any) => StyleSheet.create({
+  // --- The only change is here ---
   container: {
     backgroundColor: theme.background,
-    borderRadius: 12,
   },
+  // --- End of change ---
   commentsList: {
-    paddingVertical: 12,
+    paddingVertical: 0,
     paddingHorizontal:8,
-    paddingBottom: 20,
   },
   messageRow: {
     flexDirection: 'row',
@@ -692,6 +464,8 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   avatarContainer: {
     position: 'relative',
+    justifyContent: 'flex-end',
+    height: 36,
   },
   avatar: {
     width: 36,
@@ -747,8 +521,6 @@ const getStyles = (theme: any) => StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
     borderRadius: 12,
-    borderBottomRightRadius: 12,
-    borderBottomLeftRadius: 12,
   },
   currentUserBubble: {
     backgroundColor: theme.blueTint,
@@ -764,7 +536,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     fontSize: 12,
     color: theme.primary,
     marginBottom: 4,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   messageText: {
     fontSize: 16,
@@ -777,7 +549,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   otherUserText: {
     color: theme.text,
-
+    textAlign: 'left',
   },
   attachmentsContainer: {
     marginTop: 8,
@@ -791,14 +563,13 @@ const getStyles = (theme: any) => StyleSheet.create({
     position: 'relative',
   },
   attachmentImage: {
-    width: screenWidth * 0.6,
+    width: screenWidth * 0.4,
     height: 250,
     borderRadius: 12,
     backgroundColor: theme.inputBackground,
   },
   fullWidthImage: {
-    width: screenWidth * 0.7,
-    // height is now determined by the image's aspect ratio
+    width: screenWidth * 0.4,
     backgroundColor: 'transparent',
     borderRadius: 12,
   },
@@ -864,82 +635,12 @@ const getStyles = (theme: any) => StyleSheet.create({
   otherUserTimestamp: {
     color: theme.textSecondary,
   },
-  inputSection: {
-    backgroundColor: theme.card,
-    borderTopWidth: 1,
-    borderTopColor: theme.border,
-  },
-  attachmentPreviewContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-  },
-  attachmentPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.primary,
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
-    maxWidth: 200,
-  },
-  attachmentText: {
-    color: theme.white,
-    fontSize: 12,
-    marginHorizontal: 6,
-    flex: 1,
-  },
-  removeAttachment: {
-    padding: 2,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    padding: 16,
-    gap: 8,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: theme.inputBackground,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: theme.text,
-    maxHeight: 100,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  disabledInput: {
-    backgroundColor: theme.border,
-  },
-  iconButton: {
-    padding: 8,
-    borderRadius: 20,
-  },
-  sendButton: {
-    backgroundColor: theme.primary,
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  activeSendButton: {
-    backgroundColor: theme.primary,
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  disabledSendButton: {
-    backgroundColor: theme.border,
-  },
   emptyCommentsContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    minHeight: 150,
+    minHeight: 200,
   },
   emptyCommentsText: {
     marginTop: 16,
@@ -963,7 +664,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   modalHeader: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 40 : 20,
+    top: Platform.OS === 'ios' ? 50 : 20,
     left: 10,
     zIndex: 1,
   },

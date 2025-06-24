@@ -11,7 +11,6 @@ import 'react-native-reanimated';
 import { PermissionsProvider } from '../context/PermissionsContext';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import { auth, db } from '../lib/firebase';
-
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -60,9 +59,10 @@ function RootLayoutNav() {
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="family" options={{ headerBackTitle: "رجوع", }}/>
         <Stack.Screen name="about" options={{ headerBackTitle: "رجوع",}}/>
-
+        <Stack.Screen name="invoices" options={{ headerBackTitle: "رجوع",}}/>
       </Stack>
     </View>
+
   );
 }
 

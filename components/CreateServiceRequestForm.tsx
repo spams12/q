@@ -1,7 +1,7 @@
 import { usePermissions } from "@/context/PermissionsContext";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "expo-router";
-import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
+import { collection, doc, getDocs, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { ChevronDown, Plus, X } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -382,54 +382,64 @@ export default function CreateServiceRequestForm({
 
   const ticketType = watch("type");
 
-  const handleAddTicket = async (values: FormValues) => {
-    if (!realuserUid) return;
-    setIsSubmitting(true);
-    try {
-      const ticketData: any = {
-        customerName: values.customerName,
-        customerEmail: values.customerEmail || "",
-        customerPhone: values.customerPhone,
-        title: values.title,
-        description: values.description,
-        type: values.type,
-        status: "مفتوح",
-        priority: values.priority,
-        date: serverTimestamp(),
-        createdAt: serverTimestamp(),
-        lastUpdated: serverTimestamp(),
-        assignedUsers: selectedUserIds,
-        creatorId: realuserUid,
-        creatorName: userName || "",
-        senttouser: false,
-      };
+const handleAddTicket = async (values: FormValues) => {
+  if (!realuserUid) return;
+  setIsSubmitting(true);
+  
+  try {
+    // Generate 8-digit numeric ID
+    const generateNumericId = () => {
+      return Math.floor(10000000 + Math.random() * 90000000).toString();
+    };
+    
+    const ticketId = generateNumericId();
+    
+    const ticketData: any = {
+      customerName: values.customerName,
+      customerEmail: values.customerEmail || "",
+      customerPhone: values.customerPhone,
+      title: values.title,
+      description: values.description,
+      type: values.type,
+      status: "مفتوح",
+      priority: values.priority,
+      date: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      lastUpdated: serverTimestamp(),
+      assignedUsers: selectedUserIds,
+      creatorId: realuserUid,
+      creatorName: userName || "",
+      senttouser: false,
+    };
 
-      if (values.type === "جباية") { // Matched to new value
-        ticketData.subscribers = subscribers.map(sub => ({
-          subscriberId: sub.id,
-          name: sub.name,
-          phone: sub.phone,
-          zoneNumber: sub.zoneNumber,
-          packageType: sub.packageType,
-          price: sub.price,
-          serviceType: sub.serviceType,
-          isPaid: false,
-        }));
-      }
-
-      await addDoc(collection(db, "serviceRequests"), ticketData);
-      
-      reset();
-      setSelectedUserIds([]);
-      setSubscribers([{ id: uuidv4(), name: "", phone: "", zoneNumber: "", packageType: "", price: "", serviceType: "" }]);
-      router.push('/(tabs)/my-requests');
-      onSuccess();
-    } catch (error) {
-      console.error("Error adding ticket:", error);
-    } finally {
-      setIsSubmitting(false);
+    if (values.type === "جباية") { // Matched to new value
+      ticketData.subscribers = subscribers.map(sub => ({
+        subscriberId: sub.id,
+        name: sub.name,
+        phone: sub.phone,
+        zoneNumber: sub.zoneNumber,
+        packageType: sub.packageType,
+        price: sub.price,
+        serviceType: sub.serviceType,
+        isPaid: false,
+      }));
     }
-  };
+
+    // Use doc() with custom ID instead of addDoc()
+    await setDoc(doc(db, "serviceRequests", ticketId), ticketData);
+    
+    reset();
+    setSelectedUserIds([]);
+    setSubscribers([{ id: uuidv4(), name: "", phone: "", zoneNumber: "", packageType: "", price: "", serviceType: "" }]);
+    router.push('/(tabs)/my-requests');
+    onSuccess();
+  } catch (error) {
+    console.error("Error adding ticket:", error);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
 
   const addSubscriber = useCallback(() => {
     setSubscribers(prev => [...prev, { id: uuidv4(), name: "", phone: "", zoneNumber: "", packageType: "", price: "", serviceType: "" }]);
