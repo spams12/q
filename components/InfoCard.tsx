@@ -28,8 +28,8 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({ item, viewableItems, has
 pathname: "/tasks/[id]",
 params: {
 id: item.id,
-}
-})
+showActions: showActions
+}})
 
   };
 
@@ -52,8 +52,7 @@ id: item.id,
       case 'request':
       case 'طلب':
         return {
-          backgroundColor: theme.blueTint,
-          borderWidth: 1,
+          backgroundColor: theme.statusDefault,
           borderColor: theme.primary,
         };
       case 'complaint':

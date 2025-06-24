@@ -93,7 +93,11 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
 });
 
 const TicketDetailPage = () => {
-  const { id } = useLocalSearchParams();
+  
+  const params = useLocalSearchParams();
+  const id = params.id
+  const showActions = params.showActions
+ 
   const router = useRouter();
   const { user } = useFirebaseAuth();
   const { theme, themeName } = useTheme();
@@ -216,8 +220,9 @@ const TicketDetailPage = () => {
         if (userdoc) {
           setIsAssignedToCurrentUser(data.assignedUsers?.includes(userdoc.id) ?? false);
           const response = data.userResponses?.find(r => r.userId === userdoc.id);
+          console.log(response)
           if (data.creatorId === userdoc.uid) {
-            setCurrentUserResponse('accepted');
+            setCurrentUserResponse(response ? response.response : "pending")
           } else {
             setCurrentUserResponse(response ? response.response : 'pending');
           }
@@ -316,7 +321,7 @@ const TicketDetailPage = () => {
 
         const data = sfDoc.data() as ServiceRequest;
         const newUserResponses = data.userResponses ? [...data.userResponses] : [];
-        const userResponseIndex = newUserResponses.findIndex(res => res.userId === user.uid);
+        const userResponseIndex = newUserResponses.findIndex(res => res.userId === userdoc.id);
 
         if (userResponseIndex > -1) {
           newUserResponses[userResponseIndex].response = 'accepted';
@@ -369,7 +374,7 @@ const TicketDetailPage = () => {
 
             const data = sfDoc.data() as ServiceRequest;
             const newUserResponses = data.userResponses ? [...data.userResponses] : [];
-            const userResponseIndex = newUserResponses.findIndex(res => res.userId === user.uid);
+            const userResponseIndex = newUserResponses.findIndex(res => res.userId === userdoc.id);
 
             if (userResponseIndex > -1) {
                 newUserResponses[userResponseIndex].response = 'rejected';
@@ -627,7 +632,7 @@ const handlePickImage = async () => {
     const ticketId = id as string;
     if (!userdoc) return;
     const currentUserDocId = userdoc.id;
-    const userName = user.displayName || 'Unknown';
+    const userName = userdoc.name || 'Unknown';
 
     setActionLoading('markAsDone');
     try {
@@ -718,14 +723,14 @@ const handlePickImage = async () => {
   };
 
   const handleLogArrival = async (estimatedDuration: number, timeUnit: 'minutes' | 'hours') => {
-    if (!id || !user) {
+    if (!id || !user || !userdoc) {
         Alert.alert("خطأ", "البيانات المطلوبة غير متوفرة لتسجيل الوصول.");
         return;
     }
 
     const ticketId = id as string;
-    const currentUserDocId = user.uid;
-    const userName = user.displayName || 'Unknown';
+    const currentUserDocId = userdoc.id;
+    const userName = userdoc.name || 'Unknown';
 
     const estimatedTimeInMinutes = timeUnit === 'hours' ? estimatedDuration * 60 : estimatedDuration;
     const unitText = timeUnit === 'hours' ? 'ساعة' : 'دقيقة';
@@ -979,71 +984,88 @@ const handlePickImage = async () => {
                             {serviceRequest.type}
                         </ThemedText>
                     </View>
-                    {isAssignedToCurrentUser && (currentUserResponse === 'pending' || currentUserResponse === 'accepted') && (
-                    <>
-                        <View style={{ height: 1, backgroundColor: '#ccc' , width:"100%" , marginTop:15}} />
-                        <View style={styles.actionsContainer}>
-                        {currentUserResponse === 'pending' && (
-                        <View style={styles.buttonRow}>
-                            <Pressable
-                            style={[styles.button, styles.acceptButton, actionLoading === 'accept' && { opacity: 0.7 }]}
-                            onPress={handleAccept}
-                            disabled={!!actionLoading}
-                            >
-                            {actionLoading === 'accept' ? (
-                                <ActivityIndicator color="#fff" />
-                            ) : (
-                                <>
-                                <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                                <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>قبول</ThemedText>
-                                </>
-                            )}
-                            </Pressable>
-                            <Pressable
-                            style={[styles.button, styles.rejectButton, actionLoading === 'reject' && { opacity: 0.7 }]}
-                            onPress={handleReject}
-                            disabled={!!actionLoading}
-                            >
-                            {actionLoading === 'reject' ? (
-                                <ActivityIndicator color="#fff" />
-                            ) : (
-                                <>
-                                <Ionicons name="close-circle" size={20} color="#fff" />
-                                <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>رفض</ThemedText>
-                                </>
-                            )}
-                            </Pressable>
-                        </View>
-                        )}
-                        {currentUserResponse === 'accepted' && (
-                        <View style={styles.buttonRow}>
-                            <Pressable
-                            style={[styles.button, { backgroundColor: theme.primary || '#007bff' } , !!actionLoading && { opacity: 0.7 }]}
-                            onPress={() => setIsArrivalLogVisible(true)}
-                            disabled={!!actionLoading}
-                            >
-                            <Ionicons name="location-outline" size={20} color="#fff" />
-                            <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>وصلت الموقع</ThemedText>
-                            </Pressable>
-                            <Pressable
-                            style={[styles.button, styles.doneButton , actionLoading === 'markAsDone' && { opacity: 0.7 }]}
-                            onPress={handleMarkAsDone}
-                            disabled={!!actionLoading}
-                            >
-                            {actionLoading === 'markAsDone' ? (
-                                <ActivityIndicator color="#fff" />
-                            ) : (
-                                <>
-                                <Ionicons name="flag" size={20} color="#fff" />
-                                <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>تم إنجاز مهمتي</ThemedText>
-                                </>
-                            )}
-                            </Pressable>
-                        </View>
-                        )}
-                    </View>
-                    </>
-                )}
+                    
+                    {isAssignedToCurrentUser && 
+                        (currentUserResponse === 'pending' || currentUserResponse === 'accepted') && 
+                        serviceRequest.status !== 'مكتمل' && 
+                        serviceRequest.status !== 'مغلق' && 
+                    (
+                        <>
+                            <View style={{ height: 1, backgroundColor: '#ccc', width: "100%", marginTop: 15 }} />
+                            <View style={styles.actionsContainer}>
+
+                                {/* Stage 1: Pending Acceptance -> "قبول المهمه" full width */}
+                                {currentUserResponse === 'pending' && (
+                                    <View style={{ marginTop: 16, flexDirection: 'row' }}>
+                                        <Pressable
+                                            style={[styles.button, styles.acceptButton, actionLoading === 'accept' && { opacity: 0.7 }]}
+                                            onPress={handleAccept}
+                                            disabled={!!actionLoading}
+                                        >
+                                            {actionLoading === 'accept' ? (
+                                                <ActivityIndicator color="#fff" />
+                                            ) : (
+                                                <>
+                                                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                                                    <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>قبول المهمه</ThemedText>
+                                                </>
+                                            )}
+                                        </Pressable>
+                                    </View>
+                                )}
+
+                                {/* Stage 2: Accepted, not arrived -> "وصلت الى الموقع" full width */}
+                                {currentUserResponse === 'accepted' && !serviceRequest.onLocation && (
+                                    <View style={{ marginTop: 16, flexDirection: 'row' }}>
+                                        <Pressable
+                                            style={[styles.button, { backgroundColor: theme.primary || '#007bff' }, !!actionLoading && { opacity: 0.7 }]}
+                                            onPress={() => setIsArrivalLogVisible(true)}
+                                            disabled={!!actionLoading}
+                                        >
+                                            <Ionicons name="location-outline" size={20} color="#fff" />
+                                            <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>وصلت الى الموقع</ThemedText>
+                                        </Pressable>
+                                    </View>
+                                )}
+
+                                {/* Stage 3: Accepted and Arrived -> "كملت المهمه" and "رفض المهمه" side by side */}
+                                {currentUserResponse === 'accepted' && serviceRequest.onLocation && (
+                                    <View style={styles.buttonRow}>
+                                        <Pressable
+                                            style={[styles.button, styles.doneButton, actionLoading === 'markAsDone' && { opacity: 0.7 }]}
+                                            onPress={handleMarkAsDone}
+                                            disabled={!!actionLoading}
+                                        >
+                                            {actionLoading === 'markAsDone' ? (
+                                                <ActivityIndicator color="#fff" />
+                                            ) : (
+                                                <>
+                                                    <Ionicons name="flag" size={20} color="#fff" />
+                                                    <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>كملت المهمه</ThemedText>
+                                                </>
+                                            )}
+                                        </Pressable>
+                                        <Pressable
+                                            style={[styles.button, styles.rejectButton, actionLoading === 'reject' && { opacity: 0.7 }]}
+                                            onPress={handleReject}
+                                            disabled={!!actionLoading}
+                                        >
+                                            {actionLoading === 'reject' ? (
+                                                <ActivityIndicator color="#fff" />
+                                            ) : (
+                                                <>
+                                                    <Ionicons name="close-circle" size={20} color="#fff" />
+                                                    <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>فشلت المهمه</ThemedText>
+                                                </>
+                                            )}
+                                        </Pressable>
+                                    </View>
+                                )}
+                            </View>
+                        </>
+                    )}
+                    {/* MODIFICATION END */}
+
                 </View>
             </View>
         </LinearGradient>
@@ -1116,7 +1138,6 @@ const handlePickImage = async () => {
               </ScrollView>
             )}
             <View style={styles.inputContainer}>
-                {/* START: Modified Attachment Section */}
                 <TouchableOpacity onPress={() => setIsAttachmentMenuVisible(p => !p)} disabled={isDisabled} style={[styles.iconButton, isDisabled && styles.disabledButton]}>
                     <Ionicons name={isAttachmentMenuVisible ? "close" : "add"} size={24} color={isDisabled ? theme.placeholder : theme.primary}/>
                 </TouchableOpacity>
@@ -1131,7 +1152,6 @@ const handlePickImage = async () => {
                     </TouchableOpacity>
                   </>
                 )}
-                {/* END: Modified Attachment Section */}
 
               <TextInput
                 style={[styles.input, { textAlign: 'right' }, isDisabled && styles.disabledInput]}
@@ -1410,7 +1430,7 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
     buttonRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      gap: 28,
+      gap: 16, // Adjusted gap for better visuals
       marginTop: 16,
     },
     button: {
@@ -1433,7 +1453,8 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
     },
     buttonText: {
       color: theme.white,
-      fontSize: 14,
+      fontSize: 16, // Slightly larger for better readability
+      fontWeight: 'bold', // Make text bolder
       marginLeft: 8,
       fontFamily: 'Cairo',
       flexShrink: 1,
@@ -1445,7 +1466,7 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       backgroundColor: theme.destructive,
     },
     doneButton: {
-      backgroundColor: "green",
+      backgroundColor: theme.success, // Changed to green for consistency
     },
     centeredView: {
       flex: 1,

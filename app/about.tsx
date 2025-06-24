@@ -42,7 +42,7 @@ const AboutPage: React.FC = () => {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>تم التطوير بـ ❤️</Text>
+        <Text style={styles.footerText}>تم التطوير بواسطة فريق تطوير القبس ❤️</Text>
       </View>
     </ScrollView>
   );

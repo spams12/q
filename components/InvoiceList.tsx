@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable, // Changed from TouchableOpacity
@@ -1641,11 +1642,19 @@ function InvoiceForm({
 
   return (
     <>
-      <ScrollView
+      <KeyboardAvoidingView
+      style={{flex:1}}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+
+      >
+        <ScrollView
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
+
         keyboardShouldPersistTaps="handled"
-      >
+
+        >
        
         <View style={styles.header}>
           <Text style={styles.headerTitle}>إنشاء فاتورة</Text>
@@ -1701,135 +1710,118 @@ function InvoiceForm({
         </Pressable>
       </View>
 
-        {/* --- Items Card --- */}
-  <View style={styles.card}>
-    
+      {items.length > 0 && (
+        <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>عناصر الفاتورة</Text>
-          
-          </View> 
+          </View>
 
-          {items.length > 0 ? (
-            <View style={styles.itemListContainer}>
-              {items.map((item, index) => (
-                <View
-                  key={item.id}
-                  style={[
-                    styles.itemRow,
-                    index === items.length - 1 && styles.itemRowLast,
-                  ]}
-                >
-                  <View style={styles.itemRowDetails}>
-                    <Text style={styles.itemDescription}>
-                      {item.description}
-                    </Text>
-                    <Text style={styles.itemMeta}>
-                      {`الكمية: ${
-                        item.quantity
-                      }  ·  السعر: ${item.unitPrice.toLocaleString()} د.ع`}
-                    </Text>
-                  </View>
-                  <Text style={styles.itemTotal}>
-                    {item.totalPrice.toLocaleString()} د.ع
-                  </Text>
-                  <Pressable
-                    onPress={() => removeItem(item.id)}
-                    style={styles.deleteButton}
-                  >
-                    <Feather name="x" size={20} color={theme.placeholder} />
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          ) : (
-            !showItemForm && (
-              <View style={styles.emptyStateContainer}>
-                <Feather name="file-text" size={48} color={theme.border} />
-                <Text style={styles.emptyStateText}>لا توجد عناصر بعد</Text>
-                <Text style={styles.emptyStateSubText}>
-                  إضغط على &apos;إضافة عنصر&apos; للبدء
-                </Text>
-              </View>
-            )
-          )}
-
-          {items.length > 0 && (
-            <View style={styles.totalContainer}>
-              <Text style={styles.totalLabel}>المجموع الكلي</Text>
-              <Text style={styles.totalValue}>
-                {calculateTotal().toLocaleString()} د.ع
-              </Text>
-            </View>
-          )}
-        </View>}
-
-        {showItemForm && (
-          <View style={[styles.card, styles.itemFormCard]}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>إضافة عنصر جديد</Text>
-              <Pressable onPress={cancelItemForm} style={styles.cancelButton}>
-                <Feather name="x" size={22} color={theme.placeholder} />
-              </Pressable>
-            </View>
-            <Text style={styles.label}>نوع العنصر</Text>
-            <CustomDropdown
-              selectedValue={currentItem.type}
-              onValueChange={(itemValue) => handleItemTypeChange(itemValue)}
-              placeholder="اختر نوع العنصر..."
-              items={[
-                { label: "تنصيب مشترك جديد", value: "newCustomerInstallation" },
-                { label: "صيانة مشترك", value: "maintenance" },
-                { label: "نقليات", value: "transportationFee" },
-                { label: "صرفيات", value: "expenseReimbursement" },
-                { label: "تجديد اشتراك", value: "subscriptionRenewal" },
-                { label: "عنصر مخصص", value: "customItem" },
-              ]}
-            />
-
-            <RenderItemSpecificFields
-              currentItem={currentItem}
-              setCurrentItem={setCurrentItem}
-              invoiceSettings={invoiceSettings!}
-              customCableLength={customCableLength}
-              handleCustomCableLengthInputChange={
-                handleCustomCableLengthInputChange
-              }
-              handlePackageTypeChange={handlePackageTypeChange}
-              handleCableLengthChange={handleCableLengthChange}
-              handleDeviceModelChange={handleDeviceModelChange}
-              handleMaintenanceTypeChange={handleMaintenanceTypeChange}
-              styles={styles}
-              theme={theme}
-            />
-
-            <View style={styles.formActions}>
-              <Pressable
-                onPress={addItem}
-                disabled={isAddItemDisabled}
-                style={({ pressed }) => [
-                  styles.button,
-                  styles.buttonPrimary,
-                  styles.buttonFullWidth,
-                  isAddItemDisabled && styles.buttonDisabled,
-                  pressed &&
-                    !isAddItemDisabled &&
-                    styles.buttonPrimaryPressed,
+          <View style={styles.itemListContainer}>
+            {items.map((item, index) => (
+              <View
+                key={item.id}
+                style={[
+                  styles.itemRow,
+                  index === items.length - 1 && styles.itemRowLast,
                 ]}
               >
-                <Feather
-                  name="plus-circle"
-                  size={20}
-                  color={theme.white}
-                />
-                <Text style={styles.buttonText}>إضافة العنصر للفاتورة</Text>
-              </Pressable>
-            </View>
+                <View style={styles.itemRowDetails}>
+                  <Text style={styles.itemDescription}>{item.description}</Text>
+                  <Text style={styles.itemMeta}>
+                    {`الكمية: ${
+                      item.quantity
+                    }  ·  السعر: ${item.unitPrice.toLocaleString()} د.ع`}
+                  </Text>
+                </View>
+                <Text style={styles.itemTotal}>
+                  {item.totalPrice.toLocaleString()} د.ع
+                </Text>
+                <Pressable
+                  onPress={() => removeItem(item.id)}
+                  style={styles.deleteButton}
+                >
+                  <Feather name="x" size={20} color={theme.placeholder} />
+                </Pressable>
+              </View>
+            ))}
           </View>
-        )}
-     
+
+          <View style={styles.totalContainer}>
+            <Text style={styles.totalLabel}>المجموع الكلي</Text>
+            <Text style={styles.totalValue}>
+              {calculateTotal().toLocaleString()} د.ع
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {showItemForm && (
+        <View style={[styles.card, styles.itemFormCard]}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>إضافة عنصر جديد</Text>
+            <Pressable onPress={cancelItemForm} style={styles.cancelButton}>
+              <Feather name="x" size={22} color={theme.placeholder} />
+            </Pressable>
+          </View>
+          <Text style={styles.label}>نوع العنصر</Text>
+          <CustomDropdown
+            selectedValue={currentItem.type}
+            onValueChange={(itemValue) => handleItemTypeChange(itemValue)}
+            placeholder="اختر نوع العنصر..."
+            items={[
+              { label: "تنصيب مشترك جديد", value: "newCustomerInstallation" },
+              { label: "صيانة مشترك", value: "maintenance" },
+              { label: "نقليات", value: "transportationFee" },
+              { label: "صرفيات", value: "expenseReimbursement" },
+              { label: "تجديد اشتراك", value: "subscriptionRenewal" },
+              { label: "عنصر مخصص", value: "customItem" },
+            ]}
+          />
+
+          <RenderItemSpecificFields
+            currentItem={currentItem}
+            setCurrentItem={setCurrentItem}
+            invoiceSettings={invoiceSettings!}
+            customCableLength={customCableLength}
+            handleCustomCableLengthInputChange={
+              handleCustomCableLengthInputChange
+            }
+            handlePackageTypeChange={handlePackageTypeChange}
+            handleCableLengthChange={handleCableLengthChange}
+            handleDeviceModelChange={handleDeviceModelChange}
+            handleMaintenanceTypeChange={handleMaintenanceTypeChange}
+            styles={styles}
+            theme={theme}
+          />
+
+          <View style={styles.formActions}>
+            <Pressable
+              onPress={addItem}
+              disabled={isAddItemDisabled}
+              style={({ pressed }) => [
+                styles.button,
+                styles.buttonPrimary,
+                styles.buttonFullWidth,
+                isAddItemDisabled && styles.buttonDisabled,
+                pressed &&
+                  !isAddItemDisabled &&
+                  styles.buttonPrimaryPressed,
+              ]}
+            >
+              <Feather
+                name="plus-circle"
+                size={20}
+                color={theme.white}
+              />
+              <Text style={styles.buttonText}>إضافة العنصر للفاتورة</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+     </ScrollView>
 
 
-      </ScrollView>
+      </KeyboardAvoidingView>
 
      
 
@@ -1919,14 +1911,13 @@ const getStyles = (theme: Theme, themeName: "light" | "dark") =>
       justifyContent: "space-between",
       alignItems: "center",
       borderTopColor: theme.border,
-      gap:20,
+      gap:5,
       marginBottom:15
     },
 
     // --- Header ---
     header: {
       marginBottom: 5,
-      paddingHorizontal: 8,
     },
     headerTitle: {
       fontSize: 32,

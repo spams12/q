@@ -48,7 +48,7 @@ const TabButton = React.memo(({ tabKey, label, isActive, isLoading, onPress, the
       isActive && styles.activeTab,
       isActive && { backgroundColor: theme.background }
     ]}
-    onPressIn={() => onPress(tabKey)}
+    onPress={() => onPress(tabKey)}
   >
     <View style={styles.tabContent}>
       <Text style={[

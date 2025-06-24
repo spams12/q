@@ -20,7 +20,6 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        
         tabBarButton: (props) => {
           return (
             <HapticTab

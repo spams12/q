@@ -388,7 +388,7 @@ const ListHeader = React.memo(({
                     <TabButton title="الكل" isActive={selectedTab === 'all'} onPress={() => handleTabChange('all')} styles={styles} />
                     <TabButton title="قيد التنفيذ" isActive={selectedTab === 'pending'} onPress={() => handleTabChange('pending')} styles={styles} />
                     <TabButton title="مكتملة" isActive={selectedTab === 'completed'} onPress={() => handleTabChange('completed')} styles={styles} />
-                    <TabButton title="مرفوضة" isActive={selectedTab === 'rejected'} onPress={() => handleTabChange('rejected')} styles={styles} />
+                    <TabButton title="فاشلة" isActive={selectedTab === 'rejected'} onPress={() => handleTabChange('rejected')} styles={styles} />
                 </View>
             </View>
         </View>
