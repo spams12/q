@@ -1691,7 +1691,6 @@ function InvoiceForm({
           disabled={items.length === 0 || submitting}
           style={({ pressed }) => [
             styles.button,
-            styles.buttonPrimary,
             styles.buttonLarge,
             (items.length === 0 || submitting) && styles.buttonDisabled,
             pressed &&
@@ -1981,6 +1980,7 @@ const getStyles = (theme: Theme, themeName: "light" | "dark") =>
     buttonLarge: {
       flex: 1,
       paddingVertical: 14,
+      backgroundColor:"green"
     },
     buttonFullWidth: {
       width: "100%",

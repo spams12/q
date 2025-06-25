@@ -97,6 +97,7 @@ const TicketDetailPage = () => {
   const params = useLocalSearchParams();
   const id = params.id
   const showActions = params.showActions
+  console.log(showActions)
  
   const router = useRouter();
   const { user } = useFirebaseAuth();
@@ -804,8 +805,19 @@ const handlePickImage = async () => {
     );
   }
 
-  const isDisabled = isSubmittingComment || serviceRequest.status === 'مكتمل' || serviceRequest.status === 'مغلق' || currentUserResponse === 'completed' || currentUserResponse === 'rejected' || currentUserResponse !== 'accepted';
+const isDisabled = 
+  isSubmittingComment || 
+  serviceRequest.status === 'مكتمل' || 
+  serviceRequest.status === 'مغلق' ||
 
+  // The key change is here: explicitly check for the string 'true'
+  (showActions === 'true' && (
+    currentUserResponse === 'completed' ||
+    currentUserResponse === 'rejected' ||
+    currentUserResponse !== 'accepted'
+  ));
+  console.log("isDisabled")
+  console.log(isDisabled)
   const renderTabContent = () => {
     switch (activeTabKey) {
       case 'details':
@@ -1041,7 +1053,7 @@ const handlePickImage = async () => {
                                             ) : (
                                                 <>
                                                     <Ionicons name="flag" size={20} color="#fff" />
-                                                    <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>كملت المهمه</ThemedText>
+                                                    <ThemedText style={styles.buttonText} adjustsFontSizeToFit numberOfLines={1}>انتهت المهمه</ThemedText>
                                                 </>
                                             )}
                                         </Pressable>

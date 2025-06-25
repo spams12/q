@@ -7,12 +7,22 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 interface FilterDialogProps {
   isVisible: boolean;
   onClose: () => void;
+  // Priority
   selectedPriority: string | null;
   setSelectedPriority: (priority: string | null) => void;
+  availablePriorities: string[];
+  // Type
   selectedType: string | null;
   setSelectedType: (type: string | null) => void;
-  clearFilters: () => void;
   availableTypes: string[];
+  // Status
+  selectedStatus: string | null;
+  setSelectedStatus: (status: string | null) => void;
+  availableStatuses: string[];
+  // Actions
+  clearFilters: () => void;
+  // New Prop to control status filter visibility
+  showStatus?: boolean;
 }
 
 const FilterDialog: React.FC<FilterDialogProps> = ({
@@ -20,24 +30,31 @@ const FilterDialog: React.FC<FilterDialogProps> = ({
   onClose,
   selectedPriority,
   setSelectedPriority,
+  availablePriorities = [],
   selectedType,
   setSelectedType,
+  availableTypes = [],
+  selectedStatus,
+  setSelectedStatus,
+  availableStatuses = [],
   clearFilters,
-  availableTypes,
+  showStatus = true, // <-- NEW: Destructure prop with default value
 }) => {
   const { theme } = useTheme();
   const translateY = useSharedValue(Dimensions.get('window').height);
 
   const translations: { [key: string]: string } = {
-    High: 'عالية',
-    Medium: 'متوسطة',
-    Low: 'منخفضة',
-    Problem: 'مشكلة',
-    'New Request': 'طلب جديد',
-    All: 'الكل',
-    Open: 'مفتوح',
-    'In Progress': 'قيد المعالجة',
-    Closed: 'مغلق',
+    'عالية': 'عالية',
+    'متوسطة': 'متوسطة',
+    'منخفضة': 'منخفضة',
+    'مشكلة': 'مشكلة',
+    'طلب جديد': 'طلب جديد',
+    'طلب': 'طلب',
+    'شكوى': 'شكوى',
+    'جديدة': 'جديدة',
+    'قيد التنفيذ': 'قيد التنفيذ',
+    'تم حلها': 'تم حلها',
+    'مغلقة': 'مغلقة',
   };
 
   useEffect(() => {
@@ -70,6 +87,7 @@ const FilterDialog: React.FC<FilterDialogProps> = ({
             </TouchableOpacity>
           </View>
 
+          {/* Priority Section */}
           <Text style={[styles.filterSectionTitle, { color: theme.text }]}>الأولوية</Text>
           <ScrollView
             horizontal
@@ -77,7 +95,7 @@ const FilterDialog: React.FC<FilterDialogProps> = ({
             style={styles.horizontalScrollView}
             contentContainerStyle={styles.filterOptionsContainer}
           >
-            {['High', 'Medium', 'Low'].map(priority => (
+            {availablePriorities.map(priority => (
               <TouchableOpacity
                 key={priority}
                 style={[
@@ -94,8 +112,7 @@ const FilterDialog: React.FC<FilterDialogProps> = ({
                 <Text
                   style={[
                     styles.filterButtonText,
-                    selectedPriority === priority && { color: '#fff' },
-                    { color: theme.text },
+                    selectedPriority === priority ? { color: '#fff' } : { color: theme.text },
                   ]}
                 >
                   {translations[priority] || priority}
@@ -104,6 +121,7 @@ const FilterDialog: React.FC<FilterDialogProps> = ({
             ))}
           </ScrollView>
 
+          {/* Type Section */}
           <Text style={[styles.filterSectionTitle, { color: theme.text }]}>النوع</Text>
           <ScrollView
             horizontal
@@ -128,8 +146,7 @@ const FilterDialog: React.FC<FilterDialogProps> = ({
                 <Text
                   style={[
                     styles.filterButtonText,
-                    selectedType === type && { color: '#fff' },
-                    { color: theme.text },
+                    selectedType === type ? { color: '#fff' } : { color: theme.text },
                   ]}
                 >
                   {translations[type] || type}
@@ -137,6 +154,44 @@ const FilterDialog: React.FC<FilterDialogProps> = ({
               </TouchableOpacity>
             ))}
           </ScrollView>
+          
+          {/* Status Section - Conditionally rendered */}
+          {showStatus && (
+            <>
+              <Text style={[styles.filterSectionTitle, { color: theme.text }]}>الحالة</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.horizontalScrollView}
+                contentContainerStyle={styles.filterOptionsContainer}
+              >
+                {availableStatuses.map(status => (
+                  <TouchableOpacity
+                    key={status}
+                    style={[
+                      styles.filterButton,
+                      selectedStatus === status && {
+                        backgroundColor: theme.tabActive,
+                        borderColor: theme.tabActive,
+                      },
+                      { borderColor: theme.text },
+                    ]}
+                    onPress={() => setSelectedStatus(selectedStatus === status ? null : status)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.filterButtonText,
+                        selectedStatus === status ? { color: '#fff' } : { color: theme.text },
+                      ]}
+                    >
+                      {translations[status] || status}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </>
+          )}
 
           <View style={styles.filterActions}>
             <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
@@ -166,7 +221,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 400,
+    minHeight: 400, // Use minHeight to adapt to content
+    maxHeight: 500, // Use maxHeight to prevent it from being too tall
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,

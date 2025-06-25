@@ -46,6 +46,14 @@ export interface Theme {
   gradientStart: string;
   gradientEnd: string;
   actionsContainerBackground: string;
+
+  // New colors for chat bubbles
+  currentUserBubble: string;
+  otherUserBubble: string;
+  currentUserText: string;
+  otherUserText: string;
+  currentUserTimestamp: string;
+  otherUserTimestamp: string;
 }
 
 // Define the shape of the themes object
@@ -93,6 +101,14 @@ export const themes: Themes = {
     gradientStart: '#667eea',
     gradientEnd: '#764ba2',
     actionsContainerBackground: 'rgba(255,255,255,0.95)',
+
+    // New chat colors for light mode
+    currentUserBubble: '#007AFF',
+    otherUserBubble: '#FFFFFF',
+    currentUserText: '#FFFFFF',
+    otherUserText: '#1C1C1E',
+    currentUserTimestamp: 'rgba(255, 255, 255, 0.75)',
+    otherUserTimestamp: '#8A8A8E',
   },
   dark: {
     background: '#000000',
@@ -131,6 +147,14 @@ export const themes: Themes = {
     gradientStart: '#4c5a99',
     gradientEnd: '#593a78',
     actionsContainerBackground: 'rgba(28, 28, 30, 0.95)',
+
+    // New chat colors for dark mode
+    currentUserBubble: '#3A3A3C',
+    otherUserBubble: '#1C1C1E',
+    currentUserText: '#FFFFFF',
+    otherUserText: '#FFFFFF',
+    currentUserTimestamp: 'rgba(255, 255, 255, 0.75)',
+    otherUserTimestamp: '#8A8A8E',
   },
 };
 

@@ -318,7 +318,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                       </Text>
                     </View>
                   )}
-                  {!isImageOnlyComment && <View style={[styles.avatarTail, !isCurrentUser && styles.avatarTailLeft]} />}
                 </View>
               )}
 
@@ -417,19 +416,16 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                     })}
                   </View>
                 )}
-                <Text style={[
-                  styles.timestamp,
-                  isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp,
-                  isImageOnlyComment && styles.imageOnlyTimestamp,
-                ]}>
-                 {format(commentDate, isImageOnlyComment ? 'hh:mm a' : 'yyyy/MM/dd hh:mm a', { locale: enGB })}
-               </Text>
-             </View>
-             {isCurrentUser && (
-                <View style={styles.avatarContainer}>
-                  {!isImageOnlyComment && <View style={[styles.avatarTail, styles.avatarTailRight]} />}
+                <View style={styles.timestampContainer}>
+                  <Text style={[
+                    styles.timestamp,
+                    isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp,
+                    isImageOnlyComment && styles.imageOnlyTimestamp,
+                  ]}>
+                  {format(commentDate, 'h:m aaa', { locale: enGB })}
+                  </Text>
                 </View>
-              )}
+             </View>
             </View>
           );
           })
@@ -440,20 +436,20 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 };
 
 const getStyles = (theme: any) => StyleSheet.create({
-  // --- The only change is here ---
   container: {
+    flex: 1,
     backgroundColor: theme.background,
   },
-  // --- End of change ---
   commentsList: {
-    paddingVertical: 0,
-    paddingHorizontal:8,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
   },
   messageRow: {
     flexDirection: 'row',
-    marginBottom: 12,
+    marginBottom: 15,
     maxWidth: '85%',
     alignItems: 'flex-end',
+    gap: 8,
   },
   messageRowLeft: {
     alignSelf: 'flex-start',
@@ -463,7 +459,6 @@ const getStyles = (theme: any) => StyleSheet.create({
     flexDirection: 'row-reverse',
   },
   avatarContainer: {
-    position: 'relative',
     justifyContent: 'flex-end',
     height: 36,
   },
@@ -471,7 +466,6 @@ const getStyles = (theme: any) => StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    marginHorizontal: 8,
   },
   avatarFallback: {
     justifyContent: 'center',
@@ -483,37 +477,11 @@ const getStyles = (theme: any) => StyleSheet.create({
     fontWeight: '600',
     fontSize: 12,
   },
-  avatarTail: {
-    position: 'absolute',
-    bottom: 0,
-    width: 0,
-    height: 0,
-    borderStyle: 'solid',
-  },
-  avatarTailLeft: {
-    left: 8,
-    borderRightWidth: 8,
-    borderBottomWidth: 8,
-    borderRightColor: theme.card,
-    borderBottomColor: 'transparent',
-  },
-  avatarTailRight: {
-    right: 8,
-    borderLeftWidth: 8,
-    borderBottomWidth: 8,
-    borderLeftColor: theme.blueTint,
-    borderBottomColor: 'transparent',
-  },
   commentBubble: {
-    padding: 12,
-    borderRadius: 18,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 20,
     maxWidth: '100%',
-    shadowColor: theme.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    position: 'relative',
   },
   imageOnlyBubble: {
     padding: 0,
@@ -523,17 +491,18 @@ const getStyles = (theme: any) => StyleSheet.create({
     borderRadius: 12,
   },
   currentUserBubble: {
-    backgroundColor: theme.blueTint,
-    borderBottomRightRadius: 4,
-
+    backgroundColor: theme.currentUserBubble,
+    borderBottomRightRadius: 5,
   },
   otherUserBubble: {
-    backgroundColor: theme.card,
-    borderBottomLeftRadius: 4,
+    backgroundColor: theme.otherUserBubble,
+    borderBottomLeftRadius: 5,
+    borderWidth: theme.themeName === 'light' ? StyleSheet.hairlineWidth : 0,
+    borderColor: theme.border,
   },
   userName: {
     fontWeight: '600',
-    fontSize: 12,
+    fontSize: 13,
     color: theme.primary,
     marginBottom: 4,
     textAlign: 'left',
@@ -543,12 +512,11 @@ const getStyles = (theme: any) => StyleSheet.create({
     lineHeight: 22,
   },
   currentUserText: {
-    color: theme.text,
-    textAlign: 'right',
-
+    color: theme.currentUserText,
+    textAlign: 'left',
   },
   otherUserText: {
-    color: theme.text,
+    color: theme.otherUserText,
     textAlign: 'left',
   },
   attachmentsContainer: {
@@ -563,23 +531,21 @@ const getStyles = (theme: any) => StyleSheet.create({
     position: 'relative',
   },
   attachmentImage: {
-    width: screenWidth * 0.4,
+    width: screenWidth * 0.6,
     height: 250,
     borderRadius: 12,
     backgroundColor: theme.inputBackground,
   },
   fullWidthImage: {
-    width: screenWidth * 0.4,
+    width: screenWidth * 0.6,
     backgroundColor: 'transparent',
     borderRadius: 12,
   },
   imageOverlay: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 16,
-    padding: 6,
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   videoOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -612,28 +578,32 @@ const getStyles = (theme: any) => StyleSheet.create({
     fontSize: 12,
     color: theme.textSecondary,
   },
+  timestampContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 4,
+  },
   timestamp: {
     fontSize: 11,
-    marginTop: 4,
-    alignSelf: 'flex-end',
   },
   imageOnlyTimestamp: {
     position: 'absolute',
     bottom: 5,
     right: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     color: 'white',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: 10,
     fontSize: 10,
+    overflow: 'hidden',
     zIndex: 1,
   },
   currentUserTimestamp: {
-    color: theme.primary,
+    color: theme.currentUserTimestamp,
   },
   otherUserTimestamp: {
-    color: theme.textSecondary,
+    color: theme.otherUserTimestamp,
   },
   emptyCommentsContainer: {
     flex: 1,

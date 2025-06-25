@@ -7,6 +7,7 @@ import {
   Animated,
   FlatList,
   RefreshControl,
+  ScrollView, // <-- Import ScrollView
   StyleSheet,
   Text,
   TextInput,
@@ -32,7 +33,7 @@ import {
 import { db } from "../../lib/firebase";
 
 // ICONS
-import { CheckCircle, Clock, Inbox, ListChecks, Search, TrendingDown, TrendingUp } from "lucide-react-native";
+import { CheckCircle, Clock, Inbox, ListChecks, Search, TrendingDown, TrendingUp, XCircle } from "lucide-react-native";
 
 // CONTEXT & TYPES
 import { useTheme } from "../../context/ThemeContext";
@@ -57,7 +58,39 @@ const formatTimestamp = (date: any): string => {
   }
 };
 
+// New helper to format duration from milliseconds to a readable string (e.g., "1h 30m")
+const formatDuration = (ms: number) => {
+    if (!ms || ms < 0) return "0 د";
+    const totalMinutes = Math.floor(ms / (1000 * 60));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours > 0 && minutes > 0) {
+        return `${hours}س ${minutes}د`;
+    }
+    if (hours > 0) {
+        return `${hours}س`;
+    }
+    return `${minutes}د`;
+};
+
 // --- SUB-COMPONENTS ---
+
+// New card component for simple statistics
+const StatInfoCard = ({ title, value, icon, backgroundColor, iconColor, styles }: { title: string, value: string, icon: React.ReactNode, backgroundColor: string, iconColor: string, styles: any }) => {
+    return (
+        <View style={[styles.infoCard, { backgroundColor }]}>
+            <View style={[styles.infoCardIconContainer, { backgroundColor: iconColor + '20' }]}>
+                {icon}
+            </View>
+            <View>
+                <Text style={styles.infoCardValue}>{value}</Text>
+                <Text style={styles.infoCardTitle}>{title}</Text>
+            </View>
+        </View>
+    );
+};
+
 
 const StatCard = ({ title, value, icon, color, styles }: { title: string; value: string | number; icon: React.ReactNode; color: string, styles: any }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -85,17 +118,22 @@ const StatCard = ({ title, value, icon, color, styles }: { title: string; value:
   );
 };
 
-const TechnicianStatCards = React.memo(({ tickets, styles, isSmallScreen }: { tickets: ServiceRequest[], styles: any, isSmallScreen: boolean }) => {
+const TechnicianStatCards = React.memo(({ tickets, styles, isSmallScreen, currentUserDocId }: { tickets: ServiceRequest[], styles: any, isSmallScreen: boolean, currentUserDocId: string | null }) => {
   const stats = useMemo(() => {
     const pending = tickets.filter(t => ["مفتوح", "قيد المعالجة"].includes(t.status)).length;
     const completed = tickets.filter(t => ["مكتمل", "مغلق"].includes(t.status)).length;
-    return { pending, completed, total: tickets.length };
-  }, [tickets]);
+    const rejected = tickets.filter(ticket => {
+        const userResponse = ticket.userResponses?.find(r => r.userId === currentUserDocId);
+        return userResponse?.response === 'rejected';
+    }).length;
+
+    return { pending, completed, rejected, total: tickets.length };
+  }, [tickets, currentUserDocId]);
 
   const iconSize = isSmallScreen ? 24 : 28;
 
   return (
-    <View style={styles.technicianStatsContainer}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.technicianStatsContainer}>
       <StatCard
         title="مهام قيد التنفيذ"
         value={stats.pending}
@@ -111,13 +149,20 @@ const TechnicianStatCards = React.memo(({ tickets, styles, isSmallScreen }: { ti
         styles={styles}
       />
       <StatCard
+        title="المهام الفاشلة"
+        value={stats.rejected}
+        icon={<XCircle color="#EF4444" size={iconSize} />}
+        color="rgba(239, 68, 68, 0.1)"
+        styles={styles}
+      />
+      <StatCard
         title="إجمالي المهام"
         value={stats.total}
         icon={<Inbox color="#6B7280" size={iconSize} />}
         color="rgba(107, 114, 128, 0.1)"
         styles={styles}
       />
-    </View>
+    </ScrollView>
   );
 });
 TechnicianStatCards.displayName = 'TechnicianStatCards';
@@ -195,8 +240,9 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
                 <Text style={[styles.badgeText,getStatusBadgeTextStyle(ticket.status)]}>{ticket.status}</Text>
               </View>
             </View>
-            <Text style={styles.ticketCustomer}>العميل: {ticket.customerName}</Text>
-            <Text style={styles.ticketDate}>تاريخ الإنشاء: {formatTimestamp(ticket.date)}</Text>
+                          <Text style={styles.ticketCustomer}>العميل: {ticket.customerName}</Text>
+                            <Text style={styles.ticketDate}>تاريخ الإنشاء: {formatTimestamp(ticket.date)}</Text>
+
           </View>
 
          
@@ -218,35 +264,51 @@ const PerformanceSummaryCard = ({ tasks, styles }: { tasks: ServiceRequest[], st
         );
 
         if (relevantTasks.length === 0) {
-            return { onTimePercentage: 100, latePercentage: 0, onTimeCount: 0, lateCount: 0, averageCompletionTime: 0 };
+            return {
+                onTimePercentage: 100, latePercentage: 0, onTimeCount: 0, lateCount: 0,
+                averageCompletionTime: 0, totalWorkTime: 0, averageDailyWorkTime: 0
+            };
         }
 
-        let totalCompletionTime = 0;
+        let totalCompletionTimeDuration = 0;
+        const workTimeByDay: { [key: string]: number } = {};
+
         relevantTasks.forEach(task => {
             const onLocationTime = task.onLocationTimestamp.toDate().getTime();
             const completionTime = task.completionTimestamp.toDate().getTime();
-            totalCompletionTime += (completionTime - onLocationTime);
+            const duration = completionTime - onLocationTime;
+            totalCompletionTimeDuration += duration;
+
+            // Group work time by day
+            const dayKey = task.completionTimestamp.toDate().toISOString().split('T')[0];
+            if (workTimeByDay[dayKey]) {
+                workTimeByDay[dayKey] += duration;
+            } else {
+                workTimeByDay[dayKey] = duration;
+            }
         });
 
-        const averageCompletionTime = (totalCompletionTime / relevantTasks.length) / (1000 * 60);
+        const averageCompletionTime = (totalCompletionTimeDuration / relevantTasks.length); // in ms
 
+        const dailyWorkTimes = Object.values(workTimeByDay);
+        const totalDailyWorkSum = dailyWorkTimes.reduce((sum, time) => sum + time, 0);
+        const averageDailyWorkTime = dailyWorkTimes.length > 0 ? totalDailyWorkSum / dailyWorkTimes.length : 0;
+
+        // SLA calculation
         const tasksWithSla = relevantTasks.filter(t => t.estimatedTime != null);
-        
         let lateCount = 0;
         if (tasksWithSla.length > 0) {
             tasksWithSla.forEach((task) => {
                 if (task.onLocationTimestamp && task.completionTimestamp && task.estimatedTime) {
                     const onLocationTime = task.onLocationTimestamp.toDate().getTime();
                     const completionTime = task.completionTimestamp.toDate().getTime();
-                    const estimatedDuration = task.estimatedTime * 60 * 1000; // minutes to ms
-
+                    const estimatedDuration = task.estimatedTime * 60 * 1000;
                     if (completionTime > onLocationTime + estimatedDuration) {
                         lateCount++;
                     }
                 }
             });
         }
-
         const totalSla = tasksWithSla.length;
         const onTimeCount = totalSla - lateCount;
 
@@ -255,74 +317,97 @@ const PerformanceSummaryCard = ({ tasks, styles }: { tasks: ServiceRequest[], st
             latePercentage: totalSla > 0 ? Math.round((lateCount / totalSla) * 100) : 0,
             onTimeCount,
             lateCount,
-            averageCompletionTime: Math.round(averageCompletionTime)
+            averageCompletionTime, // in ms
+            totalWorkTime: totalCompletionTimeDuration, // in ms
+            averageDailyWorkTime, // in ms
         };
     }, [tasks]);
 
-    const { onTimePercentage, latePercentage, onTimeCount, lateCount, averageCompletionTime } = performanceStats;
+    const { onTimePercentage, latePercentage, onTimeCount, lateCount, averageCompletionTime, totalWorkTime, averageDailyWorkTime } = performanceStats;
 
     return (
         <View style={styles.container}>
-  <View style={styles.header}>
-    <Text style={styles.headerTitle}>مؤشر الأداء (SLA)</Text>
-    <Text style={styles.viewAll}>عرض الكل</Text>
-  </View>
-  
-  <View style={styles.avgTimeSection}>
-    <View style={styles.avgTimeContainer}>
-      <Text style={styles.avgTimeText}>متوسط وقت الإنجاز</Text>
-      <Text style={styles.avgTimeValue}>{averageCompletionTime} دقيقة</Text>
-    </View>
-  </View>
-  
-  <View style={styles.cardsContainer}>
-    <View style={[styles.card, styles.onTimeCard]}>
-      <View style={styles.cardContent}>
-        <View style={styles.cardIcon}>
-          <CheckCircle size={24} color="#FFFFFF" />
-        </View>
-        <Text style={styles.cardTitle}>الإنجاز في الوقت المحدد</Text>
-        <Text style={styles.projectCount}>{onTimeCount} مهمة</Text>
-      </View>
-      <View style={styles.bottomSection}>
-        <View style={styles.progressSection}>
-          <Text style={styles.percentage}>{onTimePercentage}%</Text>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${onTimePercentage}%` }]} />
-          </View>
-        </View>
-        <View style={styles.iconSection}>
-          <View style={styles.successIcon}>
-            <TrendingUp size={20} color="#10B981" />
-          </View>
-        </View>
-      </View>
-    </View>
+            <View style={styles.header}>
+                <Text style={styles.headerTitle}>ملخص الأداء</Text>
+            </View>
 
-    <View style={[styles.card, styles.lateCard]}>
-      <View style={styles.cardContent}>
-        <View style={styles.cardIcon}>
-          <Clock size={24} color="#FFFFFF" />
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.cardsScrollView}
+            >
+                <StatInfoCard
+                    title="متوسط وقت الإنجاز"
+                    value={formatDuration(averageCompletionTime)}
+                    icon={<Clock size={20} color="#3B82F6" />}
+                    backgroundColor="rgba(59, 130, 246, 0.1)"
+                    iconColor="#3B82F6"
+                    styles={styles}
+                />
+                <StatInfoCard
+                    title="متوسط العمل اليومي"
+                    value={formatDuration(averageDailyWorkTime)}
+                    icon={<Clock size={20} color="#8B5CF6" />}
+                    backgroundColor="rgba(139, 92, 246, 0.1)"
+                    iconColor="#8B5CF6"
+                    styles={styles}
+                />
+                <StatInfoCard
+                    title="إجمالي وقت العمل"
+                    value={formatDuration(totalWorkTime)}
+                    icon={<Clock size={20} color="#F59E0B" />}
+                    backgroundColor="rgba(245, 158, 11, 0.1)"
+                    iconColor="#F59E0B"
+                    styles={styles}
+                />
+
+                <View style={[styles.card, styles.onTimeCard]}>
+                    <View style={styles.cardContent}>
+                        <View style={styles.cardIcon}>
+                        <CheckCircle size={24} color="#FFFFFF" />
+                        </View>
+                        <Text style={styles.cardTitle}>في الوقت المحدد (SLA)</Text>
+                        <Text style={styles.projectCount}>{onTimeCount} مهمة</Text>
+                    </View>
+                    <View style={styles.bottomSection}>
+                        <View style={styles.progressSection}>
+                        <Text style={styles.percentage}>{onTimePercentage}%</Text>
+                        <View style={styles.progressBar}>
+                            <View style={[styles.progressFill, { width: `${onTimePercentage}%` }]} />
+                        </View>
+                        </View>
+                        <View style={styles.iconSection}>
+                        <View style={styles.successIcon}>
+                            <TrendingUp size={20} color="#10B981" />
+                        </View>
+                        </View>
+                    </View>
+                </View>
+
+                <View style={[styles.card, styles.lateCard]}>
+                    <View style={styles.cardContent}>
+                        <View style={styles.cardIcon}>
+                        <Clock size={24} color="#FFFFFF" />
+                        </View>
+                        <Text style={styles.cardTitle}>المهام المتأخرة (SLA)</Text>
+                        <Text style={styles.projectCount}>{lateCount} مهمة</Text>
+                    </View>
+                    <View style={styles.bottomSection}>
+                        <View style={styles.progressSection}>
+                        <Text style={styles.percentage}>{latePercentage}%</Text>
+                        <View style={styles.progressBar}>
+                            <View style={[styles.progressFill, { width: `${latePercentage}%` }]} />
+                        </View>
+                        </View>
+                        <View style={styles.iconSection}>
+                        <View style={styles.warningIcon}>
+                            <TrendingDown size={20} color="#EF4444" />
+                        </View>
+                        </View>
+                    </View>
+                </View>
+            </ScrollView>
         </View>
-        <Text style={styles.cardTitle}>المهام المتأخرة</Text>
-        <Text style={styles.projectCount}>{lateCount} مهمة</Text>
-      </View>
-      <View style={styles.bottomSection}>
-        <View style={styles.progressSection}>
-          <Text style={styles.percentage}>{latePercentage}%</Text>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${latePercentage}%` }]} />
-          </View>
-        </View>
-        <View style={styles.iconSection}>
-          <View style={styles.warningIcon}>
-            <TrendingDown size={20} color="#EF4444" />
-          </View>
-        </View>
-      </View>
-    </View>
-  </View>
-</View>
     );
 };
 
@@ -345,6 +430,7 @@ interface ListHeaderProps {
     handleTabChange: (tab: "all" | "pending" | "completed" | "rejected") => void;
     styles: any;
     isSmallScreen: boolean;
+    currentUserDocId: string | null;
 }
 
 const ListHeader = React.memo(({
@@ -355,13 +441,14 @@ const ListHeader = React.memo(({
     handleTabChange,
     styles,
     isSmallScreen,
+    currentUserDocId
 }: ListHeaderProps) => (
     <View style={styles.dashboardContainer}>
         <View style={styles.welcomeHeader}>
-            <Text style={styles.dashboardTitle}>لوحة التحكم</Text>
+            <Text style={styles.dashboardTitle}>الاحصائيات</Text>
             <Text style={styles.dashboardSubtitle}>مرحباً بك، تتبع مهامك وأدائك</Text>
         </View>
-        <TechnicianStatCards tickets={tasks} styles={styles} isSmallScreen={isSmallScreen} />
+        <TechnicianStatCards tickets={tasks} styles={styles} isSmallScreen={isSmallScreen} currentUserDocId={currentUserDocId}/>
         <PerformanceSummaryCard tasks={tasks} styles={styles} />
         
         <View style={styles.taskListContainer}>
@@ -592,6 +679,7 @@ const fetchTasks = useCallback(async (userDocId: string) => {
           handleTabChange={handleTabChange}
           styles={styles}
           isSmallScreen={isSmallScreen}
+          currentUserDocId={currentUserDocId}
         />}
         ListEmptyComponent={loading ? null : <EmptyList searchTerm={searchTerm} styles={styles} />}
         showsVerticalScrollIndicator={false}
@@ -702,148 +790,156 @@ const getStyles = (theme: any, width: number) => {
       borderRadius: 50,
       opacity: 0.08,
     },
+    
     // PerformanceSummaryCard styles
-   container: {
-    backgroundColor: theme.card,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    shadowColor: theme.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.text,
-    fontFamily: 'Cairo',
-  },
-  viewAll: {
-    fontSize: 14,
-    color: theme.textSecondary,
-    fontFamily: 'Cairo',
-  },
-  avgTimeSection: {
-    marginBottom: 20,
-  },
-  avgTimeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: theme.border,
-  },
-  avgTimeText: {
-    fontSize: 16,
-    color: theme.textSecondary,
-    fontFamily: 'Cairo',
-  },
-  avgTimeValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: theme.text,
-    fontFamily: 'Cairo',
-  },
-  cardsContainer: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  card: {
-    flex: 1,
-    borderRadius: 16,
-    padding: 16,
-    minHeight: 160,
-    justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  onTimeCard: {
-    backgroundColor: '#10B981', // Green for on-time tasks
-  },
-  lateCard: {
-    backgroundColor: '#EF4444', // Red for late tasks
-  },
-  cardContent: {
-    marginBottom: 'auto',
-  },
-  cardIcon: {
-    marginBottom: 12,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 4,
-    fontFamily: 'Cairo',
-    textAlign: 'right',
-  },
-  projectCount: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontFamily: 'Cairo',
-    textAlign: 'right',
-  },
-  bottomSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginTop: 16,
-  },
-  progressSection: {
-    flex: 1,
-    marginRight: 12,
-  },
-  percentage: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 6,
-    fontFamily: 'Cairo',
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 2,
-  },
-  iconSection: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  successIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  warningIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    container: {
+        backgroundColor: theme.card,
+        borderRadius: 16,
+        paddingVertical: 20,
+        marginBottom: 24,
+        shadowColor: theme.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+        elevation: 3,
+    },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+        paddingHorizontal: 20,
+    },
+    headerTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: theme.text,
+        fontFamily: 'Cairo',
+    },
+    cardsScrollView: {
+        paddingHorizontal: 20,
+        gap: 16,
+    },
+
+    // New StatInfoCard styles
+    infoCard: {
+        width: 220,
+        borderRadius: 16,
+        padding: 16,
+        justifyContent: 'space-between',
+        minHeight: 160,
+    },
+    infoCardIconContainer: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    infoCardValue: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: theme.text,
+        fontFamily: 'Cairo',
+        textAlign: 'left',
+    },
+    infoCardTitle: {
+        fontSize: 13,
+        color: theme.textSecondary,
+        fontFamily: 'Cairo',
+        textAlign: 'left',
+        marginTop: 2,
+    },
+
+    // Modified SLA card style
+    card: {
+        width: 220,
+        borderRadius: 16,
+        padding: 16,
+        minHeight: 160,
+        justifyContent: 'space-between',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    onTimeCard: {
+        backgroundColor: '#10B981',
+    },
+    lateCard: {
+        backgroundColor: '#EF4444',
+    },
+    cardContent: {
+        marginBottom: 'auto',
+    },
+    cardIcon: {
+        marginBottom: 12,
+    },
+    cardTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+        marginBottom: 4,
+        fontFamily: 'Cairo',
+        textAlign: 'right',
+    },
+    projectCount: {
+        fontSize: 12,
+        color: 'rgba(255, 255, 255, 0.8)',
+        fontFamily: 'Cairo',
+        textAlign: 'right',
+    },
+    bottomSection: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        marginTop: 16,
+    },
+    progressSection: {
+        flex: 1,
+        marginRight: 12,
+    },
+    percentage: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+        marginBottom: 6,
+        fontFamily: 'Cairo',
+    },
+    progressBar: {
+        height: 4,
+        backgroundColor: 'rgba(255, 255, 255, 0.3)',
+        borderRadius: 2,
+        overflow: 'hidden',
+    },
+    progressFill: {
+        height: '100%',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 2,
+    },
+    iconSection: {
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    successIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    warningIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    
     // TaskList styles
     taskListContainer: {
       backgroundColor: theme.card,
@@ -973,7 +1069,7 @@ const getStyles = (theme: any, width: number) => {
     },
     ticketHeader: {
       marginBottom: 12,
-      alignItems: 'flex-start',
+      alignItems: 'flex-end',
     },
     ticketTitleContainer: {
       flexDirection: 'row',
@@ -996,6 +1092,7 @@ const getStyles = (theme: any, width: number) => {
       color: theme.textSecondary,
       fontFamily: 'Cairo',
       marginBottom: 4,
+      textAlign:"left"
     },
     ticketDate: {
       fontSize: 12,
@@ -1040,5 +1137,4 @@ const getStyles = (theme: any, width: number) => {
     actionBadgeTextRed: { color: theme.destructive, fontWeight: '600', fontFamily: 'Cairo' },
     actionBadgeBlue: { backgroundColor: theme.primary + '20' },
     actionBadgeTextBlue: { color: theme.primary, fontWeight: '600', fontFamily: 'Cairo' },
-  });
-};
+  });};
