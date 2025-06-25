@@ -7,13 +7,12 @@ import { Timestamp } from "firebase/firestore";
 import React from "react";
 import {
   Alert,
-  Image,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View,
+  View
 } from "react-native";
 
 import { Theme, useTheme } from "@/context/ThemeContext";
@@ -367,12 +366,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
         {/* Invoice Header with Logo */}
         <View style={styles.invoiceHeader}>
           <View style={styles.logoContainer}>
-            <Image
-              source={require("../assets/images/icon.png")} // Using existing asset
-              alt="logo"
-              style={styles.logo}
-              resizeMode="contain"
-            />
+         
           </View>
           <Text style={styles.companyName}>
             المشروع الوطني للانترنت - فرع واسط

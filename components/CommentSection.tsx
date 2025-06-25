@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { format, isSameDay, isToday, isYesterday } from 'date-fns'; // MODIFIED: Added isSameDay, isToday, isYesterday
 import { enGB } from 'date-fns/locale';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -52,6 +52,18 @@ const getCommentDate = (timestamp: any): Date => {
     return new Date(timestamp);
   }
   return new Date();
+};
+
+// NEW: Helper to format the date header in a WhatsApp-like style
+const formatDateHeader = (date: Date): string => {
+  if (isToday(date)) {
+    return 'Today'; // أو 'اليوم' if you prefer Arabic
+  }
+  if (isYesterday(date)) {
+    return 'Yesterday'; // أو 'الأمس'
+  }
+  // You can customize this format
+  return format(date, 'MMMM d, yyyy', { locale: enGB });
 };
 
 interface CommentSectionProps {
@@ -277,157 +289,177 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             </Text>
           </View>
         ) : (
-          filteredAndSortedComments.map(comment => {
-          const user = getUser(comment.userId);
-          const userName = user?.name || comment.userName || 'مستخدم غير معروف';
-          const isCurrentUser = comment.userId === currentUserId;
-          const commentDate = getCommentDate(comment.timestamp);
+          // MODIFIED: Entire map logic is updated to include the date header
+          filteredAndSortedComments.map((comment, index) => {
+            const user = getUser(comment.userId);
+            const userName = user?.name || comment.userName || 'مستخدم غير معروف';
+            const isCurrentUser = comment.userId === currentUserId;
+            const commentDate = getCommentDate(comment.timestamp);
 
-          const isImageOnlyComment =
-            !comment.content?.trim() &&
-            comment.attachments &&
-            comment.attachments.length > 0 &&
-            comment.attachments.every(att => {
-              const isImage =
-                att.fileType === 'image' ||
-                (att.mimeType ? att.mimeType.startsWith('image/') : /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
-              return isImage;
-            });
+            // --- NEW LOGIC to decide if a date header should be shown ---
+            let dateHeader = null;
+            const previousComment = index > 0 ? filteredAndSortedComments[index - 1] : null;
+            const previousCommentDate = previousComment ? getCommentDate(previousComment.timestamp) : null;
 
-          const commentImages = comment.attachments?.filter(att => {
-            const isImage = att.fileType === 'image' || (att.mimeType && att.mimeType.startsWith('image/'));
-            return isImage || /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName);
-          }).map(att => att.downloadURL).filter((url): url is string => !!url) || [];
+            if (!previousCommentDate || !isSameDay(commentDate, previousCommentDate)) {
+              dateHeader = (
+                <View style={styles.dateHeader}>
+                  <Text style={styles.dateHeaderText}>
+                    {formatDateHeader(commentDate)}
+                  </Text>
+                </View>
+              );
+            }
+            // --- END OF NEW LOGIC ---
 
-          return (
-            <View
-              key={comment.id}
-              style={[
-                styles.messageRow,
-                isCurrentUser ? styles.messageRowRight : styles.messageRowLeft
-              ]}
-            >
-              {!isCurrentUser && (
-                <View style={styles.avatarContainer}>
-                  {user?.photoURL ? (
-                    <Image source={{ uri: user.photoURL }} style={styles.avatar} />
-                  ) : (
-                    <View style={[styles.avatar, styles.avatarFallback]}>
-                      <Text style={styles.avatarFallbackText}>
-                        {getAvatarFallback(userName)}
-                      </Text>
+            const isImageOnlyComment =
+              !comment.content?.trim() &&
+              comment.attachments &&
+              comment.attachments.length > 0 &&
+              comment.attachments.every(att => {
+                const isImage =
+                  att.fileType === 'image' ||
+                  (att.mimeType ? att.mimeType.startsWith('image/') : /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
+                return isImage;
+              });
+
+            const commentImages = comment.attachments?.filter(att => {
+              const isImage = att.fileType === 'image' || (att.mimeType && att.mimeType.startsWith('image/'));
+              return isImage || /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName);
+            }).map(att => att.downloadURL).filter((url): url is string => !!url) || [];
+
+            // Return a React Fragment to conditionally include the date header
+            return (
+              <React.Fragment key={comment.id}>
+                {dateHeader}
+                <View
+                  style={[
+                    styles.messageRow,
+                    isCurrentUser ? styles.messageRowRight : styles.messageRowLeft
+                  ]}
+                >
+                  {!isCurrentUser && (
+                    <View style={styles.avatarContainer}>
+                      {user?.photoURL ? (
+                        <Image source={{ uri: user.photoURL }} style={styles.avatar} />
+                      ) : (
+                        <View style={[styles.avatar, styles.avatarFallback]}>
+                          <Text style={styles.avatarFallbackText}>
+                            {getAvatarFallback(userName)}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                   )}
-                </View>
-              )}
 
-              <View
-                style={[
-                  styles.commentBubble,
-                  isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble,
-                  isImageOnlyComment && styles.imageOnlyBubble,
-                ]}
-              >
-                {!isCurrentUser && (
-                  <Text style={styles.userName}>{userName}</Text>
-                )}
-                
-                {comment.content ? (
-                  <Text style={[
-                    styles.messageText,
-                    isCurrentUser ? styles.currentUserText : styles.otherUserText
-                  ]}>
-                    {comment.content}
-                  </Text>
-                ) : null}
+                  <View
+                    style={[
+                      styles.commentBubble,
+                      isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble,
+                      isImageOnlyComment && styles.imageOnlyBubble,
+                    ]}
+                  >
+                    {!isCurrentUser && (
+                      <Text style={styles.userName}>{userName}</Text>
+                    )}
+                    
+                    {comment.content ? (
+                      <Text style={[
+                        styles.messageText,
+                        isCurrentUser ? styles.currentUserText : styles.otherUserText
+                      ]}>
+                        {comment.content}
+                      </Text>
+                    ) : null}
 
-                {comment.attachments && comment.attachments.length > 0 && (
-                  <View style={[styles.attachmentsContainer, isImageOnlyComment && { marginTop: 0, gap: 2 }]}>
-                    {comment.attachments.map((att, index) => {
-                      const isImage = att.fileType === 'image' || (att.mimeType ? att.mimeType.startsWith('image/') : /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
-                      const isVideo = att.fileType === 'video' || (att.mimeType ? att.mimeType.startsWith('video/') : /\.(mp4|mov|avi|mkv)$/i.test(att.fileName));
-                      const mediaUrl = att.downloadURL;
+                    {comment.attachments && comment.attachments.length > 0 && (
+                      <View style={[styles.attachmentsContainer, isImageOnlyComment && { marginTop: 0, gap: 2 }]}>
+                        {comment.attachments.map((att, attIndex) => {
+                          const isImage = att.fileType === 'image' || (att.mimeType ? att.mimeType.startsWith('image/') : /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
+                          const isVideo = att.fileType === 'video' || (att.mimeType ? att.mimeType.startsWith('video/') : /\.(mp4|mov|avi|mkv)$/i.test(att.fileName));
+                          const mediaUrl = att.downloadURL;
 
-                      return (
-                        <TouchableOpacity
-                          key={index}
-                          onPress={() => {
-                            if (isImage && mediaUrl) {
-                              const currentImageIndex = commentImages.indexOf(mediaUrl);
-                              const validIndex = currentImageIndex >= 0 ? currentImageIndex : 0;
-                              handleImagePress(mediaUrl, commentImages, validIndex);
-                            } else if (isVideo && mediaUrl) {
-                              handleVideoPress(mediaUrl);
-                            } else if (mediaUrl) {
-                              Linking.openURL(mediaUrl);
-                            }
-                          }}
-                          style={[styles.attachmentItem, isImageOnlyComment && { borderRadius: 12, overflow: 'hidden' }]}
-                          activeOpacity={0.8}
-                        >
-                          {isImage && mediaUrl ? (
-                            <View style={styles.imageAttachmentContainer}>
-                              {isImageOnlyComment ? (
-                                <AutoSizedImage
-                                  uri={mediaUrl}
-                                  style={styles.fullWidthImage}
-                                  resizeMode="contain"
-                                />
-                              ) : (
-                                <>
-                                  <Image
-                                    source={{ uri: mediaUrl }}
-                                    style={styles.attachmentImage}
-                                    resizeMode="cover"
-                                  />
-                                  <View style={styles.imageOverlay}>
-                                    <Ionicons name="expand-outline" size={20} color="white" />
+                          return (
+                            <TouchableOpacity
+                              key={attIndex}
+                              onPress={() => {
+                                if (isImage && mediaUrl) {
+                                  const currentImageIndex = commentImages.indexOf(mediaUrl);
+                                  const validIndex = currentImageIndex >= 0 ? currentImageIndex : 0;
+                                  handleImagePress(mediaUrl, commentImages, validIndex);
+                                } else if (isVideo && mediaUrl) {
+                                  handleVideoPress(mediaUrl);
+                                } else if (mediaUrl) {
+                                  Linking.openURL(mediaUrl);
+                                }
+                              }}
+                              style={[styles.attachmentItem, isImageOnlyComment && { borderRadius: 12, overflow: 'hidden' }]}
+                              activeOpacity={0.8}
+                            >
+                              {isImage && mediaUrl ? (
+                                <View style={styles.imageAttachmentContainer}>
+                                  {isImageOnlyComment ? (
+                                    <AutoSizedImage
+                                      uri={mediaUrl}
+                                      style={styles.fullWidthImage}
+                                      resizeMode="contain"
+                                    />
+                                  ) : (
+                                    <>
+                                      <Image
+                                        source={{ uri: mediaUrl }}
+                                        style={styles.attachmentImage}
+                                        resizeMode="cover"
+                                      />
+                                      <View style={styles.imageOverlay}>
+                                        <Ionicons name="expand-outline" size={20} color="white" />
+                                      </View>
+                                    </>
+                                  )}
+                                </View>
+                              ) : isVideo && mediaUrl ? (
+                                <View style={styles.imageAttachmentContainer}>
+                                  <AttachmentVideoPreview mediaUrl={mediaUrl} style={styles.attachmentImage} />
+                                  <View style={styles.videoOverlay}>
+                                    <Ionicons name="play-circle-outline" size={40} color="white" />
                                   </View>
-                                </>
+                                </View>
+                              ) : (
+                                <View style={styles.fileAttachment}>
+                                  <View style={styles.fileIcon}>
+                                    <Ionicons name="document-text-outline" size={24} color={theme.primary} />
+                                  </View>
+                                  <View style={styles.fileInfo}>
+                                    <Text style={styles.fileName} numberOfLines={1}>
+                                      {att.fileName}
+                                    </Text>
+                                    {(att.size) && (
+                                      <Text style={styles.fileSize}>
+                                        {((att.size) / 1024).toFixed(1)} كيلوبايت
+                                      </Text>
+                                    )}
+                                  </View>
+                                  <Ionicons name="download-outline" size={20} color={theme.primary} />
+                                </View>
                               )}
-                            </View>
-                          ) : isVideo && mediaUrl ? (
-                            <View style={styles.imageAttachmentContainer}>
-                              <AttachmentVideoPreview mediaUrl={mediaUrl} style={styles.attachmentImage} />
-                              <View style={styles.videoOverlay}>
-                                <Ionicons name="play-circle-outline" size={40} color="white" />
-                              </View>
-                            </View>
-                          ) : (
-                            <View style={styles.fileAttachment}>
-                              <View style={styles.fileIcon}>
-                                <Ionicons name="document-text-outline" size={24} color={theme.primary} />
-                              </View>
-                              <View style={styles.fileInfo}>
-                                <Text style={styles.fileName} numberOfLines={1}>
-                                  {att.fileName}
-                                </Text>
-                                {(att.size) && (
-                                  <Text style={styles.fileSize}>
-                                    {((att.size) / 1024).toFixed(1)} كيلوبايت
-                                  </Text>
-                                )}
-                              </View>
-                              <Ionicons name="download-outline" size={20} color={theme.primary} />
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )}
-                <View style={styles.timestampContainer}>
-                  <Text style={[
-                    styles.timestamp,
-                    isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp,
-                    isImageOnlyComment && styles.imageOnlyTimestamp,
-                  ]}>
-                  {format(commentDate, 'h:m aaa', { locale: enGB })}
-                  </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+                    <View style={styles.timestampContainer}>
+                      <Text style={[
+                        styles.timestamp,
+                        isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp,
+                        isImageOnlyComment && styles.imageOnlyTimestamp,
+                      ]}>
+                      {format(commentDate, 'h:mm aaa', { locale: enGB })}
+                      </Text>
+                    </View>
+                 </View>
                 </View>
-             </View>
-            </View>
-          );
+              </React.Fragment>
+            );
           })
         )}
       </View>
@@ -436,6 +468,26 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 };
 
 const getStyles = (theme: any) => StyleSheet.create({
+  // NEW: Styles for the date header
+  dateHeader: {
+    alignSelf: 'center',
+    backgroundColor: theme.themeName === 'dark' ? '#2c2c2e' : '#e5e5ea',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 15,
+    marginVertical: 10,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  dateHeaderText: {
+    color: theme.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  // --- Existing styles below ---
   container: {
     flex: 1,
     backgroundColor: theme.background,
@@ -446,7 +498,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   messageRow: {
     flexDirection: 'row',
-    marginBottom: 15,
+    marginBottom: 15, // This gives space between messages, date header margin handles its own space
     maxWidth: '85%',
     alignItems: 'flex-end',
     gap: 8,

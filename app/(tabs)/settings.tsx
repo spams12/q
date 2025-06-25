@@ -70,8 +70,8 @@ const ProfileHeader: React.FC<ProfileHeaderProps & { styles: any }> = ({ user, o
         </View>
       )}
     </TouchableOpacity>
-    <Text style={styles.profileName}>{user.name || 'اسم المستخدم'}</Text>
-    <Text style={styles.profileRole}>{user.role || 'عضو'}</Text>
+    <Text adjustsFontSizeToFit style={styles.profileName}>{user.name || 'اسم المستخدم'}</Text>
+    <Text  adjustsFontSizeToFit style={styles.profileRole}>{user.role || 'عضو'}</Text>
   </View>
 );
 
@@ -97,8 +97,8 @@ const SettingRow: React.FC<SettingRowProps & { styles: any }> = ({ icon, iconCol
       <Ionicons name={icon} size={20} color={iconColor ? '#FFF' : styles.icon.color} />
     </View>
     <View style={styles.settingTextContainer}>
-      <Text style={styles.settingTitle}>{title}</Text>
-      {value && <Text style={styles.settingValue}>{value}</Text>}
+      <Text adjustsFontSizeToFit style={styles.settingTitle}>{title}</Text>
+      {value && <Text adjustsFontSizeToFit style={styles.settingValue}>{value}</Text>}
     </View>
     {rightComponent ? rightComponent : (onPress && <Ionicons name="chevron-back" size={20} style={styles.chevron} />)}
   </TouchableOpacity>
@@ -271,7 +271,7 @@ const SettingsPage = () => {
       
       {/* Personal Info Group */}
       <SettingsGroup title="المعلومات الشخصية" styles={styles}>
-        <SettingRow styles={styles} icon="person-outline" title="الاسم الكامل" value={userdoc.name || ''} iconColor="#5856D6" />
+        <SettingRow  styles={styles} icon="person-outline" title="الاسم الكامل" value={userdoc.name || ''} iconColor="#5856D6" />
         <SettingRow styles={styles} icon="mail-outline" title="البريد الإلكتروني" value={userdoc.email || ''} iconColor="#007AFF" />
         <SettingRow styles={styles} icon="call-outline" title="رقم الهاتف" value={userdoc.phone || 'غير محدد'} onPress={() => setPhoneModalVisible(true)} iconColor="#34C759" />
         <SettingRow styles={styles} icon="people-outline" title="معرف الفريق" value={userdoc.teamId || 'غير محدد'} iconColor="#FF9500" />
@@ -298,7 +298,7 @@ const SettingsPage = () => {
       {/* Other Group */}
       <SettingsGroup styles={styles}>
         <SettingRow styles={styles} icon="people-circle-outline" title="عائله القبس" onPress={() => router.push('/family')} iconColor="#FF69B4" />
-        <SettingRow styles={styles} icon="information-circle-outline" title="حول التطبيق" onPress={() => router.push('/about')} iconColor="#00BCD4" />
+        <SettingRow  styles={styles} icon="information-circle-outline" title="حول التطبيق" onPress={() => router.push('/about')} iconColor="#00BCD4" />
         <TouchableOpacity onPress={handleLogout} style={styles.logoutButtonRow}>
           <View style={[styles.iconContainer, { backgroundColor: theme.destructive }]}>
             <Ionicons name="log-out-outline" size={20} color="#FFF" />

@@ -131,6 +131,7 @@ export interface Comment {
 }
 
 export interface ServiceRequest {
+  onLocation:boolean,
   id: string;
   customerId: string;
   customerName: string;

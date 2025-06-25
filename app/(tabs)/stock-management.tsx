@@ -42,7 +42,11 @@ const StockManagementScreen: React.FC = () => {
     const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
       if (doc.exists()) {
         const userData = { id: doc.id, ...doc.data() } as User;
-        setStockItems((userData.stockItems || []));
+        // Sort stock items by name
+        const sortedItems = (userData.stockItems || []).sort((a, b) =>
+          a.itemName.localeCompare(b.itemName, 'ar')
+        );
+        setStockItems(sortedItems);
       } else {
         console.error('User document does not exist');
         Alert.alert('خطأ', 'المستخدم غير موجود');
@@ -55,25 +59,12 @@ const StockManagementScreen: React.FC = () => {
     const transactionsQuery = query(
       collection(db, 'stockTransactions'),
       where('userId', '==', userUid),
-      // orderBy('timestamp', 'desc') // Firestore requires an index for this
     );
 
     const unsubscribeTransactions = onSnapshot(transactionsQuery, (snapshot) => {
       const transactionData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StockTransaction));
-      // Sort by timestamp descending
-      transactionData.sort((a, b) => {
-        const getSafeDate = (timestamp: any) => {
-          if (timestamp && typeof timestamp.toDate === 'function') {
-            return timestamp.toDate();
-          }
-          // Fallback for string or number timestamps
-          if (!timestamp) return new Date(0); // Handle null/undefined case
-          return new Date(timestamp);
-        };
-        const aTime = getSafeDate(a.timestamp);
-        const bTime = getSafeDate(b.timestamp);
-        return bTime.getTime() - aTime.getTime();
-      });
+      // Sort transactions by item name
+      transactionData.sort((a, b) => a.itemName.localeCompare(b.itemName, 'ar'));
       setTransactions(transactionData);
       setLoading(false);
     }, (error) => {

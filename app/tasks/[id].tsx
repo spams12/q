@@ -838,6 +838,19 @@ const isDisabled =
                 <ThemedText style={styles.detailText}>{serviceRequest.customerPhone}</ThemedText>
                 <Ionicons name="call" size={20} color={theme.primary} style={{ marginHorizontal: 10 }}/>
               </Pressable>
+              {/* MODIFICATION START */}
+              <View style={styles.detailItem}>
+                <Ionicons name="calendar-outline" size={20} color={theme.textSecondary} style={styles.detailIcon} />
+                <ThemedText style={styles.detailText}>
+                  {serviceRequest.createdAt && typeof serviceRequest.createdAt.toDate === 'function' 
+                    ? serviceRequest.createdAt.toDate().toLocaleString('en-GB', {
+                        year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                      })
+                    : 'غير متوفر'
+                  }
+                </ThemedText>
+              </View>
+              {/* MODIFICATION END */}
             </View>
             <View style={styles.detailsContainer}>
               <ThemedText style={styles.detailsTitle}>الوصف</ThemedText>

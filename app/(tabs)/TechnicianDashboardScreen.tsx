@@ -709,20 +709,20 @@ const getStyles = (theme: any, width: number) => {
     },
     welcomeHeader: {
       marginBottom: 24,
-      alignItems: isSmallScreen ? 'center' : 'flex-end',
+      alignItems:  'flex-end',
     },
     dashboardTitle: {
       fontSize: isSmallScreen ? 24 : 28,
       fontWeight: 'bold',
       color: theme.text,
       fontFamily: 'Cairo',
-      textAlign: isSmallScreen ? 'center' : 'right',
+      textAlign:  'right',
     },
     dashboardSubtitle: {
       fontSize: isSmallScreen ? 14 : 16,
       color: theme.textSecondary,
       fontFamily: 'Cairo',
-      textAlign: isSmallScreen ? 'center' : 'right',
+      textAlign:  'right',
       marginTop: 4,
     },
     fullScreenLoader: {
@@ -739,7 +739,7 @@ const getStyles = (theme: any, width: number) => {
     },
     // StatCard styles
     technicianStatsContainer: {
-      flexDirection: isSmallScreen ? 'column' : 'row',
+      flexDirection:'row',
       justifyContent: 'space-between',
       marginBottom: 24,
       gap: isSmallScreen ? 16 : 12,
@@ -828,6 +828,7 @@ const getStyles = (theme: any, width: number) => {
         padding: 16,
         justifyContent: 'space-between',
         minHeight: 160,
+
     },
     infoCardIconContainer: {
         width: 36,
@@ -842,13 +843,13 @@ const getStyles = (theme: any, width: number) => {
         fontWeight: 'bold',
         color: theme.text,
         fontFamily: 'Cairo',
-        textAlign: 'left',
+        textAlign: 'right',
     },
     infoCardTitle: {
         fontSize: 13,
         color: theme.textSecondary,
         fontFamily: 'Cairo',
-        textAlign: 'left',
+        textAlign: 'right',
         marginTop: 2,
     },
 
