@@ -842,12 +842,7 @@ const isDisabled =
               <View style={styles.detailItem}>
                 <Ionicons name="calendar-outline" size={20} color={theme.textSecondary} style={styles.detailIcon} />
                 <ThemedText style={styles.detailText}>
-                  {serviceRequest.createdAt && typeof serviceRequest.createdAt.toDate === 'function' 
-                    ? serviceRequest.createdAt.toDate().toLocaleString('en-GB', {
-                        year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                      })
-                    : 'غير متوفر'
-                  }
+                 
                 </ThemedText>
               </View>
               {/* MODIFICATION END */}
