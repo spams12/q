@@ -27,7 +27,6 @@ SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   const { theme } = useTheme();
-  const router = useRouter();
     useEffect(() => {
     console.log(I18nManager.isRTL ? 'RTL mode enabled' : 'LTR mode enabled');
   }, []);
@@ -135,7 +134,13 @@ export default function RootLayout() {
     const responseListener =
       Notifications.addNotificationResponseReceivedListener((response) => {
         console.log('Notification response received:', response);
-        router.push('/my-requests');
+        const data = response.notification.request.content.data;
+
+        if (data && data.type === 'serviceRequest' && data.id) {
+          router.push(`/tasks/${data.id}`);
+        } else {
+          router.push('/my-requests');
+        }
       });
 
     return () => {
