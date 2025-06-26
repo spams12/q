@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "QMC",
-    "slug": "QMC",
+    "name": "QTM",
+    "slug": "QTM",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "qmc",
+    "scheme": "QTM",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -16,9 +16,13 @@
         "NSLocationAlwaysUsageDescription": "This app uses your location in the background to track your progress on assigned tasks."
       }
     },
+      "splash": {
+      "image": "./assets/images/splashs.jpg",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"},
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/splashs.jpg",
         "backgroundColor": "#ffffff"
       },
       "googleServicesFile": "./google-services.json",
@@ -34,14 +38,14 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/splashs.jpg",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"

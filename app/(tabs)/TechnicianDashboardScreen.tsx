@@ -73,16 +73,16 @@ const formatDuration = (ms: number) => {
 
 // --- SUB-COMPONENTS ---
 
-// New card component for simple statistics
-const StatInfoCard = ({ title, value, icon, backgroundColor, iconColor, styles }: { title: string, value: string, icon: React.ReactNode, backgroundColor: string, iconColor: string, styles: any }) => {
+// MODIFIED: New card component for simple statistics with support for solid colors
+const StatInfoCard = ({ title, value, icon, backgroundColor, iconColor, textColor, styles }: { title: string, value: string, icon: React.ReactNode, backgroundColor: string, iconColor: string, textColor?: string, styles: any }) => {
     return (
         <View style={[styles.infoCard, { backgroundColor }]}>
-            <View style={[styles.infoCardIconContainer, { backgroundColor: iconColor + '20' }]}>
+            <View style={[styles.infoCardIconContainer, { backgroundColor: iconColor }]}>
                 {icon}
             </View>
             <View>
-                <Text style={styles.infoCardValue}>{value}</Text>
-                <Text style={styles.infoCardTitle}>{title}</Text>
+                <Text style={[styles.infoCardValue, textColor ? { color: textColor } : {}]}>{value}</Text>
+                <Text style={[styles.infoCardTitle, textColor ? { color: textColor, opacity: 0.8 } : {}]}>{title}</Text>
             </View>
         </View>
     );
@@ -123,10 +123,10 @@ const TechnicianStatCards = React.memo(({ tickets, styles, isSmallScreen, curren
         const userResponse = ticket.userResponses?.find(r => r.userId === currentUserDocId);
         return userResponse?.response === 'rejected';
     }).length;
-    
+
     return { pending, completed, rejected, total: tickets.length };
   }, [tickets, currentUserDocId]);
-console.log(stats)
+
   const iconSize = isSmallScreen ? 24 : 28;
 
   return (
@@ -252,7 +252,8 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
 
 TicketItem.displayName = 'TicketItem';
 
-const PerformanceSummaryCard = ({ tasks, styles }: { tasks: ServiceRequest[], styles: any }) => {
+// MODIFIED: Updated to use new solid colors and pass correct props
+const PerformanceSummaryCard = ({ tasks, styles, theme }: { tasks: ServiceRequest[], styles: any, theme: any }) => {
     const performanceStats = useMemo(() => {
         const relevantTasks = tasks.filter(
             (t) =>
@@ -333,29 +334,36 @@ const PerformanceSummaryCard = ({ tasks, styles }: { tasks: ServiceRequest[], st
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.cardsScrollView}
+                // Add snapping for a better UX on large cards
+                decelerationRate="fast"
+                snapToInterval={styles.infoCard.width + styles.cardsScrollView.gap}
+                snapToAlignment="start"
             >
                 <StatInfoCard
                     title="متوسط وقت الإنجاز"
                     value={formatDuration(averageCompletionTime)}
-                    icon={<Clock size={20} color="#3B82F6" />}
-                    backgroundColor="rgba(59, 130, 246, 0.1)"
-                    iconColor="#3B82F6"
+                    icon={<Clock size={20} color="#4A5568" />}
+                    backgroundColor="#F7FAFC"
+                    iconColor="#E2E8F0"
+                    textColor="#2D3748"
                     styles={styles}
                 />
                 <StatInfoCard
                     title="متوسط العمل اليومي"
                     value={formatDuration(averageDailyWorkTime)}
-                    icon={<Clock size={20} color="#8B5CF6" />}
-                    backgroundColor="rgba(139, 92, 246, 0.1)"
-                    iconColor="#8B5CF6"
+                    icon={<Clock size={20} color="#2F4D0C" />}
+                    backgroundColor="#C5F87C"
+                    iconColor="#B3E06B"
+                    textColor="#2F4D0C"
                     styles={styles}
                 />
                 <StatInfoCard
                     title="إجمالي وقت العمل"
                     value={formatDuration(totalWorkTime)}
-                    icon={<Clock size={20} color="#F59E0B" />}
-                    backgroundColor="rgba(245, 158, 11, 0.1)"
-                    iconColor="#F59E0B"
+                    icon={<Clock size={20} color="#E0E7FF" />}
+                    backgroundColor="#4338CA"
+                    iconColor="#5A51D1"
+                    textColor="#FFFFFF"
                     styles={styles}
                 />
 
@@ -429,6 +437,7 @@ interface ListHeaderProps {
     styles: any;
     isSmallScreen: boolean;
     currentUserDocId: string | null;
+    theme: any; // Pass theme down
 }
 
 const ListHeader = React.memo(({
@@ -439,7 +448,8 @@ const ListHeader = React.memo(({
     handleTabChange,
     styles,
     isSmallScreen,
-    currentUserDocId
+    currentUserDocId,
+    theme
 }: ListHeaderProps) => (
     <View style={styles.dashboardContainer}>
         <View style={styles.welcomeHeader}>
@@ -447,7 +457,7 @@ const ListHeader = React.memo(({
             <Text style={styles.dashboardSubtitle}>مرحباً بك، تتبع مهامك وأدائك</Text>
         </View>
         <TechnicianStatCards tickets={tasks} styles={styles} isSmallScreen={isSmallScreen} currentUserDocId={currentUserDocId}/>
-        <PerformanceSummaryCard tasks={tasks} styles={styles} />
+        <PerformanceSummaryCard tasks={tasks} styles={styles} theme={theme} />
         
         <View style={styles.taskListContainer}>
             <View style={styles.taskListHeader}>
@@ -655,6 +665,7 @@ function TechnicianDashboardScreen() {
           styles={styles}
           isSmallScreen={isSmallScreen}
           currentUserDocId={currentUserDocId}
+          theme={theme}
         />}
         ListEmptyComponent={loading ? null : <EmptyList searchTerm={searchTerm} styles={styles} />}
         showsVerticalScrollIndicator={false}
@@ -670,8 +681,14 @@ function TechnicianDashboardScreen() {
 
 export default React.memo(TechnicianDashboardScreen);
 
+// MODIFIED: Styles updated for larger, solid-color cards
 const getStyles = (theme: any, width: number) => {
   const isSmallScreen = width < 400;
+  const containerPadding = isSmallScreen ? 12 : 16;
+  const scrollViewPadding = 20;
+  // Calculate card width to be large but show a peek of the next one
+  const cardWidth = width - (containerPadding * 2) - (scrollViewPadding) - 24;
+
 
   return StyleSheet.create({
     screenContainer: {
@@ -682,7 +699,7 @@ const getStyles = (theme: any, width: number) => {
       paddingBottom: 40,
     },
     dashboardContainer: {
-      padding: isSmallScreen ? 12 : 16,
+      padding: containerPadding,
     },
     welcomeHeader: {
       marginBottom: 24,
@@ -794,48 +811,47 @@ const getStyles = (theme: any, width: number) => {
         fontFamily: 'Cairo',
     },
     cardsScrollView: {
-        paddingHorizontal: 20,
+        paddingHorizontal: scrollViewPadding,
         gap: 16,
     },
 
     // New StatInfoCard styles
     infoCard: {
-        width: 220,
-        borderRadius: 16,
-        padding: 16,
+        width: cardWidth, // CHANGED: Card width is now dynamic
+        borderRadius: 24, // Increased border radius for a modern look
+        padding: 20, // Increased padding
         justifyContent: 'space-between',
-        minHeight: 160,
-
+        minHeight: 180, // Increased height
     },
     infoCardIconContainer: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 48, // Larger icon container
+        height: 48,
+        borderRadius: 24,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 12,
     },
     infoCardValue: {
-        fontSize: 20,
+        fontSize: 24, // Larger font
         fontWeight: 'bold',
-        color: theme.text,
         fontFamily: 'Cairo',
         textAlign: 'right',
+        color: theme.text, // Default color
     },
     infoCardTitle: {
-        fontSize: 13,
-        color: theme.textSecondary,
+        fontSize: 14, // Slightly larger
+        color: theme.textSecondary, // Default color
         fontFamily: 'Cairo',
         textAlign: 'right',
-        marginTop: 2,
+        marginTop: 4,
     },
 
     // Modified SLA card style
     card: {
-        width: 220,
-        borderRadius: 16,
-        padding: 16,
-        minHeight: 160,
+        width: cardWidth, // CHANGED: Card width is now dynamic
+        borderRadius: 24, // Increased border radius
+        padding: 20,
+        minHeight: 180,
         justifyContent: 'space-between',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },

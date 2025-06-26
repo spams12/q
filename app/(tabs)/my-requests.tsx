@@ -1,7 +1,6 @@
 import { useTheme } from '@/context/ThemeContext';
 import useFirebaseAuth from '@/hooks/use-firebase-auth';
 import { Ionicons } from '@expo/vector-icons';
-import { useIsFocused } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -153,25 +152,19 @@ const MyRequestsScreen: React.FC = () => {
   const { user } = useFirebaseAuth();
   const { theme } = useTheme();
   const router = useRouter();
-  const isFocused = useIsFocused();
   const viewableItems = useSharedValue<ViewToken[]>([]);
 
+
   useEffect(() => {
-    // If the screen is not focused or there's no user, we don't fetch data.
-    if (!isFocused || !user?.uid) {
-      setRequests([]);
-      setIsLoading(false); // Ensure loading is off and list is empty.
-      return;
+    if (!user?.uid) {
+      return; 
     }
 
-    // --- This part runs only when focused and user is available ---
-
-    setIsLoading(true);
     const q = query(
       collection(db, 'serviceRequests'),
       where('creatorId', '==', user.uid),
       orderBy('createdAt', 'desc'),
-      limit(50)
+      limit(10)
     );
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -180,17 +173,22 @@ const MyRequestsScreen: React.FC = () => {
         ...doc.data()
       } as ServiceRequest));
       setRequests(fetchedRequests);
-      setIsLoading(false);
+      // This is the FIRST time we set loading to false.
+      setIsLoading(false); 
     }, (error) => {
       console.error(`Error fetching requests:`, error);
       setRequests([]);
-      setIsLoading(false);
+      // Also set loading to false on error.
+      setIsLoading(false); 
     });
 
-    // The cleanup function will be called when dependencies change or component unmounts.
-    // This correctly unsubscribes from Firestore.
-    return () => unsubscribe();
-  }, [isFocused, user?.uid]);
+    // The cleanup function will be called when user logs out, screen blurs, or component unmounts.
+    // It will correctly unsubscribe from Firestore and also clear the data.
+    return () => {
+      unsubscribe();
+      setRequests([]); // Clear data on cleanup
+    };
+  }, [ user?.uid]); // Dependencies are correct
 
   const filteredRequests = useMemo(() => {
     return requests.filter(req => {

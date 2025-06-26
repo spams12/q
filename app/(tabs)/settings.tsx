@@ -1,13 +1,13 @@
 import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import { useIsFocused } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
-import React, { Children, useEffect, useState } from 'react';
+// OPTIMIZATION: Import useMemo and useCallback
+import React, { Children, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -51,10 +51,8 @@ interface SettingRowProps {
   rightComponent?: React.ReactNode;
 }
 
-// --- Reusable UI Components ---
 
-// A component for the Profile section at the top
-const ProfileHeader: React.FC<ProfileHeaderProps & { styles: any }> = ({ user, onImagePick, loading, styles }) => (
+const ProfileHeader = React.memo<ProfileHeaderProps & { styles: any }>(({ user, onImagePick, loading, styles }) => (
   <View style={styles.profileSection}>
     <TouchableOpacity onPress={onImagePick} disabled={loading} style={styles.avatarContainer}>
       <Image
@@ -72,12 +70,11 @@ const ProfileHeader: React.FC<ProfileHeaderProps & { styles: any }> = ({ user, o
       )}
     </TouchableOpacity>
     <Text adjustsFontSizeToFit style={styles.profileName}>{user.name || 'اسم المستخدم'}</Text>
-    <Text  adjustsFontSizeToFit style={styles.profileRole}>{user.role || 'عضو'}</Text>
+    <Text adjustsFontSizeToFit style={styles.profileRole}>{user.role || 'عضو'}</Text>
   </View>
-);
+));
 
-// A component to group settings into a card
-const SettingsGroup: React.FC<SettingsGroupProps & { styles: any }> = ({ title, children, styles }) => (
+const SettingsGroup = React.memo<SettingsGroupProps & { styles: any }>(({ title, children, styles }) => (
   <View style={styles.groupContainer}>
     {title && <Text style={styles.groupTitle}>{title}</Text>}
     <View style={styles.groupCard}>
@@ -89,10 +86,9 @@ const SettingsGroup: React.FC<SettingsGroupProps & { styles: any }> = ({ title, 
       ))}
     </View>
   </View>
-);
+));
 
-// A component for a single setting row
-const SettingRow: React.FC<SettingRowProps & { styles: any }> = ({ icon, iconColor, title, value, onPress, rightComponent, styles }) => (
+const SettingRow = React.memo<SettingRowProps & { styles: any }>(({ icon, iconColor, title, value, onPress, rightComponent, styles }) => (
   <TouchableOpacity onPress={onPress} disabled={!onPress} style={styles.settingRow}>
     <View style={[styles.iconContainer, { backgroundColor: iconColor || styles.iconContainer.backgroundColor }]}>
       <Ionicons name={icon} size={20} color={iconColor ? '#FFF' : styles.icon.color} />
@@ -103,39 +99,38 @@ const SettingRow: React.FC<SettingRowProps & { styles: any }> = ({ icon, iconCol
     </View>
     {rightComponent ? rightComponent : (onPress && <Ionicons name="chevron-back" size={20} style={styles.chevron} />)}
   </TouchableOpacity>
-);
+));
 
-// The main page component
 const SettingsPage = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const { themeName, toggleTheme, theme } = useTheme();
-  const styles = getStyles(theme);
-  const [totalInvoices, setTotalInvoices] = useState(0);
-  const [numberOfInvoices, setNumberOfInvoices] = useState(0);
+  // OPTIMIZATION: Memoize the styles object so it's not recreated on every render.
+  // It will only be recreated when the `theme` object changes.
+  const styles = useMemo(() => getStyles(theme), [theme]);
+  console.log("rednedr set")
+  const [invoiceData, setInvoiceData] = useState({ total: 0, count: 0 });
   const { userdoc, setUserdoc, realuserUid } = usePermissions();
   const [loading, setLoading] = useState(false);
   const [isPhoneModalVisible, setPhoneModalVisible] = useState(false);
   const router = useRouter();
-  const isFocused = useIsFocused();
 
-    console.log("renderd settings")
+  const { latestClearTimeString, formattedDate } = useMemo(() => {
+    const latestClearTime = (userdoc?.lastClearTimes && userdoc.lastClearTimes.length > 0)
+      ? userdoc.lastClearTimes.reduce((latest, current) => (current.seconds > latest.seconds ? current : latest))
+      : null;
+    
+    const timeString = latestClearTime ? latestClearTime.toDate().toISOString() : new Date(0).toISOString();
+    
+    const dateString = latestClearTime ? new Intl.DateTimeFormat('ar-IQ', {
+        year: 'numeric', month: 'long', day: 'numeric',
+    }).format(latestClearTime.toDate()) : 'لا توجد تصفية سابقة';
 
-
-  const latestClearTime = (userdoc?.lastClearTimes && userdoc.lastClearTimes.length > 0)
-    ? userdoc.lastClearTimes.reduce((latest, current) => (current.seconds > latest.seconds ? current : latest))
-    : null;
+    return { latestClearTimeString: timeString, formattedDate: dateString };
+  }, [userdoc]);
   
-  const latestClearTimeString = latestClearTime ? latestClearTime.toDate().toISOString() : new Date(0).toISOString();
-  
-  const formattedDate = latestClearTime ? new Intl.DateTimeFormat('ar-IQ', {
-      year: 'numeric', month: 'long', day: 'numeric',
-  }).format(latestClearTime.toDate()) : 'لا توجد تصفية سابقة';
-
-// --- Real-time User Data Listener ---
+  // --- Real-time User Data Listener ---
   useEffect(() => {
-    if (!realuserUid) {
-      return;
-    }
+    if (!realuserUid) return;
 
     const userDocRef = doc(db, 'users', realuserUid);
     const unsubscribe = onSnapshot(userDocRef, (snapshot) => {
@@ -149,15 +144,16 @@ const SettingsPage = () => {
     });
 
     return () => unsubscribe();
-  }, [realuserUid, setUserdoc]);
-  // --- Logic and Handlers (kept the same) ---
+    // OPTIMIZATION: `setUserdoc` from context should be stable, so it can be removed from dependencies.
+  }, [realuserUid]);
+
+  // --- Invoice Data Listener ---
   useEffect(() => {
-    if (!isFocused || !realuserUid) {
-      setTotalInvoices(0);
-      setNumberOfInvoices(0);
+    if (!realuserUid) {
+      setInvoiceData({ total: 0, count: 0 });
       return;
     }
-
+    // Now this query uses the memoized `latestClearTimeString`
     const q = query(collection(db, 'invoices'), where('createdBy', '==', realuserUid), where('createdAt', '>=', latestClearTimeString));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -165,64 +161,62 @@ const SettingsPage = () => {
       snapshot.forEach((doc) => {
         total += doc.data().totalAmount;
       });
-      setTotalInvoices(total);
-      setNumberOfInvoices(snapshot.size);
+      setInvoiceData({ total: total, count: snapshot.size });
     }, (error) => {
       console.error("Error fetching invoices: ", error);
       Alert.alert('خطأ', 'فشل في جلب بيانات الفواتير.');
     });
 
     return () => unsubscribe();
-  }, [isFocused, realuserUid, latestClearTimeString]);
-
-  const handleImagePick = async () => {
+  }, [ realuserUid, latestClearTimeString]);
+  
+  // OPTIMIZATION: Wrap all handlers in `useCallback` to prevent them from being
+  // recreated on every render. This ensures stable props for child components.
+  const handleImagePick = useCallback(async () => {
     setLoading(true);
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('صلاحية مرفوضة', 'نحتاج إلى صلاحية الوصول إلى الصور لتحديث صورتك الشخصية.');
-      setLoading(false);
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
-    });
-    if (result.canceled) {
-      setLoading(false);
-      return;
-    }
-    const imageUri = result.assets[0].uri;
     try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('صلاحية مرفوضة', 'نحتاج إلى صلاحية الوصول إلى الصور لتحديث صورتك الشخصية.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+      if (result.canceled || !userdoc?.id) return;
+      
+      const imageUri = result.assets[0].uri;
       const response = await fetch(imageUri);
       const blob = await response.blob();
       const storage = getStorage();
-      const storageRef = ref(storage, `profile_pictures/${userdoc?.id}`);
+      const storageRef = ref(storage, `profile_pictures/${userdoc.id}`);
       await uploadBytes(storageRef, blob);
       const downloadURL = await getDownloadURL(storageRef);
-      if (userdoc?.id) {
-        const userDocRef = doc(db, 'users', userdoc.id);
-        await updateDoc(userDocRef, { photoURL: downloadURL });
-        setUserdoc({ ...userdoc!, photoURL: downloadURL });
-        Alert.alert('نجاح', 'تم تحديث الصورة الشخصية بنجاح.');
-      }
+      
+      const userDocRef = doc(db, 'users', userdoc.id);
+      await updateDoc(userDocRef, { photoURL: downloadURL });
+      // No need to call setUserdoc here, as the onSnapshot listener will catch the change and do it for us.
+      Alert.alert('نجاح', 'تم تحديث الصورة الشخصية بنجاح.');
+
     } catch (error) {
       console.error('Error uploading image: ', error);
       Alert.alert('خطأ', 'فشل تحديث الصورة.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [userdoc?.id]); // Dependency on what the function needs
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     Alert.alert(
       'تسجيل الخروج', 'هل أنت متأكد؟',
       [{ text: 'إلغاء', style: 'cancel' }, { text: 'تسجيل الخروج', style: 'destructive', onPress: () => signOut(auth) }]
     );
-  };
-  
-  const handlePhoneUpdate = async (newPhone: string) => {
+  }, []); // No dependencies
+
+  const handlePhoneUpdate = useCallback(async (newPhone: string) => {
     if (!userdoc?.id || !newPhone) {
       setPhoneModalVisible(false);
       return;
@@ -231,8 +225,8 @@ const SettingsPage = () => {
     try {
       const userDocRef = doc(db, 'users', userdoc.id);
       await updateDoc(userDocRef, { phone: newPhone });
+       // Again, onSnapshot will handle the state update.
       Alert.alert('نجاح', 'تم تحديث رقم الهاتف بنجاح.');
-      setUserdoc({ ...userdoc!, phone: newPhone });
     } catch (error) {
       console.error('Error updating phone number: ', error);
       Alert.alert('خطأ', 'فشل تحديث رقم الهاتف.');
@@ -240,7 +234,13 @@ const SettingsPage = () => {
       setLoading(false);
       setPhoneModalVisible(false);
     }
-  };
+  }, [userdoc?.id]); // Dependency on userdoc.id
+
+  const openPhoneModal = useCallback(() => setPhoneModalVisible(true), []);
+  const closePhoneModal = useCallback(() => setPhoneModalVisible(false), []);
+  const goToInvoices = useCallback(() => router.push('/invoices'), [router]);
+  const goToFamily = useCallback(() => router.push('/family'), [router]);
+  const goToAbout = useCallback(() => router.push('/about'), [router]);
 
 
   if (!userdoc) {
@@ -259,16 +259,16 @@ const SettingsPage = () => {
 
       {/* Wallet Card */}
       <SettingsGroup title="المحفظة" styles={styles}>
-        <TouchableOpacity style={styles.invoiceCard} onPress={() => router.push('/invoices')}>
+        <TouchableOpacity style={styles.invoiceCard} onPress={goToInvoices}>
             <View style={styles.invoiceCardContent}>
               <Ionicons name="receipt-outline" size={32} style={styles.invoiceIcon} />
               <View style={styles.invoiceCardText}>
                 <Text style={styles.invoiceCardTitle}>فواتير الفترة الحالية</Text>
-                <Text style={styles.invoiceCardSubtitle}>{`${numberOfInvoices} فاتورة`} • آخر تصفية: {formattedDate}</Text>
+                <Text style={styles.invoiceCardSubtitle}>{`${invoiceData.count} فاتورة`} • آخر تصفية: {formattedDate}</Text>
               </View>
             </View>
             <View style={styles.invoiceCardAmountContainer}>
-              <Text style={styles.invoiceCardAmount}>{`${totalInvoices.toLocaleString()} IQD`}</Text>
+              <Text style={styles.invoiceCardAmount}>{`${invoiceData.total.toLocaleString()} IQD`}</Text>
               <Ionicons name="chevron-back" size={24} style={styles.chevron} />
             </View>
         </TouchableOpacity>
@@ -276,9 +276,9 @@ const SettingsPage = () => {
       
       {/* Personal Info Group */}
       <SettingsGroup title="المعلومات الشخصية" styles={styles}>
-        <SettingRow  styles={styles} icon="person-outline" title="الاسم الكامل" value={userdoc.name || ''} iconColor="#5856D6" />
+        <SettingRow styles={styles} icon="person-outline" title="الاسم الكامل" value={userdoc.name || ''} iconColor="#5856D6" />
         <SettingRow styles={styles} icon="mail-outline" title="البريد الإلكتروني" value={userdoc.email || ''} iconColor="#007AFF" />
-        <SettingRow styles={styles} icon="call-outline" title="رقم الهاتف" value={userdoc.phone || 'غير محدد'} onPress={() => setPhoneModalVisible(true)} iconColor="#34C759" />
+        <SettingRow styles={styles} icon="call-outline" title="رقم الهاتف" value={userdoc.phone || 'غير محدد'} onPress={openPhoneModal} iconColor="#34C759" />
         <SettingRow styles={styles} icon="people-outline" title="معرف الفريق" value={userdoc.teamId || 'غير محدد'} iconColor="#FF9500" />
       </SettingsGroup>
 
@@ -302,8 +302,8 @@ const SettingsPage = () => {
 
       {/* Other Group */}
       <SettingsGroup styles={styles}>
-        <SettingRow styles={styles} icon="people-circle-outline" title="عائله القبس" onPress={() => router.push('/family')} iconColor="#FF69B4" />
-        <SettingRow  styles={styles} icon="information-circle-outline" title="حول التطبيق" onPress={() => router.push('/about')} iconColor="#00BCD4" />
+        <SettingRow styles={styles} icon="people-circle-outline" title="عائله القبس" onPress={goToFamily} iconColor="#FF69B4" />
+        <SettingRow styles={styles} icon="information-circle-outline" title="حول التطبيق" onPress={goToAbout} iconColor="#00BCD4" />
         <TouchableOpacity onPress={handleLogout} style={styles.logoutButtonRow}>
           <View style={[styles.iconContainer, { backgroundColor: theme.destructive }]}>
             <Ionicons name="log-out-outline" size={20} color="#FFF" />
@@ -314,7 +314,7 @@ const SettingsPage = () => {
 
       <UpdatePhoneModal
         visible={isPhoneModalVisible}
-        onClose={() => setPhoneModalVisible(false)}
+        onClose={closePhoneModal}
         onUpdate={handlePhoneUpdate}
         currentPhone={userdoc.phone || ''}
         loading={loading}
@@ -323,6 +323,7 @@ const SettingsPage = () => {
   );
 };
 
+// ... (getStyles function remains the same)
 const getStyles = (theme: Theme) => StyleSheet.create({
   // --- Global Styles ---
   container: {
@@ -527,4 +528,5 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
 });
 
+// The final export remains the same
 export default React.memo(SettingsPage);

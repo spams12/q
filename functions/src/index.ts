@@ -63,7 +63,7 @@ export const sendNewRequestNotificationOnUpdate = onDocumentUpdated({ document: 
           to: expoPushToken,
           sound: "default" as const,
           title: ` ${afterData.title} لقد تم ارسال مهمة لك `,
-          body: `تم تعيين مهمه جديده لك ${afterData.type} نوعها ${afterData.priority} وهي بدرجة خطورة ${afterData.title} اضغط للذهاب اليها فوراً !`,
+          body: `تم تعيين مهمه جديده لك نوعها  ${afterData.type} اضغط للذهاب اليها فوراً !`,
           data: { type: "serviceRequest", id: snapshot.id },
         });
         logger.log(`Prepared notification for user: ${userId}`);

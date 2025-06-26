@@ -1,16 +1,21 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { I18nManager, StyleSheet, View } from 'react-native';
+import { I18nManager, View } from 'react-native';
 import 'react-native-get-random-values';
 import 'react-native-reanimated';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PermissionsProvider } from '../context/PermissionsContext';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
+import { useProtectedRoute } from '../hooks/useProtectedRoute';
 import { auth, db } from '../lib/firebase';
+
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -21,11 +26,13 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 
-function RootLayoutNav() {
+function RootLayoutNav({ user, profile, authLoaded }: { user: User | null; profile: any; authLoaded: boolean }) {
+  useProtectedRoute(user, profile, authLoaded)
+  I18nManager.forceRTL(false);
+  I18nManager.allowRTL(false);
   const { theme } = useTheme();
     useEffect(() => {
     console.log(I18nManager.isRTL ? 'RTL mode enabled' : 'LTR mode enabled');
@@ -65,10 +72,7 @@ function RootLayoutNav() {
   );
 }
 
-const styles = StyleSheet.create({
-  backButton: {
-  },
-});
+
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -78,7 +82,6 @@ export default function RootLayout() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<any>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
-  const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
@@ -104,22 +107,6 @@ export default function RootLayout() {
   }, [user]);
 
   useEffect(() => {
-    if (!authLoaded) return;
-
-    const inAuthGroup = segments[0] === '(auth)';
-
-    if (user) {
-      if (profile && (!profile.phoneNumber || !profile.photoURL)) {
-        router.replace('/complete-profile');
-      } else if (inAuthGroup) {
-        router.replace('/(tabs)');
-      }
-    } else if (!inAuthGroup) {
-      router.replace('/login');
-    }
-  }, [user, profile, authLoaded, segments, router]);
-
-  useEffect(() => {
     if (loaded && authLoaded) {
       SplashScreen.hideAsync();
     }
@@ -127,8 +114,16 @@ export default function RootLayout() {
 
   useEffect(() => {
     const notificationListener =
-      Notifications.addNotificationReceivedListener((notification) => {
+      Notifications.addNotificationReceivedListener(async (notification) => {
         console.log('Notification received:', notification);
+        try {
+          const existingNotifications = await AsyncStorage.getItem('notifications');
+          const notifications = existingNotifications ? JSON.parse(existingNotifications) : [];
+          notifications.push(notification);
+          await AsyncStorage.setItem('notifications', JSON.stringify(notifications));
+        } catch (e) {
+          console.error("Failed to save notification.", e);
+        }
       });
 
     const responseListener =
@@ -155,9 +150,11 @@ export default function RootLayout() {
 
   return (
     <PermissionsProvider>
+      <SafeAreaProvider>
       <ThemeProvider>
-        <RootLayoutNav />
+        <RootLayoutNav user={user} profile={profile} authLoaded={authLoaded} />
       </ThemeProvider>
+      </SafeAreaProvider>
     </PermissionsProvider>
   );
 }

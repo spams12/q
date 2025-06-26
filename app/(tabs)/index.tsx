@@ -1,28 +1,24 @@
 import { usePermissions } from '@/context/PermissionsContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import { useIsFocused } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
-import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
-import { arrayUnion, collection, doc, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ViewToken } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ViewToken } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import FilterDialog from '../../components/FilterDialog';
 import InfoCard from '../../components/InfoCard';
-import useFirebaseAuth from '../../hooks/use-firebase-auth';
 import { db } from '../../lib/firebase';
-import { Comment, ServiceRequest, UserResponse } from '../../lib/types';
+import { ServiceRequest } from '../../lib/types';
 
-
-// --- Constants for Filter Options ---
-const AVAILABLE_TYPES = ['طلب', 'شكوى', 'اقتراح', 'مشكلة'];
+const AVAILABLE_TYPES = [
+    "صيانة رئيسية", "تنصيب مشترك", "صيانة مشترك", "تغيير زون المشترك",
+    "مشكلة في التفعيل", "جباية", "شكوى", "مشكلة", "طلب", "استفسار", "اقتراح"
+];
 const AVAILABLE_STATUSES = ['جديدة', 'قيد المعالجة', 'تم حلها', 'مغلقة'];
 const AVAILABLE_PRIORITIES = ['عالية', 'متوسطة', 'منخفضة'];
 
 type TabKey = 'New' | 'Accepted' | 'Completed';
-const LOCATION_TASK_NAME = 'background-location-task';
 
 interface CachedData {
   New: ServiceRequest[];
@@ -240,22 +236,13 @@ const TasksScreen: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
 
   const { userUid } = usePermissions(); // From new context
-  const { user } = useFirebaseAuth();
   const { theme } = useTheme();
-  const router = useRouter();
   const viewableItems = useSharedValue<ViewToken[]>([]);
-  const isFocused = useIsFocused();
   
 useEffect(() => {
   if (!userUid) {
     setCachedData({ New: [], Accepted: [], Completed: [] });
     setLoadingStates({ New: false, Accepted: false, Completed: false });
-    return;
-  }
-
-  // If the screen is not focused, we don't want to fetch data.
-  // The cleanup function from the previous render will handle unsubscribing.
-  if (!isFocused) {
     return;
   }
 
@@ -276,7 +263,6 @@ useEffect(() => {
     const newData: CachedData = { New: [], Accepted: [], Completed: [] };
     
     allRequests.forEach(req => {
-      // Skip tickets with status 'معلق'
       if (req.status === 'معلق') {
         return;
       }
@@ -309,7 +295,7 @@ useEffect(() => {
   });
 
   return () => unsubscribe();
-}, [userUid, isFocused]);
+}, [userUid]);
 
   const hasActiveFilters = !!(selectedPriority || selectedType || selectedStatus);
 
@@ -343,107 +329,12 @@ useEffect(() => {
     setActiveTab(tab);
   }, [activeTab]);
   
-  const handleAcceptTask = async (ticketId: string) => {
-    if (!userUid) return;
-    // ... (rest of the function is unchanged)
-    const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
-    if (foregroundStatus !== 'granted') {
-      Alert.alert('Permission required', 'Please grant foreground location permission.');
-      return;
-    }
 
-    const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-    if (backgroundStatus !== 'granted') {
-      Alert.alert('Permission required', 'Please grant background location permission for tracking.');
-      return;
-    }
-
-    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      accuracy: Location.Accuracy.Balanced,
-      timeInterval: 60000,
-      distanceInterval: 50,
-      showsBackgroundLocationIndicator: true,
-      foregroundService: {
-        notificationTitle: 'Tracking Your Location',
-        notificationBody: 'Your location is being tracked for the current task.',
-      },
-    });
-
-    try {
-      const requestRef = doc(db, "serviceRequests", ticketId);
-      const userResponse: UserResponse = {
-        userId: userUid,
-        userName: user?.displayName || "مستخدم",
-        response: "accepted",
-        timestamp: new Date().toISOString()
-      };
-      
-      await updateDoc(requestRef, {
-        userResponses: arrayUnion(userResponse),
-        lastUpdated: new Date().toISOString(),
-        status :"قيد المعالجة"
-      });
-      
-      const acceptanceComment: Comment = {
-        id: `comment_${Date.now()}`,
-        userId: userUid,
-        userName: user?.displayName || "مستخدم",
-        content: "قبلت المهمة وسأعمل عليها.",
-        timestamp: new Date().toISOString()
-      };
-      await updateDoc(requestRef, { comments: arrayUnion(acceptanceComment) });
-      
-      router.push(`/tasks/${ticketId}`);
-    } catch (error) {
-      console.error("Error accepting task:", error);
-      Alert.alert("حدث خطأ أثناء قبول المهمة");
-    }
-  }
-
-  const handleRejectTask = async (ticketId: string) => {
-     // ... (function is unchanged)
-    if (!userUid) return;
-
-    const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
-    if (isTracking) {
-      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
-    }
-
-    try {
-      const requestRef = doc(db, "serviceRequests", ticketId);
-      const userResponse: UserResponse = {
-        userId: userUid,
-        userName: user?.displayName || "مستخدم",
-        response: "rejected",
-        timestamp: new Date().toISOString()
-      };
-
-      await updateDoc(requestRef, {
-        userResponses: arrayUnion(userResponse),
-        lastUpdated: new Date().toISOString(),
-      });
-      
-      const rejectionComment: Comment = {
-        id: `comment_${Date.now()}`,
-        userId: userUid,
-        userName: user?.displayName || "مستخدم",
-        content: "رفضت المهمة. يرجى مراجعة التفاصيل معي.",
-        timestamp: new Date().toISOString()
-      };
-      await updateDoc(requestRef, { comments: arrayUnion(rejectionComment) });
-
-      Alert.alert("تم رفض المهمة بنجاح");
-    } catch (error) {
-      console.error("Error rejecting task:", error);
-      Alert.alert("حدث خطأ أثناء رفض المهمة");
-    }
-  }
-  
   const onViewableItemsChanged = useCallback(({ viewableItems: vItems }: { viewableItems: ViewToken[] }) => { viewableItems.value = vItems; }, [viewableItems]);
   const renderItem = useCallback(({ item }: { item: ServiceRequest }) => {
     const hasResponded = item.userResponses?.some(res => res.userId === userUid);
-    return <InfoCard item={item} viewableItems={viewableItems} handleAcceptTask={handleAcceptTask} handleRejectTask={handleRejectTask} hasResponded={!!hasResponded} />;
-  }, [handleAcceptTask, handleRejectTask, viewableItems, userUid]);
+    return <InfoCard item={item} viewableItems={viewableItems}  hasResponded={!!hasResponded} />;
+  }, [, viewableItems, userUid]);
   const keyExtractor = useCallback((item: ServiceRequest) => item.id, []);
   const toggleFilterPopup = useCallback(() => setIsFilterVisible(prev => !prev), []);
   const toggleSortOrder = useCallback(() => setSortOrder(prev => (prev === 'desc' ? 'asc' : 'desc')), []);

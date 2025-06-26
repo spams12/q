@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useIsFocused } from '@react-navigation/native';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
@@ -26,7 +25,6 @@ type StockManagementListItem =
 const StockManagementScreen: React.FC = () => {
   const { userUid } = usePermissions();
   const { theme } = useTheme();
-  const isFocused = useIsFocused();
   const [stockItems, setStockItems] = useState<UserStockItem[]>([]);
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,9 +33,8 @@ const StockManagementScreen: React.FC = () => {
     console.log("renderd mangments")
 
   useEffect(() => {
-    if (!isFocused) {
-      return;
-    }
+  
+    
     if (!userUid) {
       setLoading(false);
       return;
@@ -83,7 +80,7 @@ const StockManagementScreen: React.FC = () => {
       unsubscribeUser();
       unsubscribeTransactions();
     };
-  }, [isFocused, userUid]);
+  }, [ userUid]);
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);

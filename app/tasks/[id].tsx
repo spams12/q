@@ -15,6 +15,7 @@ import { arrayUnion, collection, doc, getDocs, onSnapshot, runTransaction, setDo
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Dimensions, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InvoiceList } from '../../components/InvoiceList';
 import { ThemedText } from '../../components/ThemedText';
 import { ThemedView } from '../../components/ThemedView';
@@ -22,7 +23,6 @@ import useFirebaseAuth from '../../hooks/use-firebase-auth';
 import { db, storage } from '../../lib/firebase';
 import { getPriorityBadgeColor, getStatusBadgeColor } from '../../lib/styles';
 import { Comment, Invoice, InvoiceItem, ServiceRequest, User } from '../../lib/types';
-
 const { width } = Dimensions.get('window');
 const formatDateTime = (timestamp) => {
     if (!timestamp) return 'N/A';
@@ -104,7 +104,8 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
 });
 
 const TicketDetailPage = () => {
-  
+  const insets = useSafeAreaInsets();
+
   const params = useLocalSearchParams();
   const id = params.id
   const showActions = params.showActions
@@ -1154,7 +1155,7 @@ const isDisabled =
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
-          <View style={styles.inputSection}>
+          <View style={[styles.inputSection , {paddingBottom : insets.bottom}]}>
             {attachments.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.attachmentPreviewContainer}>
                   {attachments.map((file, index) => (
@@ -1552,12 +1553,10 @@ const getStyles = (theme: any, themeName: 'light' | 'dark') => {
       color: theme.white,
       fontWeight: 'bold',
     },
-    // Styles for the new input bar section
     inputSection: {
         backgroundColor: theme.card,
         borderTopWidth: 1,
         borderTopColor: theme.border,
-        paddingBottom: Platform.OS === 'ios' ? 20 : 20, 
     },
     attachmentPreviewContainer: {
         paddingHorizontal: 16,
