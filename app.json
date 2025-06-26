@@ -21,6 +21,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "package": "com.tmody.QMC",
       "permissions": [
@@ -67,7 +68,10 @@
           "isAndroidBackgroundLocationEnabled": true
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "@react-native-firebase/app"
+      ]
     ],
     "experiments": {
       "typedRoutes": true
