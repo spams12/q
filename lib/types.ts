@@ -1,3 +1,5 @@
+import { Timestamp } from "firebase/firestore";
+
 export interface PackageType {
   id: string;
   name: string;
@@ -143,7 +145,7 @@ export interface ServiceRequest {
   status: string; 
   priority: string; 
   date: string; 
-  createdAt: string; 
+  createdAt: Timestamp; 
   lastUpdated: string;
   assignedTo?: string;
   assignedUsers?: string[];

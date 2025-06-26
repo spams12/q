@@ -18,6 +18,7 @@ import {
 
 
 // NAVIGATION
+import { useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 
 // FIREBASE
@@ -40,10 +41,6 @@ import { useTheme } from "../../context/ThemeContext";
 import useAuth from "../../hooks/use-firebase-auth";
 import { ServiceRequest } from "../../lib/types";
 
-// Cache for technician's tasks to prevent re-fetching on tab switch
-let tasksCache: ServiceRequest[] | null = null;
-let userDocIdCache: string | null = null;
-let cacheTimestamp: number | null = null;
  
  
  // --- HELPER FUNCTIONS ---
@@ -126,10 +123,10 @@ const TechnicianStatCards = React.memo(({ tickets, styles, isSmallScreen, curren
         const userResponse = ticket.userResponses?.find(r => r.userId === currentUserDocId);
         return userResponse?.response === 'rejected';
     }).length;
-
+    
     return { pending, completed, rejected, total: tickets.length };
   }, [tickets, currentUserDocId]);
-
+console.log(stats)
   const iconSize = isSmallScreen ? 24 : 28;
 
   return (
@@ -181,6 +178,7 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
   const hasAccepted = userResponse?.response === "accepted";
   const hasRejected = userResponse?.response === "rejected";
   const isCompleted = ticket.status === "مكتمل" || ticket.status === "مغلق";
+    
 
   const itemAnim = useRef(new Animated.Value(0)).current;
 
@@ -500,7 +498,12 @@ const EmptyList = ({ searchTerm, styles }: EmptyListProps) => (
     </View>
 );
 
-export default function TechnicianDashboardScreen() {
+const mapDocToServiceRequest = (docSnap: DocumentSnapshot): ServiceRequest => {
+  const data = docSnap.data() as any;
+  return { id: docSnap.id, ...data } as ServiceRequest;
+};
+
+function TechnicianDashboardScreen() {
   const { theme } = useTheme();
   const { width } = useWindowDimensions();
   const styles = getStyles(theme, width);
@@ -511,15 +514,11 @@ export default function TechnicianDashboardScreen() {
   const { user } = useAuth();
   const [currentUserDocId, setCurrentUserDocId] = useState<string | null>(null);
   const router = useRouter();
+  const isFocused = useIsFocused();
 
-
+  console.log("renderd stats ")
   const [selectedTab, setSelectedTab] = useState<"all" | "pending" | "completed" | "rejected">("all");
   const [searchTerm, setSearchTerm] = useState("");
-
-  const mapDocToServiceRequest = (docSnap: DocumentSnapshot): ServiceRequest => {
-    const data = docSnap.data() as any;
-    return { id: docSnap.id, ...data } as ServiceRequest;
-  };
 
   const fetchUserDocId = useCallback(async () => {
     if (!user?.email) return null;
@@ -529,79 +528,55 @@ export default function TechnicianDashboardScreen() {
     return usersSnapshot.docs[0].id;
   }, [user]);
 
-const fetchTasks = useCallback(async (userDocId: string) => {
-  setLoading(true);
-
-  try {
-      const constraints: QueryConstraint[] = [
-          where("assignedUsers", "array-contains", userDocId),
-          orderBy("date", "desc"),
-      ];
+  const fetchTasks = useCallback(async (userDocId: string) => {
+    try {
+        const constraints: QueryConstraint[] = [
+            where("assignedUsers", "array-contains", userDocId),
+            orderBy("date", "desc"),
+        ];
+        
+        const q = query(collection(db, "serviceRequests"), ...constraints);
+        const snap = await getDocs(q);
       
-      const q = query(collection(db, "serviceRequests"), ...constraints);
-      const snap = await getDocs(q);
-    
-      if (!snap.empty) {
-          const newTasks = snap.docs.map(mapDocToServiceRequest);
-          setTasks(newTasks);
-          tasksCache = newTasks;
-          cacheTimestamp = Date.now();
+        if (!snap.empty) {
+            const newTasks = snap.docs.map(mapDocToServiceRequest);
+            setTasks(newTasks);
+        } else {
+            setTasks([]);
+        }
+    } catch (error) {
+        console.error("Error fetching tasks:", error);
+        Alert.alert("خطأ", "لم نتمكن من تحميل المهام.");
+    }
+  }, []);
+
+  const loadData = useCallback(async () => {
+    if (user) {
+      setLoading(true);
+      const docId = await fetchUserDocId();
+      if (docId) {
+        setCurrentUserDocId(docId);
+        await fetchTasks(docId);
       } else {
-          setTasks([]);
-          tasksCache = [];
-          cacheTimestamp = Date.now();
+        setTasks([]);
       }
-  } catch (error) {
-      console.error("Error fetching tasks:", error);
-      Alert.alert("خطأ", "لم نتمكن من تحميل المهام.");
-      tasksCache = null;
-      cacheTimestamp = null;
-  } finally {
       setLoading(false);
-  }
-}, []);
+    } else {
+      setTasks([]);
+      setLoading(false);
+    }
+  }, [user, fetchUserDocId, fetchTasks]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    if (currentUserDocId) {
-      // Invalidate cache to force re-fetch
-      cacheTimestamp = null;
-      fetchTasks(currentUserDocId).finally(() => setRefreshing(false));
-    } else {
-      setRefreshing(false);
-    }
-  }, [currentUserDocId, fetchTasks]);
+    loadData().finally(() => setRefreshing(false));
+  }, [loadData]);
 
   useEffect(() => {
-    const now = Date.now();
-    // Use cache if it's less than 1 minute old to prevent re-fetch on rapid tab switching
-    if (tasksCache && userDocIdCache && cacheTimestamp && (now - cacheTimestamp < 60000)) {
-      setTasks(tasksCache);
-      setCurrentUserDocId(userDocIdCache);
-      setLoading(false);
-      return;
+    if (isFocused) {
+      loadData();
     }
-
-    if (user) {
-      fetchUserDocId().then(docId => {
-        if (docId) {
-          setCurrentUserDocId(docId);
-          userDocIdCache = docId; // Cache userDocId
-          fetchTasks(docId);
-        } else {
-          setLoading(false);
-          setTasks([]);
-        }
-      });
-    } else {
-      // Clear cache on logout
-      tasksCache = null;
-      userDocIdCache = null;
-      cacheTimestamp = null;
-      setLoading(false);
-      setTasks([]);
-    }
-  }, [user, fetchUserDocId, fetchTasks]);
+  }, [isFocused, loadData]);
 
 
   const handleTabChange = useCallback((tab: "all" | "pending" | "completed" | "rejected") => {
@@ -692,6 +667,8 @@ const fetchTasks = useCallback(async (userDocId: string) => {
     </View>
   );
 }
+
+export default React.memo(TechnicianDashboardScreen);
 
 const getStyles = (theme: any, width: number) => {
   const isSmallScreen = width < 400;

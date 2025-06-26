@@ -24,7 +24,18 @@ import { getPriorityBadgeColor, getStatusBadgeColor } from '../../lib/styles';
 import { Comment, Invoice, InvoiceItem, ServiceRequest, User } from '../../lib/types';
 
 const { width } = Dimensions.get('window');
-
+const formatDateTime = (timestamp) => {
+    if (!timestamp) return 'N/A';
+    const date = timestamp.toDate();
+    return date.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true 
+    });
+};
 type NewCustomerInstallationItem = InvoiceItem & {
   type: 'newCustomerInstallation';
   deviceModel: string;
@@ -841,9 +852,9 @@ const isDisabled =
               {/* MODIFICATION START */}
               <View style={styles.detailItem}>
                 <Ionicons name="calendar-outline" size={20} color={theme.textSecondary} style={styles.detailIcon} />
-                <ThemedText style={styles.detailText}>
-                 
-                </ThemedText>
+               <ThemedText style={styles.detailText}>
+     {formatDateTime(serviceRequest.createdAt)}
+</ThemedText>
               </View>
               {/* MODIFICATION END */}
             </View>

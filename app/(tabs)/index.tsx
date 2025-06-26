@@ -1,6 +1,7 @@
 import { usePermissions } from '@/context/PermissionsContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
@@ -232,7 +233,7 @@ const TasksScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-  
+  console.log("renderd index")
   // Filter States
   const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
@@ -243,6 +244,7 @@ const TasksScreen: React.FC = () => {
   const { theme } = useTheme();
   const router = useRouter();
   const viewableItems = useSharedValue<ViewToken[]>([]);
+  const isFocused = useIsFocused();
   
 useEffect(() => {
   if (!userUid) {
@@ -251,10 +253,16 @@ useEffect(() => {
     return;
   }
 
+  // If the screen is not focused, we don't want to fetch data.
+  // The cleanup function from the previous render will handle unsubscribing.
+  if (!isFocused) {
+    return;
+  }
+
   setLoadingStates({ New: true, Accepted: true, Completed: true });
 
   const q = query(
-    collection(db, 'serviceRequests'), 
+    collection(db, 'serviceRequests'),
     where("assignedUsers", "array-contains", userUid),
     orderBy('createdAt', 'desc')
   );
@@ -301,7 +309,7 @@ useEffect(() => {
   });
 
   return () => unsubscribe();
-}, [userUid]);
+}, [userUid, isFocused]);
 
   const hasActiveFilters = !!(selectedPriority || selectedType || selectedStatus);
 
@@ -420,7 +428,7 @@ useEffect(() => {
         userId: userUid,
         userName: user?.displayName || "مستخدم",
         content: "رفضت المهمة. يرجى مراجعة التفاصيل معي.",
-        timestamp: newtoISOString()
+        timestamp: new Date().toISOString()
       };
       await updateDoc(requestRef, { comments: arrayUnion(rejectionComment) });
 
@@ -670,4 +678,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default TasksScreen;
+export default React.memo(TasksScreen);

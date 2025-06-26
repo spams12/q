@@ -19,7 +19,12 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      
+      initialRouteName="index" 
+      
       screenOptions={{
+        
+        freezeOnBlur: true, 
         tabBarButton: (props) => {
           return (
             <HapticTab
@@ -39,8 +44,10 @@ export default function TabLayout() {
         },
       }}>
       <Tabs.Screen
+       
         name="index"
         options={{
+           
           title: 'المهام',
           tabBarIcon: ({ color, size }) => (
             <FontAwesome name="home" size={size} color={color} />
@@ -57,6 +64,8 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+          
+
         name="stock-management"
         options={{
           title: 'الحقيبة',
@@ -64,6 +73,7 @@ export default function TabLayout() {
             <MaterialIcons name="backpack" size={size} color={color} />
           ),
         }}
+        
       />
       <Tabs.Screen
         name="TechnicianDashboardScreen"

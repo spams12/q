@@ -1,6 +1,7 @@
 import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
@@ -115,6 +116,10 @@ const SettingsPage = () => {
   const [loading, setLoading] = useState(false);
   const [isPhoneModalVisible, setPhoneModalVisible] = useState(false);
   const router = useRouter();
+  const isFocused = useIsFocused();
+
+    console.log("renderd settings")
+
 
   const latestClearTime = (userdoc?.lastClearTimes && userdoc.lastClearTimes.length > 0)
     ? userdoc.lastClearTimes.reduce((latest, current) => (current.seconds > latest.seconds ? current : latest))
@@ -147,7 +152,7 @@ const SettingsPage = () => {
   }, [realuserUid, setUserdoc]);
   // --- Logic and Handlers (kept the same) ---
   useEffect(() => {
-    if (!realuserUid) {
+    if (!isFocused || !realuserUid) {
       setTotalInvoices(0);
       setNumberOfInvoices(0);
       return;
@@ -168,7 +173,7 @@ const SettingsPage = () => {
     });
 
     return () => unsubscribe();
-  }, [realuserUid, latestClearTimeString]);
+  }, [isFocused, realuserUid, latestClearTimeString]);
 
   const handleImagePick = async () => {
     setLoading(true);
@@ -522,4 +527,4 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
 });
 
-export default SettingsPage;
+export default React.memo(SettingsPage);

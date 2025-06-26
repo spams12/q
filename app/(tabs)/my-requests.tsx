@@ -1,6 +1,7 @@
 import { useTheme } from '@/context/ThemeContext';
 import useFirebaseAuth from '@/hooks/use-firebase-auth';
 import { Ionicons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -142,6 +143,8 @@ const MyRequestsScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   
+    console.log("renderd my requests")
+
   // Filter States
   const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
@@ -150,14 +153,18 @@ const MyRequestsScreen: React.FC = () => {
   const { user } = useFirebaseAuth();
   const { theme } = useTheme();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const viewableItems = useSharedValue<ViewToken[]>([]);
 
   useEffect(() => {
-    if (!user?.uid) {
+    // If the screen is not focused or there's no user, we don't fetch data.
+    if (!isFocused || !user?.uid) {
       setRequests([]);
-      setIsLoading(false);
+      setIsLoading(false); // Ensure loading is off and list is empty.
       return;
     }
+
+    // --- This part runs only when focused and user is available ---
 
     setIsLoading(true);
     const q = query(
@@ -180,8 +187,10 @@ const MyRequestsScreen: React.FC = () => {
       setIsLoading(false);
     });
 
+    // The cleanup function will be called when dependencies change or component unmounts.
+    // This correctly unsubscribes from Firestore.
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [isFocused, user?.uid]);
 
   const filteredRequests = useMemo(() => {
     return requests.filter(req => {
@@ -440,4 +449,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default MyRequestsScreen;
+export default React.memo(MyRequestsScreen);
