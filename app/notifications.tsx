@@ -2,10 +2,10 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   Animated,
-  Dimensions,
   FlatList,
   Platform,
   RefreshControl,
@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+
 
 interface Notification {
   id?: string;
@@ -24,17 +25,15 @@ interface Notification {
   type?: 'info' | 'warning' | 'success' | 'error';
 }
 
-const { width } = Dimensions.get('window');
 
 export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
-  
+  const router = useRouter()
   useEffect(() => {
     fetchNotifications();
     
-    // Fade in animation
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 800,
@@ -62,19 +61,6 @@ export default function NotificationsScreen() {
     setRefreshing(false);
   };
   
-
-  const markAsRead = async (index: number) => {
-    const updatedNotifications = [...notifications];
-    updatedNotifications[index] = { ...updatedNotifications[index], read: true };
-    setNotifications(updatedNotifications);
-    
-    try {
-      await AsyncStorage.setItem('notifications', JSON.stringify(updatedNotifications));
-    } catch (e) {
-      console.error('Failed to update notification status', e);
-    }
-  };
-
   const getNotificationIcon = (type?: string) => {
     switch (type) {
       case 'success':
@@ -107,10 +93,10 @@ export default function NotificationsScreen() {
     const icon = getNotificationIcon(item.type);
     console.log('Item:', JSON.stringify(item, null, 2));
 
-    const handlePress = () => {
-      if (!item.read) {
-        markAsRead(index);
-      }
+    const handlePress = (item) => {
+      router.push(`/tasks/${item.request.content.data.id}`);
+
+     
     };
 
     return (
@@ -120,7 +106,7 @@ export default function NotificationsScreen() {
             styles.notificationItem,
             !item.read && styles.unreadNotification
           ]}
-          onPress={handlePress}
+      onPress={() => handlePress(item)} 
           activeOpacity={0.8}
         >
           <View style={styles.notificationContent}>
@@ -148,9 +134,10 @@ export default function NotificationsScreen() {
                   styles.notificationBody,
                   !item.read && styles.unreadBody
                 ]}
-                numberOfLines={2}
+                numberOfLines={20}
               >
                 {item.request?.content?.body || item.body}
+
               </ThemedText>
               {item.timestamp && (
                 <ThemedText style={styles.timestamp}>
@@ -180,19 +167,7 @@ export default function NotificationsScreen() {
     <ThemedView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       
-      <View style={styles.header}>
-        <ThemedText type="title" style={styles.headerTitle}>
-          الإشعارات
-        </ThemedText>
-        {notifications.length > 0 && (
-          <View style={styles.badge}>
-            <ThemedText style={styles.badgeText}>
-              {notifications.filter(n => !n.read).length}
-            </ThemedText>
-          </View>
-        )}
-      </View>
-
+   
       <Animated.View style={[styles.listContainer, { opacity: fadeAnim }]}>
         <FlatList
           data={notifications}

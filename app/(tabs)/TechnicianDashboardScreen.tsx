@@ -130,7 +130,7 @@ const TechnicianStatCards = React.memo(({ tickets, styles, isSmallScreen, curren
   const iconSize = isSmallScreen ? 24 : 28;
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.technicianStatsContainer}>
+    <View style={styles.technicianStatsContainer}>
       <StatCard
         title="مهام قيد التنفيذ"
         value={stats.pending}
@@ -159,7 +159,7 @@ const TechnicianStatCards = React.memo(({ tickets, styles, isSmallScreen, curren
         color="rgba(107, 114, 128, 0.1)"
         styles={styles}
       />
-    </ScrollView>
+    </View>
   );
 });
 TechnicianStatCards.displayName = 'TechnicianStatCards';
@@ -691,7 +691,7 @@ const getStyles = (theme: any, width: number) => {
 
 
   return StyleSheet.create({
-    screenContainer: {
+screenContainer: {
       flex: 1,
       backgroundColor: theme.background,
     },
@@ -705,7 +705,7 @@ const getStyles = (theme: any, width: number) => {
       marginBottom: 24,
       alignItems:  'flex-end',
     },
-    dashboardTitle: {
+dashboardTitle: {
       fontSize: isSmallScreen ? 24 : 28,
       fontWeight: 'bold',
       color: theme.text,
@@ -733,13 +733,14 @@ const getStyles = (theme: any, width: number) => {
     },
     // StatCard styles
     technicianStatsContainer: {
-      flexDirection:'row',
-      justifyContent: 'space-between',
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 16,
       marginBottom: 24,
-      gap: isSmallScreen ? 16 : 12,
     },
     statCardContainer: {
-      flex: isSmallScreen ? undefined : 1,
+      flex: 1,
+      minWidth: isSmallScreen ? 140 : 170,
       backgroundColor: theme.card,
       borderRadius: 16,
       padding: isSmallScreen ? 12 : 16,
