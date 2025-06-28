@@ -16,7 +16,6 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { useTheme } from "../context/ThemeContext";
@@ -456,13 +455,10 @@ const handleAddTicket = async (values: FormValues) => {
   }, []);
 
   return (
-    <KeyboardAwareScrollView
+    <ScrollView
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
       keyboardShouldPersistTaps="handled"
-      nestedScrollEnabled={true}
-      extraScrollHeight={50}
-      enableOnAndroid={true}
     >
         <Controller
             control={control}
@@ -649,7 +645,7 @@ const handleAddTicket = async (values: FormValues) => {
             </TouchableOpacity>
         </View>
 
-    </KeyboardAwareScrollView>
+    </ScrollView>
   );
 }
 const getStyles = (colors: any) => StyleSheet.create({

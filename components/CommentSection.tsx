@@ -57,10 +57,10 @@ const getCommentDate = (timestamp: any): Date => {
 // NEW: Helper to format the date header in a WhatsApp-like style
 const formatDateHeader = (date: Date): string => {
   if (isToday(date)) {
-    return 'Today'; // أو 'اليوم' if you prefer Arabic
+    return 'اليوم'; // أو 'اليوم' if you prefer Arabic
   }
   if (isYesterday(date)) {
-    return 'Yesterday'; // أو 'الأمس'
+    return 'امس'; // أو 'الأمس'
   }
   // You can customize this format
   return format(date, 'MMMM d, yyyy', { locale: enGB });

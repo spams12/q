@@ -735,15 +735,16 @@ dashboardTitle: {
     technicianStatsContainer: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 16,
-      marginBottom: 24,
+      gap: 18,
+      marginBottom: 16,
+      justifyContent:"center"
     },
     statCardContainer: {
       flex: 1,
-      minWidth: isSmallScreen ? 140 : 170,
+      minWidth: 180,
       backgroundColor: theme.card,
       borderRadius: 16,
-      padding: isSmallScreen ? 12 : 16,
+      padding: 16,
       alignItems: 'center',
       shadowColor: theme.shadow,
       shadowOffset: { width: 0, height: 4 },
@@ -799,7 +800,7 @@ dashboardTitle: {
         elevation: 3,
     },
     header: {
-        flexDirection: 'row',
+        flexDirection: 'row-reverse',
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 20,

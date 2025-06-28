@@ -8,13 +8,12 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
-  I18nManager,
   Image,
   StatusBar,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  useWindowDimensions, // Import useWindowDimensions hook
+  useWindowDimensions
 } from 'react-native';
 import Animated, {
   Easing,
@@ -27,18 +26,10 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-// Import SafeAreaProvider and SafeAreaView
-import {
-  SafeAreaProvider,
-  SafeAreaView,
-} from 'react-native-safe-area-context';
 import { auth } from '../../lib/firebase';
 
-// Enable RTL layout
-I18nManager.forceRTL(true);
-I18nManager.allowRTL(true);
 
-// --- Helper Components with Responsiveness ---
+
 
 const FiberOpticLine = ({
   delay,
@@ -162,9 +153,8 @@ const LoginScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+    <>
+        <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
         
         <LinearGradient colors={[ theme.icon ? '#0a0e1a' : '#1e3c72', theme.icon ? '#1a1f2e' : '#2a5298', theme.icon ? '#0f1419' : '#1e3c72' ]} style={StyleSheet.absoluteFillObject} />
 
@@ -246,8 +236,7 @@ const LoginScreen: React.FC = () => {
             </TouchableOpacity>
           </Animated.View>
         </Animated.View>
-      </SafeAreaView>
-    </SafeAreaProvider>
+        </>
   );
 };
 

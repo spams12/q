@@ -4,7 +4,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';
-import * as ImagePicker from 'expo-image-picker'; // Added for image picking
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import * as Location from 'expo-location';
@@ -14,7 +14,10 @@ import { getAuth } from 'firebase/auth';
 import { arrayUnion, collection, doc, getDocs, onSnapshot, runTransaction, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useKeyboardHandler } from 'react-native-keyboard-controller';
+// Import Reanimated components and hooks
+import Animated, { Extrapolate, interpolate, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InvoiceList } from '../../components/InvoiceList';
 import { ThemedText } from '../../components/ThemedText';
@@ -23,8 +26,32 @@ import useFirebaseAuth from '../../hooks/use-firebase-auth';
 import { db, storage } from '../../lib/firebase';
 import { getPriorityBadgeColor, getStatusBadgeColor } from '../../lib/styles';
 import { Comment, Invoice, InvoiceItem, ServiceRequest, User } from '../../lib/types';
+
+
+const useKeyboardSpacer = (insets :any) => {
+  const screenHeight = Dimensions.get('window').height;
+  const threshold = screenHeight * 0.02; 
+  const effectiveBottomInset = insets.bottom > threshold ? insets.bottom : 0;
+  const height = useSharedValue(effectiveBottomInset);
+  useKeyboardHandler({
+    onMove: (e) => {
+      "worklet";
+      height.value = Math.max(e.height, effectiveBottomInset);
+    },
+  }, [effectiveBottomInset]);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      height: height.value,
+    };
+  }, []);
+
+  return animatedStyle;
+};
+
+
 const { width } = Dimensions.get('window');
-const formatDateTime = (timestamp) => {
+const formatDateTime = (timestamp: Timestamp | undefined) => { // Added type for timestamp
     if (!timestamp) return 'N/A';
     const date = timestamp.toDate();
     return date.toLocaleString('en-GB', {
@@ -179,7 +206,10 @@ const TicketDetailPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(0);
   const [currentUserResponse, setCurrentUserResponse] = useState<'pending' | 'accepted' | 'rejected' | 'completed' | null>(null);
-  const [slideAnim] = useState(new Animated.Value(0));
+  
+  // Reanimated: Use useSharedValue instead of useState(new Animated.Value(0))
+  const slideAnim = useSharedValue(0); 
+  
   const { userdoc } = usePermissions();
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollIsAtBottom = useRef(false);
@@ -197,9 +227,9 @@ const TicketDetailPage = () => {
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isAttachmentMenuVisible, setIsAttachmentMenuVisible] = useState(false);
   
-  // --- NEW ---
-  // State to flag that we should scroll to the bottom after the user submits a comment.
   const [shouldScrollAfterSubmit, setShouldScrollAfterSubmit] = useState(false);
+
+  const fakeview = useKeyboardSpacer(insets)
 
   const tabs = [
     { key: 'details', title: 'التفاصيل', icon: 'document-text-outline' },
@@ -282,15 +312,30 @@ const TicketDetailPage = () => {
     }
   }, [serviceRequest?.comments, activeTabKey, shouldScrollAfterSubmit]);
 
+  // Reanimated: Update switchTab to use withSpring
   const switchTab = (index: number) => {
     setActiveTab(index);
-    Animated.spring(slideAnim, {
-      toValue: index,
-      useNativeDriver: true,
-      tension: 68,
-      friction: 8,
-    }).start();
+    // Use withSpring to animate the shared value
+    slideAnim.value = withSpring(index, {
+      stiffness: 100, // Adjust these values for desired animation feel
+      damping: 10,    // (previously tension: 68, friction: 8 from react-native Animated.spring)
+    });
   };
+
+  // Reanimated: Create an animated style for the tab indicator
+  const animatedTabIndicatorStyle = useAnimatedStyle(() => {
+    const translateX = interpolate(
+      slideAnim.value,
+      tabs.map((_, i) => i),
+      tabs.map((_, i) => (width / tabs.length) * i),
+      Extrapolate.CLAMP
+    );
+    return {
+      transform: [{ translateX }],
+      width: width / tabs.length - 20, // Maintain the original width calculation
+    };
+  });
+
 
   const handleAccept = async () => {
     if (!user || !id || !userdoc) return;
@@ -1104,19 +1149,10 @@ const isDisabled =
         
         <View style={styles.tabBarContainer}>
             <View style={styles.tabBar}>
-                <Animated.View
+                <Animated.View // This is now Animated.View from react-native-reanimated
                     style={[
                         styles.tabIndicator,
-                        {
-                        transform: [{
-                            translateX: slideAnim.interpolate({
-                                inputRange: tabs.map((_, i) => i),
-                                outputRange: tabs.map((_, i) => (width / tabs.length) * i),
-                                extrapolate: 'clamp',
-                            })
-                        }],
-                        width: width / tabs.length - 20,
-                        }
+                        animatedTabIndicatorStyle // Use the reanimated animated style
                     ]}
                     pointerEvents="none"
                 />
@@ -1151,11 +1187,8 @@ const isDisabled =
       </ScrollView>
 
       {activeTabKey === 'comments' && (
-        <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-        >
-          <View style={[styles.inputSection , {paddingBottom : insets.bottom}]}>
+     
+          <View style={[styles.inputSection ]}>
             {attachments.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.attachmentPreviewContainer}>
                   {attachments.map((file, index) => (
@@ -1205,8 +1238,8 @@ const isDisabled =
                 )}
               </TouchableOpacity>
             </View>
+            <Animated.View style={fakeview}></Animated.View>
           </View>
-        </KeyboardAvoidingView>
       )}
       
       <Modal

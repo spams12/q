@@ -6,8 +6,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { I18nManager, View } from 'react-native';
+import { View } from 'react-native';
 import 'react-native-get-random-values';
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PermissionsProvider } from '../context/PermissionsContext';
@@ -31,12 +32,7 @@ SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav({ user, profile, authLoaded }: { user: User | null; profile: any; authLoaded: boolean }) {
   useProtectedRoute(user, profile, authLoaded)
-  I18nManager.forceRTL(false);
-  I18nManager.allowRTL(false);
   const { theme } = useTheme();
-    useEffect(() => {
-    console.log(I18nManager.isRTL ? 'RTL mode enabled' : 'LTR mode enabled');
-  }, []);
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <Stack
@@ -65,7 +61,7 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: User | null; profi
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="family" options={{ headerBackTitle: "رجوع", }}/>
         <Stack.Screen name="about" options={{ headerBackTitle: "رجوع",}}/>
-        <Stack.Screen name="invoices" options={{ headerBackTitle: "رجوع",}}/>
+        <Stack.Screen name="invoices" options={{ headerShown:false}}/>
       </Stack>
     </View>
 
@@ -151,9 +147,11 @@ export default function RootLayout() {
   return (
     <PermissionsProvider>
       <SafeAreaProvider>
+            <KeyboardProvider>
       <ThemeProvider>
         <RootLayoutNav user={user} profile={profile} authLoaded={authLoaded} />
       </ThemeProvider>
+       </KeyboardProvider>
       </SafeAreaProvider>
     </PermissionsProvider>
   );
