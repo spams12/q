@@ -4,10 +4,14 @@
     "slug": "QMC",
     "version": "1.0.0",
     "newArchEnabled": true,
+    "android": {
+      "edgeToEdgeEnabled": true,
+      "package": "com.tmody.QMC"
+    },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/icon.png" 
+      "favicon": "./assets/images/icon.png"
     },
     "experiments": {
       "typedRoutes": true
