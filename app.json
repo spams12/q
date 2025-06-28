@@ -3,74 +3,12 @@
     "name": "QTM",
     "slug": "QMC",
     "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/images/splashs.png",
     "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "This app uses your location to track your progress on assigned tasks.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location in the background to track your progress on assigned tasks.",
-        "NSLocationAlwaysUsageDescription": "This app uses your location in the background to track your progress on assigned tasks."
-      }
-    },
-      "splash": {
-      "image": "./assets/images/splashs.png",
-      "resizeMode": "contain"
- },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/splashs.png"
-      },
-      "edgeToEdgeEnabled": true,
-      "googleServicesFile": "./google-services.json",
-      "package": "com.tmody.QMC",
-      "permissions": [
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION"
-      ]
-    },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/splashs.png"
+      "favicon": "./assets/images/icon.png" 
     },
-    "plugins": [
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splashs.png",
-          "imageWidth": 200,
-          "resizeMode": "contain"
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/images/splashs.png"
-        }
-      ],
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "The app accesses your photos to let you share them with your friends."
-        }
-      ],
-      "expo-video",
-      [
-        "expo-location",
-        {
-          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location.",
-          "isAndroidBackgroundLocationEnabled": true
-        }
-      ],
-      "expo-web-browser",
-      [
-        "@react-native-firebase/app"
-      ]
-    ],
     "experiments": {
       "typedRoutes": true
     },
