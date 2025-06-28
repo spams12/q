@@ -19,7 +19,7 @@ export function useProtectedRoute(user: any, profile: any, authLoaded: boolean) 
     if (user) {
       // If the user is authenticated but the profile is incomplete,
       // redirect them to the complete-profile screen.
-      if (profile && (!profile.phoneNumber || !profile.photoURL)) {
+      if (profile && (!profile.phone || !profile.photoURL)) {
         router.replace('/complete-profile');
       } 
       // If the user is authenticated and is currently in the auth flow,

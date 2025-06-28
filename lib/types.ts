@@ -76,13 +76,11 @@ export interface InvoiceItem {
 }
 
 export interface Attachment {
-  downloadURL: string;
+  fileUrl: string;
   fileName: string;
-  mimeType?: string;
-  size?: number;
-  fileUrl?: string;
   fileType?: string;
   fileSize?: number;
+  id?: string;
 }
 
 export interface User {
@@ -98,7 +96,8 @@ export interface User {
   phone?: string;
   stockItems?: UserStockItem[];
   lastClearTimes: any[]
-  uid: string; // Assuming this is the Firebase UID
+  uid: string;
+  expoPushTokens :any[]
 }
 
 

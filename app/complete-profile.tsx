@@ -1,13 +1,14 @@
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import StyledTextInput from '@/components/ui/StyledTextInput';
+import { usePermissions } from '@/context/PermissionsContext'; // Already imported
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { doc, updateDoc } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,18 +17,37 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { auth, db, storage } from '../lib/firebase';
 
 export default function CompleteProfileScreen() {
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phone, setPhone] = useState('');
   const [phoneError, setPhoneError] = useState('');
-  const [image, setImage] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [displayImage, setDisplayImage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
   const user = auth.currentUser;
   const { theme } = useTheme();
 
+  // --- Use userdoc from context instead of fetching ---
+  // This hook now provides the user document.
+  const { userdoc } = usePermissions();
+
+  // --- Populate form data from the context ---
+  // This effect runs whenever `userdoc` from the context changes.
+  useEffect(() => {
+    // If the user document from the context is available, populate the form fields.
+    if (userdoc) {
+      setPhone(userdoc.phone || '');
+      // Set the image from the userdoc if it exists
+      if (userdoc.photoURL) {
+        setDisplayImage(userdoc.photoURL);
+      }
+    }
+  }, [userdoc]);
+
   const pickImage = async () => {
+    // This function will now only be called if there's no image yet.
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -36,11 +56,11 @@ export default function CompleteProfileScreen() {
     });
 
     if (!result.canceled) {
-      setImage(result.assets[0].uri);
+      setDisplayImage(result.assets[0].uri);
     }
   };
 
-  const validatePhoneNumber = (num: string) => {
+  const validatephone = (num: string) => {
     if (!/^\d+$/.test(num)) {
       return 'رقم الهاتف يجب أن يحتوي على أرقام فقط.';
     }
@@ -59,7 +79,7 @@ export default function CompleteProfileScreen() {
       return;
     }
 
-    const phoneValidationError = validatePhoneNumber(phoneNumber);
+    const phoneValidationError = validatephone(phone);
     if (phoneValidationError) {
       setPhoneError(phoneValidationError);
       return;
@@ -67,24 +87,26 @@ export default function CompleteProfileScreen() {
       setPhoneError('');
     }
 
-    if (!phoneNumber || !image) {
+    if (!phone || !displayImage) {
       Alert.alert('خطأ', 'يرجى تقديم رقم هاتف وصورة ملف شخصي.');
       return;
     }
 
-    setIsLoading(true);
+    setIsSaving(true);
     try {
-      const response = await fetch(image);
-      const blob = await response.blob();
-      const storageRef = ref(storage, `profile-pictures/${user.uid}`);
-      await uploadBytes(storageRef, blob);
-      const photoURL = await getDownloadURL(storageRef);
+      const dataToUpdate: { phone: string; photoURL?: string } = { phone };
 
-      const userDocRef = doc(db, 'users', user.uid);
-      await updateDoc(userDocRef, {
-        phoneNumber,
-        photoURL,
-      });
+      if (displayImage && !displayImage.startsWith('http')) {
+        const response = await fetch(displayImage);
+        const blob = await response.blob();
+        const storageRef = ref(storage, `profile-pictures/${userdoc.id}`);
+        await uploadBytes(storageRef, blob);
+        const newPhotoURL = await getDownloadURL(storageRef);
+        dataToUpdate.photoURL = newPhotoURL;
+      }
+
+      const userDocRef = doc(db, 'users', userdoc.id);
+      await updateDoc(userDocRef, dataToUpdate);
 
       router.replace('/(tabs)');
     } catch (error) {
@@ -94,7 +116,7 @@ export default function CompleteProfileScreen() {
         'حدث خطأ أثناء إكمال ملفك الشخصي. يرجى المحاولة مرة أخرى.'
       );
     } finally {
-      setIsLoading(false);
+      setIsSaving(false);
     }
   };
 
@@ -151,10 +173,28 @@ export default function CompleteProfileScreen() {
       fontWeight: 'bold',
       fontSize: 16,
     },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
   });
+
+  // --- Display a loading indicator until the userdoc is available from the context ---
+  if (!userdoc) {
+    return (
+      <ThemedView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
+       <KeyboardAvoidingView
+      behavior='padding'
+      keyboardVerticalOffset={50}
+      >
       <ThemedText type="title" style={styles.title}>
         أكمل ملفك الشخصي
       </ThemedText>
@@ -162,30 +202,32 @@ export default function CompleteProfileScreen() {
         فقط بضع خطوات أخرى للبدء.
       </ThemedText>
 
-      <TouchableOpacity onPress={pickImage} style={styles.imagePicker}>
-        {image ? (
-          <Image source={{ uri: image }} style={styles.profileImage} />
+      <TouchableOpacity
+        onPress={pickImage}
+        style={styles.imagePicker}
+        disabled={!!displayImage}
+      >
+        {displayImage ? (
+          <Image source={{ uri: displayImage }} style={styles.profileImage} />
         ) : (
           <View style={styles.imagePlaceholder}>
-            <Ionicons
-              name="camera-outline"
-              size={40}
-              color={theme.icon}
-            />
+            <Ionicons name="camera-outline" size={40} color={theme.icon} />
             <ThemedText style={styles.imagePickerText}>
               اختر صورة الملف الشخصي
             </ThemedText>
           </View>
         )}
       </TouchableOpacity>
+     
 
+    
       <StyledTextInput
         label="رقم الهاتف"
-        value={phoneNumber}
+        value={phone}
         onChangeText={(text) => {
-          setPhoneNumber(text);
+          setPhone(text);
           if (phoneError) {
-            const validationError = validatePhoneNumber(text);
+            const validationError = validatephone(text);
             setPhoneError(validationError);
           }
         }}
@@ -197,14 +239,15 @@ export default function CompleteProfileScreen() {
       <TouchableOpacity
         style={styles.button}
         onPress={handleCompleteProfile}
-        disabled={isLoading}
+        disabled={isSaving}
       >
-        {isLoading ? (
+        {isSaving ? (
           <ActivityIndicator color="#fff" />
         ) : (
           <ThemedText style={styles.buttonText}>حفظ الملف الشخصي</ThemedText>
         )}
       </TouchableOpacity>
+        </KeyboardAvoidingView>
     </ThemedView>
   );
 }

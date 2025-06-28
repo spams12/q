@@ -374,7 +374,6 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     borderColor: theme.card,
   },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',

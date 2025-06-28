@@ -19,6 +19,7 @@
       "resizeMode": "contain"
  },
     "android": {
+      
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/splashs.png"
         
@@ -51,6 +52,7 @@
         "expo-notifications",
         {
           "icon": "./assets/images/splashs.png"
+          
         }
       ],
       [

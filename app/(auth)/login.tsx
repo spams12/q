@@ -1,385 +1,445 @@
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { signInWithEmailAndPassword } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
-  Image,
-  StatusBar,
+  DimensionValue,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
-  useWindowDimensions
+  View,
+  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   Easing,
+  FadeIn,
   FadeInDown,
   FadeInUp,
-  SlideInRight,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
+  withSequence,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { auth } from '../../lib/firebase';
 
+import { auth } from '@/lib/firebase';
+import { router } from 'expo-router';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
+const theme = {
+  background: ['#0a0e1a', '#1a1f2e', '#0f1419'],
+  primary: '#00ff7f', // Hacker green
+  secondary: '#00bfff', // Tech blue
+  text: '#ffffff',
+  textMuted: 'rgba(255, 255, 255, 0.7)',
+  placeholder: 'rgba(255, 255, 255, 0.5)',
+  inputBackground: 'rgba(255, 255, 255, 0.08)',
+  borderColor: 'rgba(0, 191, 255, 0.3)',
+} as const;
 
+// Replaces the external ThemedText component for a single-file solution.
+const ThemedText = (props: Text['props'] & { type?: 'title' | 'default' | 'subtitle' }) => {
+  const { style, type, ...rest } = props;
+  return (
+    <Text
+      style={[
+        type === 'title' ? styles.title : type === 'subtitle' ? styles.subtitle : styles.defaultText,
+        style,
+      ]}
+      {...rest}
+    />
+  );
+};
+
+// --- BACKGROUND ANIMATION COMPONENTS ---
 
 const FiberOpticLine = ({
   delay,
   direction,
   startY,
-  width, // Receive width and height as props
-  height,
 }: {
   delay: number;
   direction: 'horizontal' | 'vertical' | 'diagonal';
   startY: number;
-  width: number;
-  height: number;
 }) => {
-  const translateX = useSharedValue(direction === 'horizontal' ? -100 : direction === 'diagonal' ? -100 : Math.random() * width);
-  const translateY = useSharedValue(direction === 'vertical' ? -100 : direction === 'diagonal' ? -100 : startY);
+  const { width, height } = useWindowDimensions();
+  const translateX = useSharedValue(direction === 'horizontal' ? -150 : direction === 'diagonal' ? -150 : Math.random() * width);
+  const translateY = useSharedValue(direction === 'vertical' ? -150 : direction === 'diagonal' ? -150 : startY);
   const opacity = useSharedValue(0);
 
   useEffect(() => {
-    // This effect now depends on width and height, so it will recalculate if the screen size changes.
-    const startAnimation = () => {
+    const duration = 4000 + Math.random() * 3000;
+    const animate = () => {
+      opacity.value = withSequence(
+        withTiming(0.4, { duration: 1000 }),
+        withTiming(0, { duration: duration - 1000 })
+      );
       if (direction === 'horizontal') {
-        translateX.value = withRepeat(withTiming(width + 100, { duration: 4000 + Math.random() * 2000, easing: Easing.linear }), -1, false);
+        translateX.value = -150;
+        translateX.value = withTiming(width + 150, { duration, easing: Easing.linear });
       } else if (direction === 'vertical') {
-        translateY.value = withRepeat(withTiming(height + 100, { duration: 5000 + Math.random() * 2000, easing: Easing.linear }), -1, false);
-      } else {
-        translateX.value = withRepeat(withTiming(width + 100, { duration: 6000 + Math.random() * 2000, easing: Easing.linear }), -1, false);
-        translateY.value = withRepeat(withTiming(height + 100, { duration: 6000 + Math.random() * 2000, easing: Easing.linear }), -1, false);
+        translateY.value = -150;
+        translateY.value = withTiming(height + 150, { duration, easing: Easing.linear });
+      } else { // Diagonal
+        translateX.value = -150;
+        translateY.value = startY - 150;
+        translateX.value = withTiming(width + 150, { duration, easing: Easing.linear });
+        translateY.value = withTiming(startY + width + 150, { duration, easing: Easing.linear });
       }
-      opacity.value = withRepeat(withTiming(0.4, { duration: 2000 }), -1, true);
     };
-
-    const timer = setTimeout(startAnimation, delay);
-    return () => clearTimeout(timer);
-  }, [delay, direction, width, height]); // Add width and height to dependency array
+    const interval = setInterval(animate, duration + 200);
+    const timer = setTimeout(animate, delay);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [delay, direction, width, height, startY, opacity, translateX, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }, { translateY: translateY.value }],
     opacity: opacity.value,
   }));
 
-  return <Animated.View style={[
-      direction === 'horizontal' ? styles.fiberLineHorizontal :
-      direction === 'vertical' ? styles.fiberLineVertical :
-      styles.fiberLineDiagonal,
-      animatedStyle,
-    ]} />;
+  const lineStyle =
+    direction === 'horizontal' ? styles.fiberLineHorizontal
+    : direction === 'vertical' ? styles.fiberLineVertical
+    : styles.fiberLineDiagonal;
+
+  return <Animated.View style={[lineStyle, animatedStyle]} />;
 };
 
-const NetworkNode = ({ color, size, left, top }: { color: string; size: number; left: number; top: number }) => {
+const NetworkNode = ({ size, left, top }: { size: number; left: DimensionValue; top: DimensionValue }) => {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(0.6);
 
   useEffect(() => {
-    scale.value = withRepeat(withTiming(1.3, { duration: 2000, easing: Easing.bezier(0.25, 0.1, 0.25, 1) }), -1, true);
-    opacity.value = withRepeat(withTiming(1, { duration: 1500, easing: Easing.bezier(0.25, 0.1, 0.25, 1) }), -1, true);
-  }, []);
+    const duration = 2000 + Math.random() * 1000;
+    scale.value = withRepeat(withTiming(1.3, { duration, easing: Easing.bezier(0.25, 0.1, 0.25, 1) }), -1, true);
+    opacity.value = withRepeat(withTiming(1, { duration: duration * 0.75, easing: Easing.bezier(0.25, 0.1, 0.25, 1) }), -1, true);
+  }, [opacity, scale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
     opacity: opacity.value,
   }));
 
-  return <Animated.View style={[ styles.networkNode, { backgroundColor: color, width: size, height: size, borderRadius: size / 2, left, top }, animatedStyle, ]} />;
+  return <Animated.View style={[styles.networkNode, { width: size, height: size, borderRadius: size / 2, left, top }, animatedStyle]} />;
 };
 
-// --- Main Login Screen Component ---
+
+// --- MAIN LOGIN SCREEN COMPONENT ---
 
 const LoginScreen: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { theme } = useTheme();
-  const { width, height } = useWindowDimensions(); // Use hook for responsive dimensions
+  const { width, height } = useWindowDimensions();
 
-  const buttonScale = useSharedValue(1);
+  // --- Animations ---
   const logoScale = useSharedValue(1);
-  const logoGlowOpacity = useSharedValue(0.05);
+  const statusDotScale = useSharedValue(1);
+  const loadingIconRotation = useSharedValue(0);
+  const emailInputScale = useSharedValue(1);
+  const passwordInputScale = useSharedValue(1);
 
   useEffect(() => {
-    logoScale.value = withRepeat(withTiming(1.2, { duration: 2500, easing: Easing.bezier(0.4, 0, 0.6, 1) }), -1, true);
-    logoGlowOpacity.value = withRepeat(withTiming(0.2, { duration: 2500, easing: Easing.bezier(0.4, 0, 0.6, 1) }), -1, true);
-  }, []);
+    logoScale.value = withRepeat(withTiming(1.05, { duration: 2500, easing: Easing.bezier(0.4, 0, 0.6, 1) }), -1, true);
+    statusDotScale.value = withRepeat(withTiming(1.5, { duration: 1000, easing: Easing.inOut(Easing.ease) }), -1, true);
+  }, [logoScale, statusDotScale]);
 
   const handleLogin = async () => {
+    Keyboard.dismiss(); // Hide keyboard
     if (!email || !password) {
       Alert.alert('خطأ', 'الرجاء إدخال البريد الإلكتروني وكلمة المرور.');
       return;
     }
     setIsLoading(true);
-    buttonScale.value = withSpring(0.95);
+    // Start loading animation
+    loadingIconRotation.value = withRepeat(withTiming(360, { duration: 1000, easing: Easing.linear }), -1, false);
+
     try {
       await signInWithEmailAndPassword(auth, email, password);
       Alert.alert('نجاح', 'تم تسجيل الدخول بنجاح!');
+        router.navigate('/');
     } catch (error: any) {
-      Alert.alert('فشل تسجيل الدخول', error.message);
+      // Handle Firebase authentication errors
+      let errorMessage = 'فشل تسجيل الدخول. يرجى المحاولة مرة أخرى.';
+      console.error('Firebase Auth Error:', error.code, error.message); // Log full error for debugging
+
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        errorMessage = 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'صيغة البريد الإلكتروني غير صحيحة.';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'تم حظر الوصول مؤقتًا بسبب عدد كبير جدًا من المحاولات الفاشلة. يرجى المحاولة لاحقًا.';
+      } else {
+        errorMessage = error.message; // Fallback for other Firebase errors
+      }
+      Alert.alert('فشل تسجيل الدخول', errorMessage);
     } finally {
       setIsLoading(false);
-      buttonScale.value = withSpring(1);
+      // Stop and reset loading animation
+      loadingIconRotation.value = withTiming(0, { duration: 300 });
     }
   };
 
   // --- Animated Styles ---
-  const buttonAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: buttonScale.value }] }));
   const logoAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: logoScale.value }] }));
-  const logoGlowAnimatedStyle = useAnimatedStyle(() => ({ opacity: logoGlowOpacity.value }));
-  
-  // --- Responsive Styles ---
-  const logoWrapperStyle = {
-    width: width * 0.2,
-    height: width * 0.2,
-    maxWidth: 180,
-    maxHeight: 180,
-    borderRadius: width * 0.2, // Fully responsive radius
-  };
-  const logoGlowStyle = {
-    width: logoWrapperStyle.width * 1.1,
-    height: logoWrapperStyle.height * 1.1,
-    borderRadius: logoWrapperStyle.borderRadius * 1.1,
-  };
+  const statusDotAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: statusDotScale.value }] }));
+  const loadingIconAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${loadingIconRotation.value}deg` }],
+  }));
+  const emailInputAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: emailInputScale.value }] }));
+  const passwordInputAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: passwordInputScale.value }] }));
 
   return (
-    <>
-        <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
-        
-        <LinearGradient colors={[ theme.icon ? '#0a0e1a' : '#1e3c72', theme.icon ? '#1a1f2e' : '#2a5298', theme.icon ? '#0f1419' : '#1e3c72' ]} style={StyleSheet.absoluteFillObject} />
+    <SafeAreaView style={styles.safeArea}>
+      <LinearGradient colors={theme.background} style={StyleSheet.absoluteFill} />
 
-        <Animated.View style={styles.background}>
-          {/* Pass responsive dimensions to background animations */}
-          {Array.from({ length: 8 }).map((_, i) => ( <FiberOpticLine key={`h-${i}`} delay={i * 600} direction="horizontal" startY={50 + (i * (height / 8))} width={width} height={height} /> ))}
-          {Array.from({ length: 6 }).map((_, i) => ( <FiberOpticLine key={`v-${i}`} delay={i * 800 + 300} direction="vertical" startY={-50} width={width} height={height} /> ))}
-          {Array.from({ length: 4 }).map((_, i) => ( <FiberOpticLine key={`d-${i}`} delay={i * 1000 + 600} direction="diagonal" startY={-50} width={width} height={height} /> ))}
-          
-          <NetworkNode color="rgba(0, 255, 127, 0.15)" size={12} left={50} top={150} />
-          <NetworkNode color="rgba(0, 191, 255, 0.15)" size={8} left={width - 80} top={250} />
-          <NetworkNode color="rgba(255, 215, 0, 0.15)" size={10} left={width / 2} top={100} />
-          <NetworkNode color="rgba(0, 255, 127, 0.15)" size={14} left={width - 120} top={height - 300} />
-          <NetworkNode color="rgba(0, 191, 255, 0.15)" size={9} left={80} top={height - 200} />
-        </Animated.View>
-
-        <Animated.View style={styles.content} entering={FadeInUp.delay(300).duration(800)}>
-          <Animated.View style={styles.logoContainer} entering={FadeInDown.delay(100).duration(600)}>
-            {/* Apply responsive styles to the logo wrapper */}
-            <Animated.View style={[styles.logoWrapper, logoAnimatedStyle, logoWrapperStyle]}>
-              <Image source={require('@/assets/images/logo.png')} style={styles.logoImage} /> 
-              {/* Apply responsive styles to the glow effect */}
-              <Animated.View style={[styles.logoGlow, logoGlowAnimatedStyle, logoGlowStyle]} />
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <FiberOpticLine key={`h-${i}`} delay={i * 700} direction="horizontal" startY={50 + (i * (height / 7))} />
+        ))}
+        {Array.from({ length: 5 }).map((_, i) => (
+          <FiberOpticLine key={`v-${i}`} delay={i * 900} direction="vertical" startY={-50} />
+        ))}
+        <NetworkNode size={12} left="15%" top="20%" />
+        <NetworkNode size={8} left="85%" top="30%" />
+        <NetworkNode size={10} left="50%" top="10%" />
+        <NetworkNode size={14} left="80%" top="75%" />
+        <NetworkNode size={9} left="20%" top="85%" />
+      </View>
+      
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContentContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Animated.View style={styles.content}>
+            <Animated.View style={[styles.logoContainer, logoAnimatedStyle]} entering={FadeInDown.delay(200).duration(800)}>
+                <Ionicons name="logo-electron" size={width * 0.18} color={theme.primary} />
             </Animated.View>
-          </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(400).duration(600)}>
-            <ThemedText type="title" style={[styles.title, { fontSize: width > 400 ? 24 : 20 }]}>
-              تطبيق الصيانة التقنية لمشتركين شبكة الالياف البصرية          
-            </ThemedText>
-          </Animated.View>
+            <Animated.View entering={FadeInDown.delay(400).duration(800)}>
+              <ThemedText type="title">نظام الصيانة التقنية</ThemedText>
+              <ThemedText type="subtitle">لشبكة الألياف البصرية</ThemedText>
+            </Animated.View>
 
-          <Animated.View style={styles.inputContainer} entering={SlideInRight.delay(600).duration(600)}>
-            <BlurView intensity={15} tint="dark" style={styles.inputWrapper}>
-              <Ionicons name="person-outline" size={22} color="#00bfff" style={styles.inputIcon} />
-              <TextInput style={styles.input} placeholder="اسم المستخدم أو البريد الإلكتروني" placeholderTextColor="rgba(255, 255, 255, 0.6)" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-            </BlurView>
+            <Animated.View style={styles.inputContainer} entering={FadeInDown.delay(600).duration(800)}>
+              <Animated.View style={emailInputAnimatedStyle}>
+                <BlurView intensity={15} tint="dark" style={styles.inputWrapper}>
+                  <Ionicons name="person-outline" size={22} color={theme.secondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="البريد الإلكتروني"
+                    placeholderTextColor={theme.placeholder}
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    onFocus={() => emailInputScale.value = withSpring(1.03)}
+                    onBlur={() => emailInputScale.value = withSpring(1)}
+                  />
+                </BlurView>
+              </Animated.View>
 
-            <BlurView intensity={15} tint="dark" style={styles.inputWrapper}>
-              <Ionicons name="shield-checkmark-outline" size={22} color="#00bfff" style={styles.inputIcon} />
-              <TextInput style={styles.input} placeholder="كلمة المرور" placeholderTextColor="rgba(255, 255, 255, 0.6)" value={password} onChangeText={setPassword} secureTextEntry={!showPassword} />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-                <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color="#00bfff" />
+              <Animated.View style={passwordInputAnimatedStyle}>
+                <BlurView intensity={15} tint="dark" style={styles.inputWrapper}>
+                  <Ionicons name="shield-checkmark-outline" size={22} color={theme.secondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="كلمة المرور"
+                    placeholderTextColor={theme.placeholder}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    onFocus={() => passwordInputScale.value = withSpring(1.03)}
+                    onBlur={() => passwordInputScale.value = withSpring(1)}
+                  />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                    <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={22} color={theme.secondary} />
+                  </TouchableOpacity>
+                </BlurView>
+              </Animated.View>
+            </Animated.View>
+
+            <Animated.View entering={FadeInUp.delay(800).duration(800)}>
+              <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={isLoading} activeOpacity={0.8}>
+                <LinearGradient colors={[theme.primary, theme.secondary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.buttonGradient}>
+                  {isLoading ? (
+                    <View style={styles.buttonContent}>
+                      <Animated.View style={loadingIconAnimatedStyle}>
+                        <Ionicons name="sync" size={24} color={theme.text} />
+                      </Animated.View>
+                      <ThemedText style={styles.buttonText}>جاري الاتصال...</ThemedText>
+                    </View>
+                  ) : (
+                    <Animated.View style={styles.buttonContent} entering={FadeIn.duration(300)}>
+                      <Ionicons name="log-in-outline" size={24} color={theme.text} style={styles.buttonIcon} />
+                      <ThemedText style={styles.buttonText}>دخول النظام</ThemedText>
+                    </Animated.View>
+                  )}
+                </LinearGradient>
               </TouchableOpacity>
-            </BlurView>
-          </Animated.View>
-
-          <Animated.View entering={FadeInUp.delay(800).duration(600)} style={buttonAnimatedStyle}>
-            <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={isLoading}>
-              <LinearGradient colors={['#00ff7f', '#00bfff', '#1e90ff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.buttonGradient}>
-                {isLoading ? (
-                  <Animated.View style={styles.loadingContainer} entering={FadeInDown.duration(300)}>
-                    <Ionicons name="sync" size={24} color="#ffffff" />
-                    <ThemedText style={styles.buttonText}>جاري الاتصال...</ThemedText>
-                  </Animated.View>
-                ) : (
-                  <Animated.View style={styles.buttonContent}>
-                    <Ionicons name="log-in-outline" size={24} color="#ffffff" style={styles.buttonIcon} />
-                    <ThemedText style={styles.buttonText}>دخول النظام</ThemedText>
-                  </Animated.View>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
-
-          <Animated.View style={[styles.techInfo, { marginTop: height > 700 ? 40 : 20 }]} entering={FadeInUp.delay(1000).duration(600)}>
-            <Animated.View style={styles.statusIndicator}>
-              <Animated.View style={styles.statusDot} />
-              <ThemedText style={styles.statusText}>متصل بالخادم الرئيسي</ThemedText>
-
             </Animated.View>
-                              <ThemedText adjustsFontSizeToFit style={{color:"#00ff7f" ,fontFamily:"Cario"}}>القبس تكنولجي</ThemedText>
-                  <ThemedText adjustsFontSizeToFit style={{color:"#00ff7f"}}>لمقاولات البنى التحتيةالتكنلوجيا و للانترنت </ThemedText>
 
-            <ThemedView style={styles.divider} />
-            <TouchableOpacity style={styles.supportButton}>
-              <Ionicons name="headset-outline" size={15} color="#00bfff" />
-              <ThemedText adjustsFontSizeToFit style={styles.supportText}>الدعم التقني</ThemedText>
-            </TouchableOpacity>
+            <Animated.View style={styles.footer} entering={FadeInUp.delay(1000).duration(800)}>
+              <View style={styles.statusIndicator}>
+                <Animated.View style={[styles.statusDot, statusDotAnimatedStyle]} />
+                <ThemedText style={styles.statusText}>متصل بالخادم الرئيسي</ThemedText>
+              </View>
+              <View style={styles.divider} />
+              <TouchableOpacity style={styles.supportButton}>
+                <Ionicons name="headset-outline" size={16} color={theme.secondary} />
+                <ThemedText style={styles.supportText}>الدعم الفني</ThemedText>
+              </TouchableOpacity>
+            </Animated.View>
           </Animated.View>
-        </Animated.View>
-        </>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 export default LoginScreen;
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#0a0e1a', // Fallback background color
+    backgroundColor: theme.background[0],
   },
-  background: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-    zIndex: -1,
+  scrollContentContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   content: {
-    flex: 1,
-    justifyContent: 'center',
-    width: '90%', // Use percentage for horizontal spacing
-    maxWidth: 500, // Add max width for tablet support
-    alignSelf: 'center', // Center the content block
-    zIndex: 1,
+    paddingHorizontal: '5%',
+    paddingBottom: 20,
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 10, // Base margin, can be adjusted dynamically
-  },
-  logoWrapper: {
-    // Responsive dimensions are now applied inline
+    marginBottom: 20,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignSelf: 'center',
     backgroundColor: 'rgba(0, 255, 127, 0.1)',
     borderWidth: 2,
-    borderColor: 'rgba(0, 255, 127, 0.3)',
-  },
-  logoImage: {
-    // Use percentages to scale image within its container
-    width: '85%',
-    height: '85%',
-    resizeMode: 'contain',
-  },
-  logoGlow: {
-    position: 'absolute',
-    backgroundColor: 'rgba(0, 255, 127, 0.05)',
-    shadowColor: '#00ff7f',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 25,
+    borderColor: 'rgba(0, 255, 127, 0.2)',
   },
   title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: theme.text,
     textAlign: 'center',
-    color: '#ffffff',
-    marginBottom: 24, // Consistent spacing
+  },
+  subtitle: {
+    fontSize: 18,
+    color: theme.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 30,
+  },
+  defaultText: {
+    fontSize: 16,
+    color: theme.text,
   },
   inputContainer: {
-    marginBottom: 24, // Consistent spacing
+    marginBottom: 20,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: theme.inputBackground,
     borderRadius: 12,
-    marginBottom: 15,
-    paddingHorizontal: 18,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0, 191, 255, 0.3)',
-    overflow: 'hidden',
+    borderColor: theme.borderColor,
+    overflow: 'hidden', // Necessary for BlurView borderRadius
   },
   inputIcon: {
-    marginRight: 12,
+    marginHorizontal: 15,
   },
   input: {
     flex: 1,
-    height: 52,
+    height: 55,
     fontSize: 16,
-    textAlign: 'right',
-    color: '#ffffff',
+    color: theme.text,
+    textAlign: 'right', // For RTL (Arabic) input
+    paddingHorizontal: 10,
+    // Add this if you have an Arabic font like 'Cairo' in your project
+    // fontFamily: 'Cairo-Regular', 
   },
   eyeIcon: {
-    padding: 8,
+    padding: 15,
   },
   loginButton: {
     borderRadius: 12,
     overflow: 'hidden',
-    elevation: 12,
-    shadowColor: '#00ff7f',
-    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
+    shadowColor: theme.primary,
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
-    shadowRadius: 12,
-    marginBottom: 0,
+    shadowRadius: 10,
   },
   buttonGradient: {
-    paddingVertical: 18,
-    paddingHorizontal: 32,
+    paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 56,
   },
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   buttonIcon: {
-    marginLeft: 8,
-  },
-  loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginRight: 10,
   },
   buttonText: {
-    color: '#ffffff',
+    color: theme.text,
     fontSize: 18,
     fontWeight: 'bold',
-    marginLeft: 8,
   },
-  techInfo: {
+  footer: {
     alignItems: 'center',
+    marginTop: 40,
   },
   statusIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
   },
   statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#00ff7f',
-    marginLeft: 8,
-    shadowColor: '#00ff7f',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: theme.primary,
+    marginRight: 10,
+    shadowColor: theme.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
-    shadowRadius: 4,
+    shadowRadius: 10,
   },
   statusText: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: theme.textMuted,
     fontSize: 14,
   },
   divider: {
     width: 60,
     height: 1,
-    backgroundColor: 'rgba(0, 191, 255, 0.3)',
-    marginVertical: 12,
+    backgroundColor: theme.borderColor,
+    marginVertical: 15,
   },
   supportButton: {
     flexDirection: 'row',
@@ -389,16 +449,16 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: 'rgba(0, 191, 255, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 191, 255, 0.3)',
+    borderColor: theme.borderColor,
   },
   supportText: {
-    color: '#00bfff',
+    color: theme.secondary,
     fontSize: 14,
-    marginRight: 8,
+    fontWeight: '600',
+    marginLeft: 8,
   },
-  // Fiber line styles remain the same
-  fiberLineHorizontal: { position: 'absolute', width: 120, height: 1.5, backgroundColor: 'rgba(0, 255, 127, 0.2)', shadowColor: '#00ff7f', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 2, },
-  fiberLineVertical: { position: 'absolute', width: 1.5, height: 80, backgroundColor: 'rgba(0, 191, 255, 0.2)', shadowColor: '#00bfff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 2, },
-  fiberLineDiagonal: { position: 'absolute', width: 100, height: 1.5, backgroundColor: 'rgba(255, 215, 0, 0.15)', transform: [{ rotate: '45deg' }], shadowColor: '#ffd700', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.2, shadowRadius: 2, },
-  networkNode: { position: 'absolute', shadowColor: '#00ff7f', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 6, },
+  fiberLineHorizontal: { position: 'absolute', width: 150, height: 1, backgroundColor: 'rgba(0, 255, 127, 0.3)' },
+  fiberLineVertical: { position: 'absolute', width: 1, height: 150, backgroundColor: 'rgba(0, 191, 255, 0.3)' },
+  fiberLineDiagonal: { position: 'absolute', width: 180, height: 1, backgroundColor: 'rgba(255, 215, 0, 0.2)', transform: [{ rotate: '45deg' }] },
+  networkNode: { position: 'absolute', backgroundColor: 'rgba(0, 255, 127, 0.2)', shadowColor: theme.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10 },
 });

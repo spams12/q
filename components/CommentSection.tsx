@@ -1,4 +1,4 @@
-import { format, isSameDay, isToday, isYesterday } from 'date-fns'; // MODIFIED: Added isSameDay, isToday, isYesterday
+import { format, isSameDay, isToday, isYesterday } from 'date-fns';
 import { enGB } from 'date-fns/locale';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -54,15 +54,14 @@ const getCommentDate = (timestamp: any): Date => {
   return new Date();
 };
 
-// NEW: Helper to format the date header in a WhatsApp-like style
+// Helper to format the date header in a WhatsApp-like style
 const formatDateHeader = (date: Date): string => {
   if (isToday(date)) {
-    return 'اليوم'; // أو 'اليوم' if you prefer Arabic
+    return 'اليوم';
   }
   if (isYesterday(date)) {
-    return 'امس'; // أو 'الأمس'
+    return 'امس';
   }
-  // You can customize this format
   return format(date, 'MMMM d, yyyy', { locale: enGB });
 };
 
@@ -289,14 +288,12 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             </Text>
           </View>
         ) : (
-          // MODIFIED: Entire map logic is updated to include the date header
           filteredAndSortedComments.map((comment, index) => {
             const user = getUser(comment.userId);
             const userName = user?.name || comment.userName || 'مستخدم غير معروف';
             const isCurrentUser = comment.userId === currentUserId;
             const commentDate = getCommentDate(comment.timestamp);
 
-            // --- NEW LOGIC to decide if a date header should be shown ---
             let dateHeader = null;
             const previousComment = index > 0 ? filteredAndSortedComments[index - 1] : null;
             const previousCommentDate = previousComment ? getCommentDate(previousComment.timestamp) : null;
@@ -310,7 +307,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                 </View>
               );
             }
-            // --- END OF NEW LOGIC ---
 
             const isImageOnlyComment =
               !comment.content?.trim() &&
@@ -323,12 +319,12 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                 return isImage;
               });
 
+            // MODIFIED: Use att.fileUrl instead of att.downloadURL
             const commentImages = comment.attachments?.filter(att => {
               const isImage = att.fileType === 'image' || (att.mimeType && att.mimeType.startsWith('image/'));
               return isImage || /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName);
-            }).map(att => att.downloadURL).filter((url): url is string => !!url) || [];
+            }).map(att => att.fileUrl).filter((url): url is string => !!url) || [];
 
-            // Return a React Fragment to conditionally include the date header
             return (
               <React.Fragment key={comment.id}>
                 {dateHeader}
@@ -377,11 +373,13 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                         {comment.attachments.map((att, attIndex) => {
                           const isImage = att.fileType === 'image' || (att.mimeType ? att.mimeType.startsWith('image/') : /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
                           const isVideo = att.fileType === 'video' || (att.mimeType ? att.mimeType.startsWith('video/') : /\.(mp4|mov|avi|mkv)$/i.test(att.fileName));
-                          const mediaUrl = att.downloadURL;
+                          
+                          // MODIFIED: Use att.fileUrl instead of att.downloadURL
+                          const mediaUrl = att.fileUrl; 
 
                           return (
                             <TouchableOpacity
-                              key={attIndex}
+                              key={att.id || attIndex} 
                               onPress={() => {
                                 if (isImage && mediaUrl) {
                                   const currentImageIndex = commentImages.indexOf(mediaUrl);
@@ -433,9 +431,10 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                                     <Text style={styles.fileName} numberOfLines={1}>
                                       {att.fileName}
                                     </Text>
-                                    {(att.size) && (
+                                    {/* MODIFIED: Use att.fileSize instead of att.size */}
+                                    {(att.fileSize) && (
                                       <Text style={styles.fileSize}>
-                                        {((att.size) / 1024).toFixed(1)} كيلوبايت
+                                        {(att.fileSize / 1024).toFixed(1)} كيلوبايت
                                       </Text>
                                     )}
                                   </View>
@@ -467,8 +466,8 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   );
 };
 
+// --- Styles remain the same, no changes needed here ---
 const getStyles = (theme: any) => StyleSheet.create({
-  // NEW: Styles for the date header
   dateHeader: {
     alignSelf: 'center',
     backgroundColor: theme.themeName === 'dark' ? '#2c2c2e' : '#e5e5ea',
@@ -487,7 +486,6 @@ const getStyles = (theme: any) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  // --- Existing styles below ---
   container: {
     flex: 1,
     backgroundColor: theme.background,
@@ -498,7 +496,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   messageRow: {
     flexDirection: 'row',
-    marginBottom: 15, // This gives space between messages, date header margin handles its own space
+    marginBottom: 15,
     maxWidth: '85%',
     alignItems: 'flex-end',
     gap: 8,
@@ -581,6 +579,8 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   imageAttachmentContainer: {
     position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   attachmentImage: {
     width: screenWidth * 0.6,
@@ -613,12 +613,14 @@ const getStyles = (theme: any) => StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: theme.border,
+    width: screenWidth * 0.65,
   },
   fileIcon: {
     marginRight: 12,
   },
   fileInfo: {
     flex: 1,
+    marginRight: 8,
   },
   fileName: {
     fontSize: 14,
@@ -677,7 +679,6 @@ const getStyles = (theme: any) => StyleSheet.create({
     color: theme.placeholder,
     textAlign: 'center',
   },
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'black',
