@@ -6,13 +6,12 @@ import * as SplashScreen from 'expo-splash-screen';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
 import 'react-native-get-random-values';
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PermissionsProvider } from '../context/PermissionsContext';
-import { ThemeProvider, useTheme } from '../context/ThemeContext';
+import { ThemeProvider } from '../context/ThemeContext';
 import { useProtectedRoute } from '../hooks/useProtectedRoute';
 import { auth, db } from '../lib/firebase';
 
@@ -32,15 +31,10 @@ SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav({ user, profile, authLoaded }: { user: User | null; profile: any; authLoaded: boolean }) {
   useProtectedRoute(user, profile, authLoaded)
-  const { theme } = useTheme();
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
       <Stack
         screenOptions={{
-          headerStyle: {
-            backgroundColor: theme.background,
-          },
-          headerTintColor: theme.text,
+       headerShown:false
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -49,21 +43,17 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: User | null; profi
         <Stack.Screen
           name="create-request"
           options={{
-            title: 'إنشاء تكت',
-            headerTitleAlign: 'center',
-            headerBackTitle: "رجوع",
+          headerShown:false
           }}
         />
         <Stack.Screen name="notifications" options={{
-            title: 'الاشعارات',
-            headerTitleAlign: 'center',
+          headerShown:false
           }}/>
         <Stack.Screen name="+not-found" />
-        <Stack.Screen name="family" options={{ headerBackTitle: "رجوع", }}/>
-        <Stack.Screen name="about" options={{ headerBackTitle: "رجوع",}}/>
+        <Stack.Screen name="family" options={{ headerShown:false, }}/>
+        <Stack.Screen name="about" options={{ headerShown:false,}}/>
         <Stack.Screen name="invoices" options={{ headerShown:false}}/>
       </Stack>
-    </View>
 
   );
 }
