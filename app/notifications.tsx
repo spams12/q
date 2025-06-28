@@ -9,7 +9,6 @@ import {
   FlatList,
   Platform,
   RefreshControl,
-  StatusBar,
   StyleSheet,
   TouchableOpacity,
   View
@@ -164,10 +163,7 @@ export default function NotificationsScreen() {
   );
 
   return (
-    <ThemedView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
-      
-   
+    <ThemedView style={styles.container}>      
       <Animated.View style={[styles.listContainer, { opacity: fadeAnim }]}>
         <FlatList
           data={notifications}

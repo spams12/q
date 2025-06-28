@@ -7,7 +7,7 @@ import {
   Animated,
   FlatList,
   RefreshControl,
-  ScrollView, // <-- Import ScrollView
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -55,7 +55,6 @@ const formatTimestamp = (date: any): string => {
   }
 };
 
-// New helper to format duration from milliseconds to a readable string (e.g., "1h 30m")
 const formatDuration = (ms: number) => {
     if (!ms || ms < 0) return "0 د";
     const totalMinutes = Math.floor(ms / (1000 * 60));
@@ -73,7 +72,6 @@ const formatDuration = (ms: number) => {
 
 // --- SUB-COMPONENTS ---
 
-// MODIFIED: New card component for simple statistics with support for solid colors
 const StatInfoCard = ({ title, value, icon, backgroundColor, iconColor, textColor, styles }: { title: string, value: string, icon: React.ReactNode, backgroundColor: string, iconColor: string, textColor?: string, styles: any }) => {
     return (
         <View style={[styles.infoCard, { backgroundColor }]}>
@@ -115,7 +113,8 @@ const StatCard = ({ title, value, icon, color, styles }: { title: string; value:
   );
 };
 
-const TechnicianStatCards = React.memo(({ tickets, styles, isSmallScreen, currentUserDocId }: { tickets: ServiceRequest[], styles: any, isSmallScreen: boolean, currentUserDocId: string | null }) => {
+// MODIFIED: This component now uses explicit rows for the 2x2 layout
+const TechnicianStatCards = React.memo(({ tickets, styles, currentUserDocId }: { tickets: ServiceRequest[], styles: any, currentUserDocId: string | null }) => {
   const stats = useMemo(() => {
     const pending = tickets.filter(t => ["مفتوح", "قيد المعالجة"].includes(t.status)).length;
     const completed = tickets.filter(t => ["مكتمل", "مغلق"].includes(t.status)).length;
@@ -127,38 +126,44 @@ const TechnicianStatCards = React.memo(({ tickets, styles, isSmallScreen, curren
     return { pending, completed, rejected, total: tickets.length };
   }, [tickets, currentUserDocId]);
 
-  const iconSize = isSmallScreen ? 24 : 28;
+  const iconSize = 28;
 
   return (
     <View style={styles.technicianStatsContainer}>
-      <StatCard
-        title="مهام قيد التنفيذ"
-        value={stats.pending}
-        icon={<Clock color="#3B82F6" size={iconSize} />}
-        color="rgba(59, 130, 246, 0.1)"
-        styles={styles}
-      />
-      <StatCard
-        title="مهام مكتملة"
-        value={stats.completed}
-        icon={<ListChecks color="#10B981" size={iconSize} />}
-        color="rgba(16, 185, 129, 0.1)"
-        styles={styles}
-      />
-      <StatCard
-        title="المهام الفاشلة"
-        value={stats.rejected}
-        icon={<XCircle color="#EF4444" size={iconSize} />}
-        color="rgba(239, 68, 68, 0.1)"
-        styles={styles}
-      />
-      <StatCard
-        title="إجمالي المهام"
-        value={stats.total}
-        icon={<Inbox color="#6B7280" size={iconSize} />}
-        color="rgba(107, 114, 128, 0.1)"
-        styles={styles}
-      />
+      {/* Row 1 */}
+      <View style={styles.statCardRow}>
+        <StatCard
+          title="مهام قيد التنفيذ"
+          value={stats.pending}
+          icon={<Clock color="#3B82F6" size={iconSize} />}
+          color="rgba(59, 130, 246, 0.1)"
+          styles={styles}
+        />
+        <StatCard
+          title="مهام مكتملة"
+          value={stats.completed}
+          icon={<ListChecks color="#10B981" size={iconSize} />}
+          color="rgba(16, 185, 129, 0.1)"
+          styles={styles}
+        />
+      </View>
+      {/* Row 2 */}
+      <View style={styles.statCardRow}>
+        <StatCard
+          title="المهام الفاشلة"
+          value={stats.rejected}
+          icon={<XCircle color="#EF4444" size={iconSize} />}
+          color="rgba(239, 68, 68, 0.1)"
+          styles={styles}
+        />
+        <StatCard
+          title="إجمالي المهام"
+          value={stats.total}
+          icon={<Inbox color="#6B7280" size={iconSize} />}
+          color="rgba(107, 114, 128, 0.1)"
+          styles={styles}
+        />
+      </View>
     </View>
   );
 });
@@ -252,7 +257,7 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
 
 TicketItem.displayName = 'TicketItem';
 
-// MODIFIED: Updated to use new solid colors and pass correct props
+
 const PerformanceSummaryCard = ({ tasks, styles, theme }: { tasks: ServiceRequest[], styles: any, theme: any }) => {
     const performanceStats = useMemo(() => {
         const relevantTasks = tasks.filter(
@@ -278,7 +283,6 @@ const PerformanceSummaryCard = ({ tasks, styles, theme }: { tasks: ServiceReques
             const duration = completionTime - onLocationTime;
             totalCompletionTimeDuration += duration;
 
-            // Group work time by day
             const dayKey = task.completionTimestamp.toDate().toISOString().split('T')[0];
             if (workTimeByDay[dayKey]) {
                 workTimeByDay[dayKey] += duration;
@@ -287,13 +291,12 @@ const PerformanceSummaryCard = ({ tasks, styles, theme }: { tasks: ServiceReques
             }
         });
 
-        const averageCompletionTime = (totalCompletionTimeDuration / relevantTasks.length); // in ms
+        const averageCompletionTime = (totalCompletionTimeDuration / relevantTasks.length);
 
         const dailyWorkTimes = Object.values(workTimeByDay);
         const totalDailyWorkSum = dailyWorkTimes.reduce((sum, time) => sum + time, 0);
         const averageDailyWorkTime = dailyWorkTimes.length > 0 ? totalDailyWorkSum / dailyWorkTimes.length : 0;
 
-        // SLA calculation
         const tasksWithSla = relevantTasks.filter(t => t.estimatedTime != null);
         let lateCount = 0;
         if (tasksWithSla.length > 0) {
@@ -316,9 +319,9 @@ const PerformanceSummaryCard = ({ tasks, styles, theme }: { tasks: ServiceReques
             latePercentage: totalSla > 0 ? Math.round((lateCount / totalSla) * 100) : 0,
             onTimeCount,
             lateCount,
-            averageCompletionTime, // in ms
-            totalWorkTime: totalCompletionTimeDuration, // in ms
-            averageDailyWorkTime, // in ms
+            averageCompletionTime,
+            totalWorkTime: totalCompletionTimeDuration,
+            averageDailyWorkTime,
         };
     }, [tasks]);
 
@@ -334,7 +337,6 @@ const PerformanceSummaryCard = ({ tasks, styles, theme }: { tasks: ServiceReques
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.cardsScrollView}
-                // Add snapping for a better UX on large cards
                 decelerationRate="fast"
                 snapToInterval={styles.infoCard.width + styles.cardsScrollView.gap}
                 snapToAlignment="start"
@@ -435,9 +437,8 @@ interface ListHeaderProps {
     selectedTab: "all" | "pending" | "completed" | "rejected";
     handleTabChange: (tab: "all" | "pending" | "completed" | "rejected") => void;
     styles: any;
-    isSmallScreen: boolean;
     currentUserDocId: string | null;
-    theme: any; // Pass theme down
+    theme: any;
 }
 
 const ListHeader = React.memo(({
@@ -447,7 +448,6 @@ const ListHeader = React.memo(({
     selectedTab,
     handleTabChange,
     styles,
-    isSmallScreen,
     currentUserDocId,
     theme
 }: ListHeaderProps) => (
@@ -456,7 +456,7 @@ const ListHeader = React.memo(({
             <Text style={styles.dashboardTitle}>الاحصائيات</Text>
             <Text style={styles.dashboardSubtitle}>مرحباً بك، تتبع مهامك وأدائك</Text>
         </View>
-        <TechnicianStatCards tickets={tasks} styles={styles} isSmallScreen={isSmallScreen} currentUserDocId={currentUserDocId}/>
+        <TechnicianStatCards tickets={tasks} styles={styles} currentUserDocId={currentUserDocId}/>
         <PerformanceSummaryCard tasks={tasks} styles={styles} theme={theme} />
         
         <View style={styles.taskListContainer}>
@@ -517,7 +517,6 @@ function TechnicianDashboardScreen() {
   const { theme } = useTheme();
   const { width } = useWindowDimensions();
   const styles = getStyles(theme, width);
-  const isSmallScreen = width < 400;
   const [tasks, setTasks] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -526,7 +525,6 @@ function TechnicianDashboardScreen() {
   const router = useRouter();
   const isFocused = useIsFocused();
 
-  console.log("renderd stats ")
   const [selectedTab, setSelectedTab] = useState<"all" | "pending" | "completed" | "rejected">("all");
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -663,7 +661,6 @@ function TechnicianDashboardScreen() {
           selectedTab={selectedTab}
           handleTabChange={handleTabChange}
           styles={styles}
-          isSmallScreen={isSmallScreen}
           currentUserDocId={currentUserDocId}
           theme={theme}
         />}
@@ -681,17 +678,18 @@ function TechnicianDashboardScreen() {
 
 export default React.memo(TechnicianDashboardScreen);
 
-// MODIFIED: Styles updated for larger, solid-color cards
+// MODIFIED: Styles updated for a stable 2x2 grid layout
 const getStyles = (theme: any, width: number) => {
-  const isSmallScreen = width < 400;
-  const containerPadding = isSmallScreen ? 12 : 16;
+  const containerPadding = 16;
   const scrollViewPadding = 20;
-  // Calculate card width to be large but show a peek of the next one
   const cardWidth = width - (containerPadding * 2) - (scrollViewPadding) - 24;
+  
+  const statCardGap = 18;
+  const statCardWidth = (width - (containerPadding * 2) - statCardGap) / 2;
 
 
   return StyleSheet.create({
-screenContainer: {
+    screenContainer: {
       flex: 1,
       backgroundColor: theme.background,
     },
@@ -705,15 +703,15 @@ screenContainer: {
       marginBottom: 24,
       alignItems:  'flex-end',
     },
-dashboardTitle: {
-      fontSize: isSmallScreen ? 24 : 28,
+    dashboardTitle: {
+      fontSize: 28,
       fontWeight: 'bold',
       color: theme.text,
       fontFamily: 'Cairo',
       textAlign:  'right',
     },
     dashboardSubtitle: {
-      fontSize: isSmallScreen ? 14 : 16,
+      fontSize: 16,
       color: theme.textSecondary,
       fontFamily: 'Cairo',
       textAlign:  'right',
@@ -731,17 +729,19 @@ dashboardTitle: {
       color: theme.textSecondary,
       fontFamily: 'Cairo',
     },
-    // StatCard styles
+    // --- StatCard styles MODIFIED for 2x2 grid ---
     technicianStatsContainer: {
+      flexDirection: 'column', // Lays out the rows vertically
+      gap: statCardGap,         // Creates vertical space between rows
+      marginBottom: 24,
+    },
+    // New style for rows
+    statCardRow: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 18,
-      marginBottom: 16,
-      justifyContent:"center"
+      justifyContent: 'space-between', // Spaces the two cards in a row
     },
     statCardContainer: {
-      flex: 1,
-      minWidth: 180,
+      width: statCardWidth,
       backgroundColor: theme.card,
       borderRadius: 16,
       padding: 16,
@@ -755,24 +755,24 @@ dashboardTitle: {
       position: 'relative',
     },
     iconContainer: {
-      width: isSmallScreen ? 40 : 48,
-      height: isSmallScreen ? 40 : 48,
-      borderRadius: isSmallScreen ? 20 : 24,
+      width: 48,
+      height: 48,
+      borderRadius: 24,
       justifyContent: 'center',
       alignItems: 'center',
-      marginBottom: isSmallScreen ? 8 : 12,
+      marginBottom: 12,
     },
     statCardContent: {
       alignItems: 'center',
     },
     statCardValue: {
-      fontSize: isSmallScreen ? 22 : 26,
+      fontSize: 26,
       fontWeight: 'bold',
       color: theme.text,
       fontFamily: 'Cairo',
     },
     statCardTitle: {
-      fontSize: isSmallScreen ? 12 : 14,
+      fontSize: 14,
       color: theme.textSecondary,
       fontFamily: 'Cairo',
       marginTop: 2,
@@ -819,14 +819,14 @@ dashboardTitle: {
 
     // New StatInfoCard styles
     infoCard: {
-        width: cardWidth, // CHANGED: Card width is now dynamic
-        borderRadius: 24, // Increased border radius for a modern look
-        padding: 20, // Increased padding
+        width: cardWidth,
+        borderRadius: 24,
+        padding: 20,
         justifyContent: 'space-between',
-        minHeight: 180, // Increased height
+        minHeight: 180,
     },
     infoCardIconContainer: {
-        width: 48, // Larger icon container
+        width: 48,
         height: 48,
         borderRadius: 24,
         justifyContent: 'center',
@@ -834,15 +834,15 @@ dashboardTitle: {
         marginBottom: 12,
     },
     infoCardValue: {
-        fontSize: 24, // Larger font
+        fontSize: 24,
         fontWeight: 'bold',
         fontFamily: 'Cairo',
         textAlign: 'right',
-        color: theme.text, // Default color
+        color: theme.text,
     },
     infoCardTitle: {
-        fontSize: 14, // Slightly larger
-        color: theme.textSecondary, // Default color
+        fontSize: 14,
+        color: theme.textSecondary,
         fontFamily: 'Cairo',
         textAlign: 'right',
         marginTop: 4,
@@ -850,8 +850,8 @@ dashboardTitle: {
 
     // Modified SLA card style
     card: {
-        width: cardWidth, // CHANGED: Card width is now dynamic
-        borderRadius: 24, // Increased border radius
+        width: cardWidth,
+        borderRadius: 24,
         padding: 20,
         minHeight: 180,
         justifyContent: 'space-between',
@@ -948,7 +948,7 @@ dashboardTitle: {
       elevation: 2,
     },
     taskListHeader: {
-      padding: isSmallScreen ? 16 : 20,
+      padding: 20,
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
       backgroundColor: theme.card,
@@ -960,7 +960,7 @@ dashboardTitle: {
       marginBottom: 16,
     },
     taskListTitle: {
-      fontSize: isSmallScreen ? 18 : 20,
+      fontSize: 20,
       fontWeight: 'bold',
       color: theme.text,
       fontFamily: 'Cairo',
@@ -1057,10 +1057,10 @@ dashboardTitle: {
       borderBottomColor: theme.border,
       marginBottom: 16,
       borderRadius: 12,
-      marginHorizontal: isSmallScreen ? 12 : 16,
+      marginHorizontal: 16,
     },
     ticketContent: {
-      paddingHorizontal: isSmallScreen ? 16 : 20,
+      paddingHorizontal: 20,
       paddingVertical: 16,
     },
     ticketHeader: {

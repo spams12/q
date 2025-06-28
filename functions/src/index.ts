@@ -26,6 +26,7 @@ export const sendNewRequestNotificationOnUpdate = onDocumentUpdated({ document: 
     return;
   }
 
+  // This part checks for newly ASSIGNED users
   const beforeUsers = beforeData.assignedUsers || [];
   const afterUsers = afterData.assignedUsers || [];
 
@@ -147,6 +148,87 @@ export const sendNewRequestNotificationOnCreate = onDocumentCreated({ document: 
       logger.log("Push notifications sent successfully for new document.");
     } catch (error) {
       logger.error("Error sending push notifications for new document:", error);
+    }
+  }
+});
+
+// ADDED THIS NEW FUNCTION
+export const sendCommentNotification = onDocumentUpdated({ document: "serviceRequests/{requestId}", region: "europe-west1" }, async (event) => {
+  const beforeData = event.data?.before.data();
+  const afterData = event.data?.after.data();
+  const snapshot = event.data?.after;
+
+  if (!beforeData || !afterData || !snapshot) {
+    logger.log("Comment Notif: No data associated with the event");
+    return;
+  }
+
+  const beforeComments = beforeData.comments || [];
+  const afterComments = afterData.comments || [];
+
+  // Check if a new comment was added
+  if (afterComments.length <= beforeComments.length) {
+    // logger.log("Comment Notif: No new comments found.");
+    return;
+  }
+
+  const newComment = afterComments[afterComments.length - 1];
+  if (!newComment || !newComment.userId || !newComment.userName || !newComment.content) {
+    logger.log("Comment Notif: New comment is malformed or missing fields.", newComment);
+    return;
+  }
+
+  // Get all users assigned to the task, EXCEPT the user who wrote the comment
+  const recipients = (afterData.assignedUsers || []).filter((userId: string) => userId !== newComment.userId);
+
+  if (recipients.length === 0) {
+    logger.log("Comment Notif: No recipients to notify for the new comment.");
+    return;
+  }
+
+  const messages = [];
+  for (const userId of recipients) {
+    try {
+      const userDoc = await admin.firestore().collection("users").doc(userId).get();
+      if (!userDoc.exists) {
+        logger.error("Comment Notif: User document not found for userId:", userId);
+        continue;
+      }
+
+      const userData = userDoc.data();
+      if (!userData || !userData.expoPushToken) {
+        logger.error("Comment Notif: User data or expoPushToken is missing for userId:", userId);
+        continue;
+      }
+
+      const { expoPushToken } = userData;
+
+      if (Expo.isExpoPushToken(expoPushToken)) {
+        messages.push({
+          to: expoPushToken,
+          sound: "default" as const,
+          title: `تعليق جديد على: ${afterData.title}`,
+          body: `${newComment.userName}: ${newComment.content}`,
+          data: { type: "serviceRequest", id: snapshot.id },
+        });
+        logger.log(`Comment Notif: Prepared comment notification for user: ${userId}`);
+      } else {
+        logger.error("Comment Notif: Invalid Expo push token for userId:", userId);
+      }
+    } catch (error) {
+      logger.error(`Comment Notif: Error processing user ${userId}:`, error);
+    }
+  }
+
+  if (messages.length > 0) {
+    try {
+      const chunks = expo.chunkPushNotifications(messages);
+      for (const chunk of chunks) {
+        await expo.sendPushNotificationsAsync(chunk);
+      }
+      logger.log("Comment Notif: Push notifications sent successfully.");
+    } catch (error) {
+      logger.error("Comment Notif: Error sending push notifications:", error);
     }
   }
 });
