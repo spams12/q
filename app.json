@@ -1,11 +1,10 @@
 {
   "expo": {
     "name": "QTM",
-    "slug": "QTM",
+    "slug": "QMC",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "QTM",
+    "icon": "./assets/images/splashs.png",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
@@ -16,12 +15,12 @@
       }
     },
       "splash": {
-      "image": "./assets/images/splashs.jpg",
+      "image": "./assets/images/splashs.png",
       "resizeMode": "contain"
  },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/splashs.jpg"
+        "foregroundImage": "./assets/images/splashs.png"
       },
       "edgeToEdgeEnabled": true,
       "googleServicesFile": "./google-services.json",
@@ -35,14 +34,14 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/icon.png"
+      "favicon": "./assets/images/splashs.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splashs.jpg",
+          "image": "./assets/images/splashs.png",
           "imageWidth": 200,
           "resizeMode": "contain"
         }
@@ -50,7 +49,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon.png"
+          "icon": "./assets/images/splashs.png"
         }
       ],
       [
