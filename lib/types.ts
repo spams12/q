@@ -146,7 +146,6 @@ export interface ServiceRequest {
   date: string; 
   createdAt: Timestamp; 
   lastUpdated: string;
-  assignedTo?: string;
   assignedUsers?: string[];
   attachments?: string[]; 
   comments?: Comment[];

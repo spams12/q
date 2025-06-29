@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // --- ADDED ---
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
@@ -14,14 +14,23 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
-import { Platform, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  AppState,
+  Linking,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import 'react-native-get-random-values';
-import { KeyboardProvider } from "react-native-keyboard-controller";
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PermissionsProvider } from '../context/PermissionsContext';
-import { ThemeProvider, useTheme } from '../context/ThemeContext';
+import { ThemeProvider, Themes, useTheme } from '../context/ThemeContext';
 import { useProtectedRoute } from '../hooks/useProtectedRoute';
 import { auth, db } from '../lib/firebase';
 import { User as AppUser } from '../lib/types';
@@ -30,19 +39,137 @@ Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
     shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true
+    shouldShowBanner : true,
+    shouldShowList :true
   }),
 });
 
 SplashScreen.preventAutoHideAsync();
 
+// --- NEW & IMPROVED: Notification Permission Modal Component ---
 
-async function registerForPushNotificationsAsync(userDocId: string) {
-  // Ensure we have a document ID to work with
+// A factory function to create theme-aware styles
+const getStyles = (theme: Themes['light']) =>
+  StyleSheet.create({
+    centeredView: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.55)', // A slightly darker backdrop for better focus
+    },
+    modalView: {
+      margin: 20,
+      backgroundColor: theme.card, // Use theme color for the background
+      borderRadius: 14, // Softer, more modern corners
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      elevation: 10,
+      width: '85%',
+      maxWidth: 320, // Set a max width for consistency on larger screens
+      overflow: 'hidden', // Ensures child elements adhere to borderRadius
+    },
+    textContainer: {
+      padding: 20,
+      paddingBottom: 15,
+      alignItems: 'center',
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontFamily: 'Cairo',
+      fontWeight: 'bold',
+      color: theme.text, // Use theme color for text
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    modalText: {
+      fontSize: 14,
+      fontFamily: 'Cairo',
+      lineHeight: 22,
+      color: theme.textSecondary, // Use secondary text color for the body
+      textAlign: 'center',
+    },
+    buttonContainer: {
+      flexDirection: 'column',
+      width: '100%',
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.separator, // Use theme color for separators
+    },
+    button: {
+      width: '100%',
+      padding: 14,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    buttonSeparator: {
+      width: '100%',
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: theme.separator,
+    },
+    buttonText: {
+      fontSize: 17,
+      fontFamily: 'Cairo',
+      color: theme.primary, // Use theme primary color for button text
+      textAlign: 'center',
+    },
+    primaryButtonText: {
+      fontWeight: 'bold', // Emphasize the primary action
+    },
+  });
+
+type NotificationPermissionModalProps = {
+  visible: boolean;
+  onGoToSettings: () => void;
+  onMaybeLater: () => void;
+};
+
+const NotificationPermissionModal = ({
+  visible,
+  onGoToSettings,
+  onMaybeLater,
+}: NotificationPermissionModalProps) => {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
+
+  return (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onMaybeLater} // Allow closing on Android back press
+    >
+      <View style={styles.centeredView}>
+        <View style={styles.modalView}>
+          <View style={styles.textContainer}>
+            <Text style={styles.modalTitle}>تفعيل الإشعارات</Text>
+            <Text style={styles.modalText}>
+              للحصول على التحديثات الفورية، يرجى تمكين الإشعارات من الإعدادات.
+            </Text>
+          </View>
+
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity style={styles.button} onPress={onGoToSettings}>
+              <Text style={[styles.buttonText, styles.primaryButtonText]}>
+                الانتقال إلى الإعدادات
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.buttonSeparator} />
+            <TouchableOpacity style={styles.button} onPress={onMaybeLater}>
+              <Text style={styles.buttonText}>لاحقاً</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// --- REFACTORED: This function now only handles token registration, assuming permission is granted. ---
+async function registerPushToken(userDocId: string) {
   if (!userDocId) return;
 
-  // Set up Android notification channel
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'default',
@@ -52,35 +179,21 @@ async function registerForPushNotificationsAsync(userDocId: string) {
     });
   }
 
-  // Request notification permissions
-  const { status } = await Notifications.requestPermissionsAsync();
-  if (status !== 'granted') {
-    console.log('Permission to receive notifications was denied.');
-    return;
-  }
-  
   try {
-    // Get the unique Expo push token for this device
     const token = (await Notifications.getExpoPushTokenAsync()).data;
     console.log('Expo Push Token:', token);
 
     if (token) {
-      // Use the provided user document ID to create a reference
       const userDocRef = doc(db, 'users', userDocId);
-      
-      // Update the document, adding the new token to the 'expoPushTokens' array.
-      // arrayUnion is smart and won't add the token if it already exists.
       await updateDoc(userDocRef, {
         expoPushTokens: arrayUnion(token),
       });
-
       console.log(`Token successfully added for user with doc ID ${userDocId}`);
     }
   } catch (error) {
-     console.error('Error registering push token:', error);
+    console.error('Error registering push token:', error);
   }
 }
-
 
 function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseUser | null; profile: AppUser | null; authLoaded: boolean }) {
   useProtectedRoute(user, profile, authLoaded)
@@ -115,14 +228,34 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseUser | nul
         <Stack.Screen name="about" options={{ headerBackTitle: "رجوع",}}/>
         <Stack.Screen name="invoices" options={{headerShown:false}}/>
         <Stack.Screen name="complete-profile" options={{ headerBackTitle: "رجوع",headerTitle:"الملف الشخصي"}}/>
-
       </Stack>
     </View>
   );
 }
 
-
 // --- MAIN ROOT LAYOUT COMPONENT ---
+
+// --- ADDED: Constants and Type Definitions for Notification Handling ---
+const ASYNC_STORAGE_KEY = 'notifications';
+
+interface StoredNotification {
+  id?: string;
+  title: string;
+  body: string;
+  timestamp?: string;
+  read?: boolean;
+  type?: 'info' | 'warning' | 'success' | 'error';
+  request?: {
+    identifier: string; // The unique ID from the push notification system
+    content: {
+      data?: { id?: string; type?: string; [key: string]: any };
+      dataString?: string; // Fallback: payload as a stringified JSON
+      title?: string;
+      body?: string;
+    };
+  };
+}
+
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     Cairo: require('../assets/fonts/Cairo.ttf'),
@@ -131,13 +264,31 @@ export default function RootLayout() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<AppUser | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
+  const [isPermissionModalVisible, setIsPermissionModalVisible] = useState(false);
   const router = useRouter();
 
+  // --- NEW: Permission handling logic ---
+  const handleNotificationPermissions = async (userDocId: string) => {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus === 'undetermined') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus === 'denied') {
+      setIsPermissionModalVisible(true);
+      return;
+    }
+
+    if (finalStatus === 'granted') {
+      await registerPushToken(userDocId);
+    }
+  };
+  
   useEffect(() => {
     if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (!currentUser) {
@@ -146,8 +297,8 @@ export default function RootLayout() {
       setAuthLoaded(true);
     });
     return () => unsubscribe();
-  }, []);
-
+  }, [error]);
+  
   useEffect(() => {
     if (!user) return;
 
@@ -155,14 +306,13 @@ export default function RootLayout() {
       try {
         const usersCollectionRef = collection(db, 'users');
         const q = query(usersCollectionRef, where("uid", "==", user.uid));
-        
         const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
           const userDoc = querySnapshot.docs[0];
-          const userDocId = userDoc.id; // This is the unique Firestore document ID!
+          const userDocId = userDoc.id;
 
-          await registerForPushNotificationsAsync(userDocId);
+          await handleNotificationPermissions(userDocId);
 
           const userDocRef = doc(db, 'users', userDocId);
           const unsubscribeSnapshot = onSnapshot(userDocRef, (doc) => {
@@ -180,15 +330,29 @@ export default function RootLayout() {
 
     let unsubscribe: (() => void) | undefined;
     findUserAndSetup().then(unsub => {
-        unsubscribe = unsub;
+      unsubscribe = unsub;
     });
 
     return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      if (unsubscribe) unsubscribe();
     };
-  }, [user]); 
+  }, [user]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
+      if (nextAppState === 'active' && profile) {
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status === 'granted') {
+          setIsPermissionModalVisible(false);
+          await registerPushToken(profile.id);
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [profile]); 
 
   useEffect(() => {
     if (loaded && authLoaded) {
@@ -196,31 +360,59 @@ export default function RootLayout() {
     }
   }, [loaded, authLoaded]);
 
+  // --- MODIFIED: This useEffect now handles storing notifications locally ---
   useEffect(() => {
-    const notificationListener =
-      Notifications.addNotificationReceivedListener(async (notification) => {
-        console.log('Notification received:', notification);
-        try {
-          const existingNotifications = await AsyncStorage.getItem('notifications');
-          const notifications = existingNotifications ? JSON.parse(existingNotifications) : [];
-          notifications.push(notification);
-          await AsyncStorage.setItem('notifications', JSON.stringify(notifications));
-        } catch (e) {
-          console.error("Failed to save notification.", e);
-        }
-      });
+    const notificationListener = Notifications.addNotificationReceivedListener(async (notification) => {
+      console.log('Notification received, saving to local storage:', notification);
 
-    const responseListener =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        console.log('Notification response received:', response);
-        const data = response.notification.request.content.data;
+      // Create a notification object matching the format used by NotificationsScreen
+      const newNotification: StoredNotification = {
+          title: notification.request.content.title || 'إشعار جديد',
+          body: notification.request.content.body || 'لا يوجد محتوى',
+          timestamp: new Date(notification.date).toISOString(),
+          read: false,
+          type: (notification.request.content.data?.type as any) || 'info',
+          request: {
+              identifier: notification.request.identifier,
+              content: {
+                  title: notification.request.content.title || undefined,
+                  body: notification.request.content.body || undefined,
+                  data: notification.request.content.data || undefined,
+                  dataString: notification.request.content.data 
+                    ? JSON.stringify(notification.request.content.data) 
+                    : undefined,
+              },
+          },
+      };
 
-        if (data && data.type === 'serviceRequest' && data.id) {
-          router.push(`/tasks/${data.id}`);
-        } else {
-          router.push('/my-requests');
-        }
-      });
+      try {
+        // 1. Get current notifications from storage
+        const storedNotificationsJSON = await AsyncStorage.getItem(ASYNC_STORAGE_KEY);
+        const currentNotifications: StoredNotification[] = storedNotificationsJSON ? JSON.parse(storedNotificationsJSON) : [];
+
+        // 2. Add the new notification to the top of the list
+        const updatedNotifications = [newNotification, ...currentNotifications];
+
+        // 3. Save the updated list back to storage
+        await AsyncStorage.setItem(ASYNC_STORAGE_KEY, JSON.stringify(updatedNotifications));
+        console.log('Successfully saved new notification to AsyncStorage.');
+
+      } catch (e) {
+        console.error('Failed to save notification to AsyncStorage:', e);
+      }
+    });
+
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('Notification response received:', response);
+      const data = response.notification.request.content.data;
+
+      // Handle navigation when user taps on the notification
+      if (data && data.type === 'serviceRequest' && data.id) {
+        router.push(`/tasks/${data.id}`);
+      } else {
+        router.push('/notifications'); // Fallback to notifications screen
+      }
+    });
 
     return () => {
       Notifications.removeNotificationSubscription(notificationListener);
@@ -229,19 +421,26 @@ export default function RootLayout() {
   }, [router]);
 
 
-  // While loading fonts or auth state, return nothing to show the splash screen.
   if (!loaded || !authLoaded) {
     return null;
   }
 
-  // --- RENDER THE APP ---
-  // Wrap everything in your custom providers.
   return (
     <PermissionsProvider>
       <SafeAreaProvider>
         <KeyboardProvider>
           <ThemeProvider>
             <RootLayoutNav user={user} profile={profile} authLoaded={authLoaded} />
+            <NotificationPermissionModal
+              visible={isPermissionModalVisible}
+              onGoToSettings={() => {
+                setIsPermissionModalVisible(false);
+                Linking.openSettings();
+              }}
+              onMaybeLater={() => {
+                setIsPermissionModalVisible(false);
+              }}
+            />
           </ThemeProvider>
         </KeyboardProvider>
       </SafeAreaProvider>

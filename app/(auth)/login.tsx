@@ -19,7 +19,6 @@ import {
 } from 'react-native';
 import Animated, {
   Easing,
-  FadeIn,
   FadeInDown,
   FadeInUp,
   useAnimatedStyle,
@@ -27,7 +26,7 @@ import Animated, {
   withRepeat,
   withSequence,
   withSpring,
-  withTiming,
+  withTiming
 } from 'react-native-reanimated';
 
 import { auth } from '@/lib/firebase';
@@ -275,30 +274,30 @@ const LoginScreen: React.FC = () => {
               </Animated.View>
             </Animated.View>
 
-            <Animated.View entering={FadeInUp.delay(800).duration(800)}>
+            <View >
               <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={isLoading} activeOpacity={0.8}>
-                <LinearGradient colors={[theme.primary, theme.secondary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.buttonGradient}>
+                <View style={styles.buttonGradient}>
                   {isLoading ? (
                     <View style={styles.buttonContent}>
-                      <Animated.View style={loadingIconAnimatedStyle}>
                         <Ionicons name="sync" size={24} color={theme.text} />
-                      </Animated.View>
+                      
                       <ThemedText style={styles.buttonText}>جاري الاتصال...</ThemedText>
                     </View>
                   ) : (
-                    <Animated.View style={styles.buttonContent} entering={FadeIn.duration(300)}>
+                    <View style={styles.buttonContent} >
                       <Ionicons name="log-in-outline" size={24} color={theme.text} style={styles.buttonIcon} />
                       <ThemedText style={styles.buttonText}>دخول النظام</ThemedText>
-                    </Animated.View>
+                    </View>
                   )}
-                </LinearGradient>
+                </View>
               </TouchableOpacity>
-            </Animated.View>
+            </View>
 
             <Animated.View style={styles.footer} entering={FadeInUp.delay(1000).duration(800)}>
               <View style={styles.statusIndicator}>
                 <Animated.View style={[styles.statusDot, statusDotAnimatedStyle]} />
-                <ThemedText style={styles.statusText}>متصل بالخادم الرئيسي</ThemedText>
+                               <ThemedText style={styles.statusText}>شركة القبس لمقاولات البنى التحتية و الانترنت</ThemedText>
+ <Animated.View style={[styles.statusDot, statusDotAnimatedStyle]} />
               </View>
               <View style={styles.divider} />
               <TouchableOpacity style={styles.supportButton}>
@@ -389,11 +388,8 @@ const styles = StyleSheet.create({
   loginButton: {
     borderRadius: 12,
     overflow: 'hidden',
-    elevation: 10,
-    shadowColor: theme.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
+    backgroundColor: theme.secondary,
+    
   },
   buttonGradient: {
     paddingVertical: 16,
@@ -425,7 +421,7 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     backgroundColor: theme.primary,
-    marginRight: 10,
+    marginHorizontal: 10,
     shadowColor: theme.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
@@ -434,6 +430,7 @@ const styles = StyleSheet.create({
   statusText: {
     color: theme.textMuted,
     fontSize: 14,
+    fontFamily: 'Cairo',
   },
   divider: {
     width: 60,

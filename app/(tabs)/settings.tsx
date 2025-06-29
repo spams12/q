@@ -289,7 +289,7 @@ const SettingsPage = () => {
           icon="notifications-outline"
           title="الإشعارات"
           iconColor="#FF3B30"
-          rightComponent={<Switch value={notificationsEnabled} onValueChange={setNotificationsEnabled} trackColor={{ false: '#E9E9EA', true: theme.success }} thumbColor="#FFF" />}
+          rightComponent={<Switch value={true}  trackColor={{ false: '#E9E9EA', true: theme.success }} thumbColor="#FFF" />}
         />
         <SettingRow
           styles={styles}

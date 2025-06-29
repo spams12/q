@@ -3,8 +3,56 @@
  */
 import { Expo, ExpoPushMessage } from "expo-server-sdk";
 import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
+
+// Define the types provided for clarity and type safety
+interface Comment {
+  id: string;
+  userId: string;
+  userName: string;
+  content: string;
+  timestamp: any;
+  createdAt?: any;
+  isStatusChange?: boolean;
+}
+
+interface ServiceRequest {
+  onLocation: boolean;
+  id: string;
+  customerId: string;
+  customerName: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  title: string;
+  description: string;
+  type: string;
+  status: string;
+  priority: string;
+  date: string;
+  createdAt: Timestamp;
+  lastUpdated: string;
+  assignedUsers?: string[];
+  attachments?: string[];
+  comments?: Comment[];
+  creatorId: string;
+  creatorName: string;
+  subscribers?: string[];
+  subscriberId?: string | null;
+  invoiceIds?: string[];
+  completionTimestamp?: any;
+  onLocationTimestamp?: any;
+  estimatedTime?: number;
+}
+
+// NEW: Define the type for an Announcement
+interface Announcement {
+    head: string;
+    body: string;
+    assignedUsers: string[];
+}
+
 
 // Initialize the Firebase Admin SDK to access Firestore.
 admin.initializeApp();
@@ -64,7 +112,6 @@ async function getNotificationMessagesForUsers(
           });
         } else {
           logger.warn(`Invalid Expo push token found for user ${userDoc.id}:`, pushToken);
-          // Optional: You could add logic here to remove invalid tokens from Firestore.
         }
       }
     } else {
@@ -77,6 +124,30 @@ async function getNotificationMessagesForUsers(
 
 
 /**
+ * Helper function to send notifications in chunks.
+ * @param {ExpoPushMessage[]} messages - Array of messages to send.
+ * @param {string} logContext - A string describing the context for logging.
+ */
+async function sendNotifications(messages: ExpoPushMessage[], logContext: string) {
+    if (messages.length === 0) {
+        return;
+    }
+    logger.log(`Preparing to send ${messages.length} push notifications for ${logContext}.`);
+    const chunks = expo.chunkPushNotifications(messages);
+    try {
+      for (const chunk of chunks) {
+        await expo.sendPushNotificationsAsync(chunk);
+      }
+      logger.log(`Push notifications sent successfully for ${logContext}.`);
+    } catch (error)      {
+      logger.error(`Error sending push notifications for ${logContext}:`, error);
+    }
+}
+
+
+// --- SERVICE REQUEST TRIGGERS ---
+
+/**
  * Cloud Function that triggers when a new service request is created.
  * It sends a notification to all initially assigned users.
  */
@@ -87,8 +158,7 @@ export const sendNewRequestNotificationOnCreate = onDocumentCreated({ document: 
     return;
   }
 
-  const data = snapshot.data();
-  // Ensure assignedUsers is an array, defaulting to empty if it doesn't exist.
+  const data = snapshot.data() as ServiceRequest;
   const assignedUsers: string[] = data.assignedUsers || [];
 
   if (assignedUsers.length === 0) {
@@ -98,76 +168,111 @@ export const sendNewRequestNotificationOnCreate = onDocumentCreated({ document: 
 
   logger.log(`New service request created. Notifying users: ${assignedUsers.join(", ")}`);
 
-  // Use the helper function to build the notification messages.
   const messages = await getNotificationMessagesForUsers(assignedUsers, {
     title: `مهمة جديدة: ${data.title}`,
     body: `تم تعيين مهمة جديدة لك. النوع: ${data.type}، الأولوية: ${data.priority}. اضغط للتفاصيل.`,
     data: { type: "serviceRequest", id: snapshot.id },
   });
 
-  if (messages.length > 0) {
-    logger.log(`Preparing to send ${messages.length} push notifications.`);
-    const chunks = expo.chunkPushNotifications(messages);
-    try {
-      for (const chunk of chunks) {
-        await expo.sendPushNotificationsAsync(chunk);
-      }
-      logger.log("Push notifications sent successfully for new document.");
-    } catch (error) {
-      logger.error("Error sending push notifications for new document:", error);
-    }
-  }
+  await sendNotifications(messages, "new service request");
 });
 
 
 /**
  * Cloud Function that triggers when a service request is updated.
- * It sends a notification ONLY to users who were newly added to the assignment.
  */
-export const sendNewRequestNotificationOnUpdate = onDocumentUpdated({ document: "serviceRequests/{requestId}", region: "europe-west1" }, async (event) => {
+export const serviceRequestUpdateManager = onDocumentUpdated({ document: "serviceRequests/{requestId}", region: "europe-west1" }, async (event) => {
   if (!event.data) {
     logger.log("No data associated with the update event, exiting.");
     return;
   }
-  const beforeData = event.data.before.data();
-  const afterData = event.data.after.data();
+  const beforeData = event.data.before.data() as ServiceRequest;
+  const afterData = event.data.after.data() as ServiceRequest;
+  const requestId = event.params.requestId;
 
   if (!beforeData || !afterData) {
     logger.log("Missing before or after data in update event, exiting.");
     return;
   }
 
-  // Ensure arrays exist, default to empty.
+  // --- Logic for newly assigned users ---
   const beforeUsers: string[] = beforeData.assignedUsers || [];
   const afterUsers: string[] = afterData.assignedUsers || [];
-
-  // Determine which users are newly assigned by filtering.
   const newUsers = afterUsers.filter((userId) => !beforeUsers.includes(userId));
 
-  if (newUsers.length === 0) {
-    logger.log("No new users were assigned in this update.");
+  if (newUsers.length > 0) {
+    logger.log(`Service request updated. Notifying newly assigned users: ${newUsers.join(", ")}`);
+    const messages = await getNotificationMessagesForUsers(newUsers, {
+      title: `لقد تم اسناد مهمة لك: ${afterData.title}`,
+      body: `تم تعيينك لمهمة قائمة. النوع: ${afterData.type}. اضغط للمتابعة فوراً!`,
+      data: { type: "serviceRequest", id: requestId },
+    });
+    await sendNotifications(messages, "new assignees");
+  }
+
+  // --- Logic for new comments ---
+  const beforeComments: Comment[] = beforeData.comments || [];
+  const afterComments: Comment[] = afterData.comments || [];
+
+  if (afterComments.length > beforeComments.length) {
+    const newComment = afterComments[afterComments.length - 1];
+    if (newComment.isStatusChange === true) {
+      logger.log("A new comment was detected, but it was a status change. No notification will be sent.");
+    } else {
+      const allAssignedUsers: string[] = afterData.assignedUsers || [];
+      const recipients = allAssignedUsers.filter(userId => userId !== newComment.userId);
+
+      if (recipients.length > 0) {
+        logger.log(`New comment on ticket ${requestId}. Notifying users: ${recipients.join(", ")}`);
+        const bodyContent = newComment.content.length > 100
+            ? newComment.content.substring(0, 97) + "..."
+            : newComment.content;
+
+        const messages = await getNotificationMessagesForUsers(recipients, {
+          title: `تعليق جديد على: ${afterData.title}`,
+          body: `${newComment.userName}: ${bodyContent}`,
+          data: { type: "serviceRequest", id: requestId },
+        });
+        await sendNotifications(messages, "new comment");
+      } else {
+          logger.log("New comment was added, but no other users are assigned to notify.");
+      }
+    }
+  }
+});
+
+
+// --- NEW ANNOUNCEMENT TRIGGER ---
+
+/**
+ * Cloud Function that triggers when a new announcement is created.
+ * It sends a notification to all users in the `assignedUsers` array.
+ */
+export const sendAnnouncementNotification = onDocumentCreated({ document: "announcements/{announcementId}", region: "europe-west1" }, async (event) => {
+  const snapshot = event.data;
+  if (!snapshot) {
+    logger.log("No data associated with the announcement creation event, exiting.");
     return;
   }
 
-  logger.log(`Service request updated. Notifying newly assigned users: ${newUsers.join(", ")}`);
+  const announcementData = snapshot.data() as Announcement;
+  // Ensure assignedUsers is an array, defaulting to empty if it doesn't exist.
+  const assignedUsers: string[] = announcementData.assignedUsers || [];
 
-  // Use the helper function to build messages for the new users.
-  const messages = await getNotificationMessagesForUsers(newUsers, {
-    title: `لقد تم اسناد مهمة لك: ${afterData.title}`,
-    body: `تم تعيينك لمهمة قائمة. النوع: ${afterData.type}. اضغط للمتابعة فوراً!`,
-    data: { type: "serviceRequest", id: event.params.requestId },
+  if (assignedUsers.length === 0) {
+    logger.log("New announcement created, but no users were assigned. No notifications to send.");
+    return;
+  }
+
+  logger.log(`New announcement received. Notifying users: ${assignedUsers.join(", ")}`);
+
+  // Use the helper function to build the notification messages.
+  const messages = await getNotificationMessagesForUsers(assignedUsers, {
+    title: announcementData.head,  // Use the 'head' field for the title
+    body: announcementData.body,    // Use the 'body' field for the body
+    data: { type: "announcement", id: snapshot.id }, // Add data for client-side routing
   });
 
-  if (messages.length > 0) {
-    logger.log(`Preparing to send ${messages.length} push notifications to new assignees.`);
-    const chunks = expo.chunkPushNotifications(messages);
-    try {
-      for (const chunk of chunks) {
-        await expo.sendPushNotificationsAsync(chunk);
-      }
-      logger.log("Push notifications sent successfully for updated document.");
-    } catch (error) {
-      logger.error("Error sending push notifications for updated document:", error);
-    }
-  }
+  // Use the reusable sendNotifications helper to send the messages.
+  await sendNotifications(messages, "new announcement");
 });

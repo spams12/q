@@ -1,13 +1,16 @@
+// src/screens/TasksScreen.tsx
+
 import { usePermissions } from '@/context/PermissionsContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-// import { useSharedValue } from 'react-native-reanimated'; // Removed animation import
 import FilterDialog from '../../components/FilterDialog';
 import InfoCard from '../../components/InfoCard';
+import { handleAcceptTask, handleRejectTask } from '../../hooks/taskar';
 import { db } from '../../lib/firebase';
 import { ServiceRequest } from '../../lib/types';
 
@@ -156,7 +159,7 @@ const ListEmptyComponent = React.memo(({ isLoading, theme, hasActiveFilters }: {
 });
 ListEmptyComponent.displayName = 'ListEmptyComponent';
 
-// --- Utility Functions (unchanged) ---
+// --- Utility Functions ---
 const getMillis = (timestamp: any): number => {
     if (!timestamp) return 0;
     if (typeof timestamp.toMillis === 'function') return timestamp.toMillis();
@@ -177,18 +180,17 @@ const TasksScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-
   const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [actionLoadingTaskId, setActionLoadingTaskId] = useState<string | null>(null);
 
-  const { userUid } = usePermissions();
+  const {  userdoc, userUid } = usePermissions();
   const { theme } = useTheme();
-  // const viewableItems = useSharedValue<ViewToken[]>([]); // Removed animation state
-
+  const router = useRouter();
   const scrollRef = useRef<FlatList<ServiceRequest>>(null);
 
-  // --- Data Fetching Logic (unchanged) ---
+  // --- Data Fetching Logic ---
   useEffect(() => {
     if (!userUid) {
       setCachedData({ New: [], Accepted: [], Completed: [] });
@@ -225,7 +227,35 @@ const TasksScreen: React.FC = () => {
     return () => unsubscribe();
   }, [userUid]);
 
-  // --- Memoized Logic and Callbacks (unchanged) ---
+  // --- Action Handlers using the Service ---
+  const handleAcceptTaskTEST = useCallback((taskId: string) => {
+    if (!userdoc) {
+      console.warn("User data not available to accept task.");
+      return;
+    }
+    const navigateToDetails = (id: string) => {
+        router.push({ pathname: "/tasks/[id]", params: { id } });
+    };
+    // FIX: This function now matches the signature expected by `handleAccept`.
+    const setActionLoading = (action: 'accept' | 'reject' | null) => {
+        setActionLoadingTaskId(action ? taskId : null);
+    };
+    handleAcceptTask( taskId , userdoc, setActionLoading, navigateToDetails);
+  }, [ userdoc, router]);
+
+  const handleRejectTaskTEST = useCallback((taskId: string) => {
+    if (!userdoc) {
+      console.warn("User data not available to reject task.");
+      return;
+    }
+    // FIX: This function now matches the signature expected by `handleReject`.
+    const setActionLoading = (action: 'accept' | 'reject' | null) => {
+        setActionLoadingTaskId(action ? taskId : null);
+    };
+    handleRejectTask(taskId , userdoc, setActionLoading);
+  }, [userdoc]);
+
+  // --- Memoized Logic and Callbacks ---
   const hasActiveFilters = !!(selectedPriority || selectedType || selectedStatus);
 
   const filteredServiceRequests = useMemo(() => {
@@ -244,7 +274,7 @@ const TasksScreen: React.FC = () => {
     return [...filteredData].sort((a, b) => {
       const dateA = getMillis(a.createdAt);
       const dateB = getMillis(b.createdAt);
-      return sortOrder === 'asc' ? dateA - dateB : dateB - a;
+      return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
     });
   }, [cachedData, activeTab, searchQuery, selectedPriority, selectedType, selectedStatus, sortOrder]);
 
@@ -254,13 +284,23 @@ const TasksScreen: React.FC = () => {
     setActiveTab(tab);
   }, [activeTab]);
 
-  // Removed onViewableItemsChanged callback as it's no longer needed for animation
-
   const renderItem = useCallback(({ item }: { item: ServiceRequest }) => {
     const hasResponded = item.userResponses?.some(res => res.userId === userUid);
-    // Removed viewableItems prop from InfoCard
-    return <InfoCard item={item} hasResponded={!!hasResponded} />;
-  }, [userUid]); // Removed viewableItems from dependency array
+    const isActionLoading = actionLoadingTaskId === item.id;
+    const showActions = activeTab === 'New';
+
+    return (
+      <InfoCard
+        item={item}
+        hasResponded={!!hasResponded}
+        showActions={showActions}
+        handleAcceptTask={handleAcceptTaskTEST}
+        handleRejectTask={handleRejectTaskTEST}
+        isActionLoading={isActionLoading}
+      />
+    );
+  // FIX: Added `activeTab` to the dependency array to satisfy the linter.
+  }, [userUid, activeTab, actionLoadingTaskId, handleAcceptTask, handleRejectTask]);
 
   const keyExtractor = useCallback((item: ServiceRequest) => item.id, []);
   const toggleFilterPopup = useCallback(() => setIsFilterVisible(prev => !prev), []);
@@ -275,9 +315,12 @@ const TasksScreen: React.FC = () => {
     if (filterKey === 'type') setSelectedType(null);
     if (filterKey === 'status') setSelectedStatus(null);
   }, []);
+
+  // FIX: Extracted complex expression from dependency array.
+  const isLoadingCurrentTab = loadingStates[activeTab];
   const renderListEmpty = useCallback(() => (
-    <ListEmptyComponent isLoading={loadingStates[activeTab]} theme={theme} hasActiveFilters={hasActiveFilters} />
-  ), [loadingStates[activeTab], theme, hasActiveFilters]);
+    <ListEmptyComponent isLoading={isLoadingCurrentTab} theme={theme} hasActiveFilters={hasActiveFilters} />
+  ), [isLoadingCurrentTab, theme, hasActiveFilters]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -309,9 +352,6 @@ const TasksScreen: React.FC = () => {
           </>
         }
         ListEmptyComponent={renderListEmpty}
-        // Removed props related to scroll animation
-        // onViewableItemsChanged={onViewableItemsChanged}
-        // viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
       />
@@ -335,7 +375,7 @@ const TasksScreen: React.FC = () => {
   );
 };
 
-// --- Styles (Unchanged) ---
+// --- Styles (unchanged) ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
