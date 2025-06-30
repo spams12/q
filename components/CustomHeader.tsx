@@ -2,8 +2,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { usePermissions } from '../context/PermissionsContext';
+import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext'; // Adjust path if needed
 
 interface CustomHeaderProps {
@@ -18,13 +18,11 @@ interface CustomHeaderProps {
 
 const CustomHeader = (props: CustomHeaderProps) => {
   const { theme } = useTheme();
-  const { userdoc } = usePermissions();
-
+  const  insets = useSafeAreaInsets()
   // The new title prop takes precedence. Fallback to navigation props.
-  const displayTitle = props.title || props.options?.title || props.route?.name || 'Screen';
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.header, borderBottomColor: theme.border }]}>
+    <View style={[styles.container, { backgroundColor: theme.header, borderBottomColor: theme.border } , {paddingTop:insets.top}]}>
       {/* Left side: Avatar */}
       <View style={styles.leftContainer}>
         
@@ -35,41 +33,37 @@ const CustomHeader = (props: CustomHeaderProps) => {
 
       {/* Center: Title */}
       <View style={styles.centerContainer}>
-        <Text style={[styles.title, { color: theme.text }]}>{displayTitle}</Text>
-      </View>
-
-      {/* Right side: Icons */}
-      <View style={styles.rightContainer}>
-        <Image
-          source={{ uri: userdoc?.photoURL }}
+         <Image
+          source={require("../assets/images/LogoInvoice.png")}
           style={styles.avatar}
+          
         />
-
-
-       
       </View>
+
+      {/* Right side: Spacer for balance */}
+      <View style={styles.rightContainer} />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
     container: {
-        height: 100,
-        paddingTop: 40,
+        height: 70,
         paddingHorizontal: 15,
         flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'space-between',
         borderBottomWidth: 1,
       },
       leftContainer: {
         flex: 1,
         justifyContent: 'flex-start',
+        alignItems: 'center',
         flexDirection: 'row',
       },
       centerContainer: {
         flex: 2,
         alignItems: 'center',
+        justifyContent: 'center',
       },
       rightContainer: {
         flex: 1,
@@ -77,16 +71,16 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
       },
       avatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 130,
+        height: 85,
+        resizeMode: 'contain',
       },
       title: {
         fontSize: 20,
         fontWeight: 'bold',
       },
       iconButton: {
-        marginLeft: 15,
+        // marginLeft: 15, // Removed for layout balance
       },
 });
 
