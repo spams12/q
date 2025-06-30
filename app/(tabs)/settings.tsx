@@ -7,6 +7,7 @@ import { signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 // OPTIMIZATION: Import useMemo and useCallback
+import { UseDialog } from '@/context/DialogContext';
 import React, { Children, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -73,6 +74,7 @@ const ProfileHeader = React.memo<ProfileHeaderProps & { styles: any }>(({ user, 
     <Text adjustsFontSizeToFit style={styles.profileRole}>{user.role || 'عضو'}</Text>
   </View>
 ));
+ProfileHeader.displayName = 'ProfileHeader';
 
 const SettingsGroup = React.memo<SettingsGroupProps & { styles: any }>(({ title, children, styles }) => (
   <View style={styles.groupContainer}>
@@ -87,6 +89,7 @@ const SettingsGroup = React.memo<SettingsGroupProps & { styles: any }>(({ title,
     </View>
   </View>
 ));
+SettingsGroup.displayName = 'SettingsGroup';
 
 const SettingRow = React.memo<SettingRowProps & { styles: any }>(({ icon, iconColor, title, value, onPress, rightComponent, styles }) => (
   <TouchableOpacity onPress={onPress} disabled={!onPress} style={styles.settingRow}>
@@ -100,12 +103,13 @@ const SettingRow = React.memo<SettingRowProps & { styles: any }>(({ icon, iconCo
     {rightComponent ? rightComponent : (onPress && <Ionicons name="chevron-back" size={20} style={styles.chevron} />)}
   </TouchableOpacity>
 ));
+SettingRow.displayName = 'SettingRow';
 
 const SettingsPage = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const { themeName, toggleTheme, theme } = useTheme();
-  // OPTIMIZATION: Memoize the styles object so it's not recreated on every render.
-  // It will only be recreated when the `theme` object changes.
+  const { showDialog } = UseDialog()
+
   const styles = useMemo(() => getStyles(theme), [theme]);
   console.log("rednedr set")
   const [invoiceData, setInvoiceData] = useState({ total: 0, count: 0 });
@@ -164,7 +168,10 @@ const SettingsPage = () => {
       setInvoiceData({ total: total, count: snapshot.size });
     }, (error) => {
       console.error("Error fetching invoices: ", error);
-      Alert.alert('خطأ', 'فشل في جلب بيانات الفواتير.');
+      showDialog({
+        status: 'error',
+        message: 'فشل في جلب بيانات الفواتير.',
+      });
     });
 
     return () => unsubscribe();
@@ -177,7 +184,10 @@ const SettingsPage = () => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('صلاحية مرفوضة', 'نحتاج إلى صلاحية الوصول إلى الصور لتحديث صورتك الشخصية.');
+        showDialog({
+          status: 'error',
+          message:"نحتاج إلى صلاحية الوصول إلى الصور لتحديث صورتك الشخصية"
+        })
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -198,12 +208,19 @@ const SettingsPage = () => {
       
       const userDocRef = doc(db, 'users', userdoc.id);
       await updateDoc(userDocRef, { photoURL: downloadURL });
-      // No need to call setUserdoc here, as the onSnapshot listener will catch the change and do it for us.
-      Alert.alert('نجاح', 'تم تحديث الصورة الشخصية بنجاح.');
+      showDialog({
+        status: 'success',
+        message: 'تم تحديث الصورة الشخصية بنجاح.',
+      })
+
 
     } catch (error) {
       console.error('Error uploading image: ', error);
-      Alert.alert('خطأ', 'فشل تحديث الصورة.');
+      showDialog({
+        status: 'error',
+        message: 'فشل تحميل الصورة.',
+      })
+
     } finally {
       setLoading(false);
     }
@@ -214,7 +231,7 @@ const SettingsPage = () => {
       'تسجيل الخروج', 'هل أنت متأكد؟',
       [{ text: 'إلغاء', style: 'cancel' }, { text: 'تسجيل الخروج', style: 'destructive', onPress: () => signOut(auth) }]
     );
-  }, []); // No dependencies
+  }, []); // No dependenciess
 
   const handlePhoneUpdate = useCallback(async (newPhone: string) => {
     if (!userdoc?.id || !newPhone) {
@@ -226,10 +243,13 @@ const SettingsPage = () => {
       const userDocRef = doc(db, 'users', userdoc.id);
       await updateDoc(userDocRef, { phone: newPhone });
        // Again, onSnapshot will handle the state update.
-      Alert.alert('نجاح', 'تم تحديث رقم الهاتف بنجاح.');
+      showDialog({
+        status: 'success',
+        message: 'تم تحديث رقم الهاتف بنجاح.',
+      })
     } catch (error) {
       console.error('Error updating phone number: ', error);
-      Alert.alert('خطأ', 'فشل تحديث رقم الهاتف.');
+      showDialog({status : "error", message:'فشل تحديث رقم الهاتف.'});
     } finally {
       setLoading(false);
       setPhoneModalVisible(false);
@@ -318,6 +338,7 @@ const SettingsPage = () => {
         onUpdate={handlePhoneUpdate}
         currentPhone={userdoc.phone || ''}
         loading={loading}
+        
       />
     </ScrollView>
   );

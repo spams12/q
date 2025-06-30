@@ -56,7 +56,7 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const useDialog = () => {
+export const UseDialog = () => {
   const context = useContext(DialogContext);
   if (context === undefined) {
     throw new Error('useDialog must be used within a DialogProvider');

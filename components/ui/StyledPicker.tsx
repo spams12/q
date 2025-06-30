@@ -1,6 +1,6 @@
 import { Colors } from '@/constants/Colors';
 import React, { useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { FlatList, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 
@@ -108,6 +108,8 @@ const StyledPicker: React.FC<StyledPickerProps> = ({ label, selectedValue, onVal
         visible={modalVisible}
         animationType="fade"
         onRequestClose={() => setModalVisible(false)}
+        statusBarTranslucent={Platform.OS === 'android'}
+        
       >
         <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
           <View style={styles.modalContent}>

@@ -31,7 +31,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { useDialog } from '@/context/DialogContext';
+import { UseDialog } from '@/context/DialogContext';
 import { auth } from '@/lib/firebase';
 
 const theme = {
@@ -167,7 +167,7 @@ const LoginScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { width, height } = useWindowDimensions();
-  const { showDialog } = useDialog();
+  const { showDialog } = UseDialog();
 
   // --- Animations ---
   const logoScale = useSharedValue(1);

@@ -1831,6 +1831,8 @@ function InvoiceForm({
         transparent={true}
         visible={stockCheckFailed}
         onRequestClose={closeMissingItemsDialog}
+        statusBarTranslucent={Platform.OS === 'android'}
+
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalView}>
@@ -2344,6 +2346,8 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
         visible={!!selectedInvoice}
         animationType="slide"
         onRequestClose={() => setSelectedInvoice(null)}
+       statusBarTranslucent={Platform.OS === 'android'}
+
       >
         <InvoiceDetails
           invoice={selectedInvoice}

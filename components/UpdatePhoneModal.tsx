@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import {
-    ActivityIndicator,
-    Modal,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 interface UpdatePhoneModalProps {
@@ -32,6 +33,8 @@ const UpdatePhoneModal: React.FC<UpdatePhoneModalProps> = ({
       transparent={true}
       visible={visible}
       onRequestClose={onClose}
+      statusBarTranslucent={Platform.OS === 'android'}
+      
     >
       <View style={styles.centeredView}>
         <View style={styles.modalView}>

@@ -1,10 +1,10 @@
+import { UseDialog } from '@/context/DialogContext';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { useDialog } from '@/context/DialogContext';
 
 const theme = {
   background: ['#0a0e1a', '#1a1f2e', '#0f1419'],
@@ -52,7 +52,8 @@ const StatusDialog = ({
   };
 
   return (
-    <Modal visible={visible} transparent>
+    <Modal visible={visible} transparent                 statusBarTranslucent={Platform.OS === 'android'}
+    >
       <Pressable style={styles.dialogOverlay} onPress={onClose}>
         <Animated.View
           entering={FadeIn.duration(250).springify().damping(15).stiffness(120)}
@@ -80,7 +81,7 @@ const StatusDialog = ({
 };
 
 export const GlobalStatusDialog = () => {
-  const { dialogState, hideDialog } = useDialog();
+  const { dialogState, hideDialog } = UseDialog();
   const { visible, status, message, buttonText, onButtonPress } = dialogState;
 
   // This function will be called when the primary button is pressed.

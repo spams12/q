@@ -1,13 +1,13 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
-    FlatList,
-    Modal,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  FlatList,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
 import { Theme, useTheme } from "@/context/ThemeContext";
@@ -62,6 +62,8 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
         transparent={true}
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
+        statusBarTranslucent={Platform.OS === 'android'}
+
       >
         <Pressable
           style={styles.modalBackdrop}

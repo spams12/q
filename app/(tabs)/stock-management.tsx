@@ -1,15 +1,15 @@
+import { UseDialog } from '@/context/DialogContext';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
-  View,
+  View
 } from 'react-native';
 import { usePermissions } from '../../context/PermissionsContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -30,7 +30,8 @@ const StockManagementScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('stock');
-    console.log("renderd mangments")
+  const { showDialog } = UseDialog()
+  
 
   useEffect(() => {
   
@@ -52,11 +53,11 @@ const StockManagementScreen: React.FC = () => {
         setStockItems(sortedItems);
       } else {
         console.error('User document does not exist');
-        Alert.alert('خطأ', 'المستخدم غير موجود');
+        showDialog({status:"error" , message:"لم يتم العثور على بيانات المستخدم"})
       }
     }, (error) => {
       console.error('Error fetching user:', error);
-      Alert.alert('خطأ', 'فشل في جلب بيانات المستخدم');
+      showDialog({status:"error" , message:"فشل في جلب بيانات المستخدم"})
     });
 
     const transactionsQuery = query(
@@ -72,7 +73,7 @@ const StockManagementScreen: React.FC = () => {
       setLoading(false);
     }, (error) => {
       console.error('Error fetching transactions:', error);
-      Alert.alert('خطأ', 'فشل في جلب المعاملات');
+      showDialog({status:"error" , message:"فشل في جلب بيانات المعاملات"})
       setLoading(false);
     });
 

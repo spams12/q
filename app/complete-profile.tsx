@@ -1,6 +1,7 @@
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import StyledTextInput from '@/components/ui/StyledTextInput';
+import { UseDialog } from '@/context/DialogContext';
 import { usePermissions } from '@/context/PermissionsContext'; // Already imported
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,11 +12,10 @@ import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   StyleSheet,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { auth, db, storage } from '../lib/firebase';
@@ -28,6 +28,7 @@ export default function CompleteProfileScreen() {
   const router = useRouter();
   const user = auth.currentUser;
   const { theme } = useTheme();
+  const { showDialog } = UseDialog();
 
   // --- Use userdoc from context instead of fetching ---
   // This hook now provides the user document.
@@ -75,7 +76,10 @@ export default function CompleteProfileScreen() {
 
   const handleCompleteProfile = async () => {
     if (!user) {
-      Alert.alert('خطأ', 'يجب عليك تسجيل الدخول لإكمال ملفك الشخصي.');
+      showDialog({
+        status: 'error',
+        message: 'يجب عليك تسجيل الدخول اولا`',
+      });
       return;
     }
 
@@ -88,7 +92,10 @@ export default function CompleteProfileScreen() {
     }
 
     if (!phone || !displayImage) {
-      Alert.alert('خطأ', 'يرجى تقديم رقم هاتف وصورة ملف شخصي.');
+         showDialog({
+        status:"error",
+        message:"يرجى تقديم رقم الهاتف"
+      })
       return;
     }
 
@@ -111,10 +118,11 @@ export default function CompleteProfileScreen() {
       router.replace('/(tabs)');
     } catch (error) {
       console.error('Error completing profile:', error);
-      Alert.alert(
-        'خطأ',
-        'حدث خطأ أثناء إكمال ملفك الشخصي. يرجى المحاولة مرة أخرى.'
-      );
+      showDialog({
+        status:"error",
+        message:"حدث خطأ أثناء إكمال ملفك الشخصي. يرجى المحاولة مرة أخرى."
+      })
+
     } finally {
       setIsSaving(false);
     }

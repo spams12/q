@@ -10,6 +10,7 @@ import { useColorScheme } from 'react-native';
 
 // Define the shape of the theme object
 export interface Theme {
+  themeName: 'light' | 'dark';
   background: string;
   text: string;
   textSecondary: string;
@@ -54,6 +55,7 @@ export interface Theme {
   otherUserText: string;
   currentUserTimestamp: string;
   otherUserTimestamp: string;
+  currentUserBubbleGradient: string[];
 }
 
 // Define the shape of the themes object
@@ -65,6 +67,7 @@ export interface Themes {
 // Define your color palettes
 export const themes: Themes = {
   light: {
+    themeName: 'light',
     background: '#F2F2F7',
     text: '#1C1C1E',
     textSecondary: '#8A8A8E',
@@ -109,8 +112,10 @@ export const themes: Themes = {
     otherUserText: '#1C1C1E',
     currentUserTimestamp: 'rgba(255, 255, 255, 0.75)',
     otherUserTimestamp: '#8A8A8E',
+    currentUserBubbleGradient: ['#007AFF', '#007AFF'],
   },
   dark: {
+    themeName: 'dark',
     background: '#000000',
     text: '#FFFFFF',
     textSecondary: '#8A8A8E',
@@ -149,12 +154,13 @@ export const themes: Themes = {
     actionsContainerBackground: 'rgba(28, 28, 30, 0.95)',
 
     // New chat colors for dark mode
-    currentUserBubble: '#3A3A3C',
-    otherUserBubble: '#1C1C1E',
+    currentUserBubble: '#0A84FF',
+    otherUserBubble: '#262628',
     currentUserText: '#FFFFFF',
     otherUserText: '#FFFFFF',
     currentUserTimestamp: 'rgba(255, 255, 255, 0.75)',
     otherUserTimestamp: '#8A8A8E',
+    currentUserBubbleGradient: ['#7F00FF', '#4B0082'],
   },
 };
 

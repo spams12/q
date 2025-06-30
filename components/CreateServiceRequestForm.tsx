@@ -8,6 +8,7 @@ import { Controller, useForm } from "react-hook-form";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -165,6 +166,8 @@ const Select = ({ label, options, selectedValue, onValueChange, placeholder, dis
                 visible={modalVisible}
                 onRequestClose={handleClose}
                 animationType="fade"
+                statusBarTranslucent={Platform.OS === 'android'}
+
             >
                 <Pressable style={styles.modalOverlay} onPressIn={handleClose}>
                     <View style={styles.modalContent} onStartShouldSetResponder={() => true}>

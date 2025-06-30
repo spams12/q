@@ -23,6 +23,7 @@ import { db, storage } from '../../lib/firebase';
 import { getPriorityBadgeColor, getStatusBadgeColor } from '../../lib/styles';
 import { Comment, Invoice, ServiceRequest, User } from '../../lib/types';
 // --- NEW: Import the action handlers from the service file ---
+import { UseDialog } from '@/context/DialogContext';
 import { handleAcceptTask, handleLogArrival, handleMarkAsDone, handleRejectTask } from '../../hooks/taskar';
 
 // --- KEYBOARD AVOIDANCE HOOK ---
@@ -83,6 +84,8 @@ interface AttachmentAsset {
 }
 
 const TicketDetailPage = () => {
+    const { showDialog } = UseDialog()
+    
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
     const id = params.id as string;
@@ -142,7 +145,6 @@ const TicketDetailPage = () => {
 
     const copyToClipboard = (text: string) => {
         Clipboard.setStringAsync(text);
-        Alert.alert('تم النسخ', 'تم نسخ الرقم إلى الحافظة.');
     };
 
     const handlePhonePress = (phoneNumber: string) => {
@@ -156,7 +158,6 @@ const TicketDetailPage = () => {
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState(0);
     const [currentUserResponse, setCurrentUserResponse] = useState<'pending' | 'accepted' | 'rejected' | 'completed' | null>(null);
-
     const slideAnim = useSharedValue(0);
 
     const { userdoc } = usePermissions();
@@ -286,7 +287,7 @@ const TicketDetailPage = () => {
             });
         } catch (e) {
             console.error("Failed to add comment: ", e);
-            Alert.alert("خطأ", "فشل في إرسال التعليق.");
+            showDialog({status:"error" , message:"فشل في إرسال التعليق."})
         }
     };
 
@@ -294,7 +295,7 @@ const TicketDetailPage = () => {
     const handlePickImage = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert('Permission required', 'Please grant permission to access your photo library.');
+            showDialog({status:"error" , message:"يرجى السماح بالوصول إلى الصور."})
             return;
         }
 
@@ -885,6 +886,8 @@ const TicketDetailPage = () => {
                 transparent={true}
                 visible={isArrivalLogVisible}
                 onRequestClose={() => setIsArrivalLogVisible(false)}
+                statusBarTranslucent={Platform.OS === 'android'}
+
             >
                 <KeyboardAvoidingView
                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

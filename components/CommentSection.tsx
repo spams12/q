@@ -1,5 +1,6 @@
 import { format, isSameDay, isToday, isYesterday } from 'date-fns';
 import { enGB } from 'date-fns/locale';
+import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -238,6 +239,8 @@ const CommentSection: React.FC<CommentSectionProps> = ({
         transparent={true}
         visible={modalVisible}
         onRequestClose={closeModal}
+        statusBarTranslucent={Platform.OS === 'android'}
+
       >
         <GestureHandlerRootView style={{ flex: 1 }}>
           <View style={styles.modalOverlay}>
@@ -353,8 +356,15 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                       styles.commentBubble,
                       isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble,
                       isImageOnlyComment && styles.imageOnlyBubble,
+                      isCurrentUser && theme.themeName === 'dark' && { backgroundColor: 'transparent' },
                     ]}
                   >
+                    {isCurrentUser && theme.themeName === 'dark' ? (
+                      <LinearGradient
+                        colors={theme.currentUserBubbleGradient}
+                        style={StyleSheet.absoluteFill}
+                      />
+                    ) : null}
                     {!isCurrentUser && (
                       <Text style={styles.userName}>{userName}</Text>
                     )}
@@ -374,12 +384,11 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                           const isImage = att.fileType === 'image' || (att.mimeType ? att.mimeType.startsWith('image/') : /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
                           const isVideo = att.fileType === 'video' || (att.mimeType ? att.mimeType.startsWith('video/') : /\.(mp4|mov|avi|mkv)$/i.test(att.fileName));
                           
-                          // MODIFIED: Use att.fileUrl instead of att.downloadURL
-                          const mediaUrl = att.fileUrl; 
+                          const mediaUrl = att.fileUrl;
 
                           return (
                             <TouchableOpacity
-                              key={att.id || attIndex} 
+                              key={att.id || attIndex}
                               onPress={() => {
                                 if (isImage && mediaUrl) {
                                   const currentImageIndex = commentImages.indexOf(mediaUrl);
@@ -431,7 +440,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                                     <Text style={styles.fileName} numberOfLines={1}>
                                       {att.fileName}
                                     </Text>
-                                    {/* MODIFIED: Use att.fileSize instead of att.size */}
                                     {(att.fileSize) && (
                                       <Text style={styles.fileSize}>
                                         {(att.fileSize / 1024).toFixed(1)} كيلوبايت
@@ -532,6 +540,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     paddingHorizontal: 15,
     borderRadius: 20,
     maxWidth: '100%',
+    overflow: 'hidden',
   },
   imageOnlyBubble: {
     padding: 0,

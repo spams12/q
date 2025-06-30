@@ -140,7 +140,9 @@ const NotificationPermissionModal = ({
       animationType="fade"
       transparent={true}
       visible={visible}
-      onRequestClose={onMaybeLater} // Allow closing on Android back press
+      onRequestClose={onMaybeLater} 
+      statusBarTranslucent={Platform.OS === 'android'}
+
     >
       <View style={styles.centeredView}>
         <View style={styles.modalView}>

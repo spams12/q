@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   FlatList,
   RefreshControl,
@@ -37,6 +36,7 @@ import { db } from "../../lib/firebase";
 import { CheckCircle, Clock, Inbox, ListChecks, Search, TrendingDown, TrendingUp, XCircle } from "lucide-react-native";
 
 // CONTEXT & TYPES
+import { UseDialog } from "@/context/DialogContext";
 import { useTheme } from "../../context/ThemeContext";
 import useAuth from "../../hooks/use-firebase-auth";
 import { ServiceRequest } from "../../lib/types";
@@ -514,6 +514,8 @@ const mapDocToServiceRequest = (docSnap: DocumentSnapshot): ServiceRequest => {
 };
 
 function TechnicianDashboardScreen() {
+    const { showDialog } = UseDialog()
+  
   const { theme } = useTheme();
   const { width } = useWindowDimensions();
   const styles = getStyles(theme, width);
@@ -554,7 +556,7 @@ function TechnicianDashboardScreen() {
         }
     } catch (error) {
         console.error("Error fetching tasks:", error);
-        Alert.alert("خطأ", "لم نتمكن من تحميل المهام.");
+        showDialog({status :"error" ,message:"فشل في جلب البيانات"})
     }
   }, []);
 
