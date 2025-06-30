@@ -16,7 +16,8 @@
       "developmentClient": false,
       "android": {
         "buildType": "apk",
-        "autoIncrement": true
+        "autoIncrement": true,
+        "gradleCommand": ":app:assembleRelease"
       },
       "ios": {
         "simulator": false,
@@ -35,5 +36,8 @@
         "autoIncrement": true
       }
     }
+  },
+  cli: {
+    appVersionSource: "local"
   }
 }

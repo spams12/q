@@ -14,15 +14,13 @@
         "NSLocationAlwaysUsageDescription": "This app uses your location in the background to track your progress on assigned tasks."
       }
     },
-      "splash": {
+    "splash": {
       "image": "./assets/images/splashs.png",
       "resizeMode": "contain"
- },
+    },
     "android": {
-      
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/splashs.png"
-        
       },
       "edgeToEdgeEnabled": true,
       "googleServicesFile": "./google-services.json",
@@ -31,7 +29,8 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION"
-      ]
+      ],
+      "versionCode": 2
     },
     "web": {
       "bundler": "metro",
@@ -52,7 +51,6 @@
         "expo-notifications",
         {
           "icon": "./assets/images/splashs.png"
-          
         }
       ],
       [
