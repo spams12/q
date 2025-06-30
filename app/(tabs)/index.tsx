@@ -351,9 +351,9 @@ const TasksScreen: React.FC = () => {
         ListHeaderComponent={
           <>
             <View style={styles.headerTitleContainer}>
-              <Text style={[styles.headerTitle, { color: theme.text }]}>المهام</Text>
-              <Text style={[styles.headerSubtitle, { color: theme.text }]}>قائمة المهام المسندة إليك من قبل المدير.</Text>
-            </View>
+              <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.headerTitle, { color: theme.text }]}>المهام</Text>
+              <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.headerSubtitle, { color: theme.text }]}>قائمة المهام المسندة إليك من قبل المدير.</Text>
+            </View> 
 
             <View style={styles.controlsContainer}>
               <SearchInput value={searchQuery} onChangeText={setSearchQuery} theme={theme} />

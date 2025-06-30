@@ -239,7 +239,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
         transparent={true}
         visible={modalVisible}
         onRequestClose={closeModal}
-        statusBarTranslucent={Platform.OS === 'android'}
+statusBarTranslucent={Platform.OS === 'android'}
 
       >
         <GestureHandlerRootView style={{ flex: 1 }}>

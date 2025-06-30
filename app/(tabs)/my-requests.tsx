@@ -211,12 +211,12 @@ const MyRequestsScreen: React.FC = () => {
             {/* Title Section */}
             <View style={styles.titleSection}>
               <View style={styles.headerRow}>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>التكتات</Text>
+                <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.headerTitle, { color: theme.text }]}>التكتات</Text>
                 <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.tabActive }]} onPress={onAddPress}>
-                  <Text style={styles.addButtonText}>انشاء تكت</Text>
+                  <Text adjustsFontSizeToFit numberOfLines={1} style={styles.addButtonText}>انشاء تكت</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={[styles.headerSubtitle, { color: theme.text }]}>
+              <Text  adjustsFontSizeToFit numberOfLines={1} style={[styles.headerSubtitle, { color: theme.text }]}>
                 قائمة التكتات التي قمت بإنشائها.
               </Text>
             </View>

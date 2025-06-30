@@ -330,7 +330,7 @@ const PerformanceSummaryCard = ({ tasks, styles, theme }: { tasks: ServiceReques
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>ملخص الأداء</Text>
+                <Text  style={styles.headerTitle}>ملخص الأداء</Text>
             </View>
 
             <ScrollView
@@ -453,8 +453,8 @@ const ListHeader = React.memo(({
 }: ListHeaderProps) => (
     <View style={styles.dashboardContainer}>
         <View style={styles.welcomeHeader}>
-            <Text style={styles.dashboardTitle}>الاحصائيات</Text>
-            <Text style={styles.dashboardSubtitle}>مرحباً بك، تتبع مهامك وأدائك</Text>
+            <Text adjustsFontSizeToFit numberOfLines={1} style={styles.dashboardTitle}>الاحصائيات</Text>
+            <Text adjustsFontSizeToFit numberOfLines={1} style={styles.dashboardSubtitle}>مرحباً بك، تتبع مهامك وأدائك</Text>
         </View>
         <TechnicianStatCards tickets={tasks} styles={styles} currentUserDocId={currentUserDocId}/>
         <PerformanceSummaryCard tasks={tasks} styles={styles} theme={theme} />

@@ -515,7 +515,6 @@ const TicketDetailPage = () => {
     }
 
     const isDisabled =
-        isSubmittingComment ||
         serviceRequest.status === 'مكتمل' ||
         serviceRequest.status === 'مغلق' ||
         (showActions === 'true' && (

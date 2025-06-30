@@ -220,7 +220,7 @@ export default function CompleteProfileScreen() {
         ) : (
           <View style={styles.imagePlaceholder}>
             <Ionicons name="camera-outline" size={40} color={theme.icon} />
-            <ThemedText style={styles.imagePickerText}>
+            <ThemedText adjustsFontSizeToFit numberOfLines={1} style={styles.imagePickerText}>
               اختر صورة الملف الشخصي
             </ThemedText>
           </View>

@@ -201,8 +201,8 @@ const StockManagementScreen: React.FC = () => {
   const ListHeader = React.memo(() => (
     <>
       <View style={styles.headerContainer}>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>إدارة الحقيبة</Text>
-        <Text style={[styles.headerSubtitle, { color: theme.text }]}>
+        <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.headerTitle, { color: theme.text }]}>إدارة الحقيبة</Text>
+        <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.headerSubtitle, { color: theme.text }]}>
           عرض وإدارة مخزونك ومعاملاتك.
         </Text>
       </View>

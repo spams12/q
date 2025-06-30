@@ -106,7 +106,6 @@ const SettingRow = React.memo<SettingRowProps & { styles: any }>(({ icon, iconCo
 SettingRow.displayName = 'SettingRow';
 
 const SettingsPage = () => {
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const { themeName, toggleTheme, theme } = useTheme();
   const { showDialog } = UseDialog()
 
@@ -304,13 +303,7 @@ const SettingsPage = () => {
 
       {/* App Settings Group */}
       <SettingsGroup title="إعدادات التطبيق" styles={styles}>
-        <SettingRow
-          styles={styles}
-          icon="notifications-outline"
-          title="الإشعارات"
-          iconColor="#FF3B30"
-          rightComponent={<Switch value={true}  trackColor={{ false: '#E9E9EA', true: theme.success }} thumbColor="#FFF" />}
-        />
+
         <SettingRow
           styles={styles}
           icon="moon-outline"
