@@ -232,6 +232,18 @@ const CommentSection: React.FC<CommentSectionProps> = ({
     setModalVisible(false);
   };
 
+  const handleLocationPress = (latitude: number, longitude: number) => {
+    const label = 'Shared Location';
+    const url = Platform.select({
+      ios: `maps://?q=${label}&ll=${latitude},${longitude}`,
+      android: `geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`,
+    });
+
+    if (url) {
+      Linking.openURL(url).catch(err => console.error("Couldn't load page", err));
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Modal
@@ -239,8 +251,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
         transparent={true}
         visible={modalVisible}
         onRequestClose={closeModal}
-statusBarTranslucent={Platform.OS === 'android'}
-
+        statusBarTranslucent={Platform.OS === 'android'}
       >
         <GestureHandlerRootView style={{ flex: 1 }}>
           <View style={styles.modalOverlay}>
@@ -313,19 +324,19 @@ statusBarTranslucent={Platform.OS === 'android'}
 
             const isImageOnlyComment =
               !comment.content?.trim() &&
+              (!comment.location) &&
               comment.attachments &&
               comment.attachments.length > 0 &&
               comment.attachments.every(att => {
                 const isImage =
-                  att.fileType === 'image' ||
-                  (att.mimeType ? att.mimeType.startsWith('image/') : /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
+                  att.fileType === 'image' || (/\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
                 return isImage;
               });
+            
+            const isLocationOnlyComment = !comment.content?.trim() && !(comment.attachments && comment.attachments.length > 0) && !!comment.location;
 
-            // MODIFIED: Use att.fileUrl instead of att.downloadURL
             const commentImages = comment.attachments?.filter(att => {
-              const isImage = att.fileType === 'image' || (att.mimeType && att.mimeType.startsWith('image/'));
-              return isImage || /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName);
+              return att.fileType === 'image' || /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName);
             }).map(att => att.fileUrl).filter((url): url is string => !!url) || [];
 
             return (
@@ -355,16 +366,18 @@ statusBarTranslucent={Platform.OS === 'android'}
                     style={[
                       styles.commentBubble,
                       isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble,
-                      isImageOnlyComment && styles.imageOnlyBubble,
-                      isCurrentUser && theme.themeName === 'dark' && { backgroundColor: 'transparent' },
+                      (isImageOnlyComment || isLocationOnlyComment) && styles.unwrappedContentBubble,
+                      isCurrentUser && theme.themeName === 'dark' && !isImageOnlyComment && !isLocationOnlyComment && { backgroundColor: 'transparent' },
                     ]}
                   >
-                    {isCurrentUser && theme.themeName === 'dark' ? (
+                    {/* MODIFICATION 1: Prevent gradient on image/location only comments */}
+                    {isCurrentUser && theme.themeName === 'dark' && !isImageOnlyComment && !isLocationOnlyComment ? (
                       <LinearGradient
-                        colors={theme.currentUserBubbleGradient}
+                        colors={theme.currentUserBubbleGradient as any}
                         style={StyleSheet.absoluteFill}
                       />
                     ) : null}
+
                     {!isCurrentUser && (
                       <Text style={styles.userName}>{userName}</Text>
                     )}
@@ -381,8 +394,8 @@ statusBarTranslucent={Platform.OS === 'android'}
                     {comment.attachments && comment.attachments.length > 0 && (
                       <View style={[styles.attachmentsContainer, isImageOnlyComment && { marginTop: 0, gap: 2 }]}>
                         {comment.attachments.map((att, attIndex) => {
-                          const isImage = att.fileType === 'image' || (att.mimeType ? att.mimeType.startsWith('image/') : /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
-                          const isVideo = att.fileType === 'video' || (att.mimeType ? att.mimeType.startsWith('video/') : /\.(mp4|mov|avi|mkv)$/i.test(att.fileName));
+                          const isImage = att.fileType === 'image' || (/\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
+                          const isVideo = att.fileType === 'video' || (/\.(mp4|mov|avi|mkv)$/i.test(att.fileName));
                           
                           const mediaUrl = att.fileUrl;
 
@@ -454,15 +467,41 @@ statusBarTranslucent={Platform.OS === 'android'}
                         })}
                       </View>
                     )}
-                    <View style={styles.timestampContainer}>
-                      <Text style={[
-                        styles.timestamp,
-                        isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp,
-                        isImageOnlyComment && styles.imageOnlyTimestamp,
-                      ]}>
-                      {format(commentDate, 'h:mm aaa', { locale: enGB })}
-                      </Text>
-                    </View>
+
+                    {comment.location && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          if (comment.location) {
+                            handleLocationPress(comment.location.latitude, comment.location.longitude)
+                          }
+                        }}
+                        style={[
+                          styles.locationAttachment,
+                          isLocationOnlyComment && { marginTop: 0, width: screenWidth * 0.65 }
+                        ]}
+                      >
+                        <Ionicons name="map-outline" size={24} color={theme.primary} />
+                        <View style={styles.locationInfo}>
+                          <Text style={styles.locationText}>Location Shared</Text>
+                          <Text style={styles.locationCoords}>
+                            {comment.location.latitude.toFixed(4)}, {comment.location.longitude.toFixed(4)}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                    
+                    {/* MODIFICATION 2: Hide timestamp container for location-only comments */}
+                    {!isLocationOnlyComment && (
+                      <View style={styles.timestampContainer}>
+                        <Text style={[
+                          styles.timestamp,
+                          isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp,
+                          isImageOnlyComment && styles.imageOnlyTimestamp,
+                        ]}>
+                        {format(commentDate, 'h:mm aaa', { locale: enGB })}
+                        </Text>
+                      </View>
+                    )}
                  </View>
                 </View>
               </React.Fragment>
@@ -474,7 +513,7 @@ statusBarTranslucent={Platform.OS === 'android'}
   );
 };
 
-// --- Styles remain the same, no changes needed here ---
+// I renamed `imageOnlyBubble` to `unwrappedContentBubble` for clarity, as it now applies to more than just images.
 const getStyles = (theme: any) => StyleSheet.create({
   dateHeader: {
     alignSelf: 'center',
@@ -542,7 +581,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     maxWidth: '100%',
     overflow: 'hidden',
   },
-  imageOnlyBubble: {
+  unwrappedContentBubble: { // Renamed from imageOnlyBubble
     padding: 0,
     backgroundColor: 'transparent',
     shadowOpacity: 0,
@@ -638,6 +677,30 @@ const getStyles = (theme: any) => StyleSheet.create({
     marginBottom: 2,
   },
   fileSize: {
+    fontSize: 12,
+    color: theme.textSecondary,
+  },
+  locationAttachment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.inputBackground,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    marginTop: 8,
+    gap: 12,
+  },
+  locationInfo: {
+    flex: 1,
+  },
+  locationText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.text,
+    marginBottom: 2,
+  },
+  locationCoords: {
     fontSize: 12,
     color: theme.textSecondary,
   },

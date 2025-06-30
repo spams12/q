@@ -7,6 +7,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
+import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { arrayUnion, collection, doc, getDocs, onSnapshot, runTransaction, Timestamp, updateDoc } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
@@ -341,6 +342,35 @@ const TicketDetailPage = () => {
             }
         } catch (err) {
             console.error('Error picking document:', err);
+        }
+    };
+
+    const handleShareLocation = async () => {
+        if (!userdoc) return;
+
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert('Permission denied', 'Permission to access location was denied');
+            return;
+        }
+
+        try {
+            const location = await Location.getCurrentPositionAsync({});
+            const newCommentData = {
+                id: `comment_${Date.now()}`,
+                location: {
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                },
+                timestamp: Timestamp.now(),
+                userId: userdoc.id,
+                userName: userdoc.name,
+            };
+            await handleAddComment(newCommentData);
+            setIsAttachmentMenuVisible(false);
+        } catch (error) {
+            console.error('Failed to get location:', error);
+            Alert.alert("خطأ", "فشل في الحصول على الموقع.");
         }
     };
 
@@ -851,6 +881,9 @@ const TicketDetailPage = () => {
                                 </TouchableOpacity>
                                 <TouchableOpacity onPress={handlePickDocument} disabled={isDisabled} style={[styles.iconButton, isDisabled && styles.disabledButton]}>
                                     <Ionicons name="document-attach-outline" size={24} color={isDisabled ? theme.placeholder : theme.primary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={handleShareLocation} disabled={isDisabled} style={[styles.iconButton, isDisabled && styles.disabledButton]}>
+                                    <Ionicons name="location-outline" size={24} color={isDisabled ? theme.placeholder : theme.primary} />
                                 </TouchableOpacity>
                             </>
                         )}

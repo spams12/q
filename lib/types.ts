@@ -129,6 +129,10 @@ export interface Comment {
   createdAt?: any;
   isStatusChange?: boolean;
   attachments?: Attachment[];
+  location?: {
+    latitude: number;
+    longitude: number;
+  };
 }
 
 export interface ServiceRequest {
