@@ -381,7 +381,7 @@ const TicketDetailPage = () => {
                 content: commentToSave.trim(),
                 attachments: uploadedAttachments,
                 timestamp: Timestamp.now(),
-                userId: userdoc.uid,
+                userId: userdoc.id,
                 userName: userdoc.name,
             };
 

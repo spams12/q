@@ -61,7 +61,8 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
 export const handleAcceptTask = async (
     id: string,
     userdoc: User,
-    setActionLoading: (action: string | null) => void
+    setActionLoading: (action: 'accept' | null) => void,
+    onSuccess?: (taskId: string) => void // Add onSuccess callback for navigation
 ) => {
     if (!userdoc) return;
     setActionLoading('accept');
@@ -98,10 +99,10 @@ export const handleAcceptTask = async (
 
             const newComment: Comment = {
                 id: `${Date.now()}`,
-                content: `قبل المستخدم ${userdoc.name} المهمة.`,
+                content: "قبلت المهمة وسأعمل عليها",
                 userId: userdoc.id,
                 userName: userdoc.name || 'النظام',
-                createdAt: Timestamp.now(),
+                timestamp: Timestamp.now(),
                 isStatusChange: true,
             };
 
@@ -138,6 +139,12 @@ export const handleAcceptTask = async (
                 },
             });
         }
+        
+        // Call the success callback to trigger navigation
+        if (onSuccess) {
+            onSuccess(id);
+        }
+
     } catch (e) {
         console.error("Failed to handle accept action: ", e);
         Alert.alert("Error", `Failed to accept the task: ${e instanceof Error ? e.message : String(e)}`);
@@ -152,7 +159,7 @@ export const handleAcceptTask = async (
 export const handleRejectTask = async (
     id: string,
     userdoc: User,
-    setActionLoading: (action: string | null) => void
+    setActionLoading: (action: 'reject' | null) => void // Corrected type
 ) => {
     if (!userdoc) return;
     setActionLoading('reject');
@@ -181,7 +188,7 @@ export const handleRejectTask = async (
                 content: `رفض المستخدم ${userdoc.name} المهمة.`,
                 userId: userdoc.id,
                 userName: userdoc.name || 'النظام',
-                createdAt: Timestamp.now(),
+                timestamp: Timestamp.now(),
                 isStatusChange: true,
             };
 
@@ -224,7 +231,7 @@ export const handleLogArrival = async (
         userName: userdoc.name || 'Unknown',
         timestamp: Timestamp.now(),
         content: `وصل الفني للموقع. مدة العمل المقدرة: ${estimatedDuration} ${durationText}.`,
-        isStatusChange: false,
+        isStatusChange: true,
     };
 
     try {

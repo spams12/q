@@ -29,6 +29,8 @@ import 'react-native-get-random-values';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GlobalStatusDialog } from '../components/global/StatusDialog';
+import { DialogProvider } from '../context/DialogContext';
 import { PermissionsProvider } from '../context/PermissionsContext';
 import { ThemeProvider, Themes, useTheme } from '../context/ThemeContext';
 import { useProtectedRoute } from '../hooks/useProtectedRoute';
@@ -430,9 +432,11 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <KeyboardProvider>
           <ThemeProvider>
-            <RootLayoutNav user={user} profile={profile} authLoaded={authLoaded} />
-            <NotificationPermissionModal
-              visible={isPermissionModalVisible}
+            <DialogProvider>
+              <RootLayoutNav user={user} profile={profile} authLoaded={authLoaded} />
+              <GlobalStatusDialog />
+              <NotificationPermissionModal
+                visible={isPermissionModalVisible}
               onGoToSettings={() => {
                 setIsPermissionModalVisible(false);
                 Linking.openSettings();
@@ -441,6 +445,7 @@ export default function RootLayout() {
                 setIsPermissionModalVisible(false);
               }}
             />
+            </DialogProvider>
           </ThemeProvider>
         </KeyboardProvider>
       </SafeAreaProvider>

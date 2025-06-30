@@ -193,10 +193,10 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const filteredAndSortedComments = useMemo(() => comments
     .filter(comment => {
       const content = comment.content || '';
-      if (comment.isStatusChange || (content.startsWith('قام') && content.includes('بتغيير حالة التكت من'))) {
+      if ( (content.startsWith('قام') && content.includes('بتغيير حالة التكت من'))) {
         return false;
       }
-      const keywordsToHide = ['قبلت المهمة', 'رفضت المهمة', 'بتغيير عنوان التذكرة', 'بإلغاء إسناد التذكرة', 'بإسناد التذكرة إلى', 'قبل المستخدم', 'رفض المستخدم'];
+      const keywordsToHide = [ 'بتغيير عنوان التذكرة', 'بإلغاء إسناد التذكرة', 'بإسناد التذكرة إلى', ];
       if (keywordsToHide.some(keyword => content.includes(keyword))) {
         return false;
       }

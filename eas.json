@@ -5,7 +5,6 @@
       "developmentClient": true,
       "android": {
         "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
       },
       "ios": {
         "simulator": true,

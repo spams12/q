@@ -1562,6 +1562,7 @@ function InvoiceForm({
         userName: currentUserDisplayName || user?.displayName || "",
         content: `تم إنشاء فاتورة جديدة بقيمة ${calculateTotal().toLocaleString()} دينار عراقي.`,
         timestamp: new Date().toISOString(),
+        isStatusChange:true
       };
       await updateDoc(ticketRef, { comments: arrayUnion(comment) });
 

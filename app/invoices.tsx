@@ -16,9 +16,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-
-
-
 interface InvoiceItem {
   name: string;
   price: number;
@@ -50,12 +47,19 @@ export interface Invoice {
   subscriberId?: string;
 }
 
-
 // Helper to format date for display
 const formatDate = (date: Timestamp | Date | string) => {
     const d = date instanceof Timestamp ? date.toDate() : new Date(date);
     return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear() } ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
 };
+
+// Helper to format currency with commas for thousands
+const formatCurrency = (amount: number) => {
+    return amount.toLocaleString('en-US', {
+       
+    });
+};
+
 
 // Helper for status badge styling and text
 const getStatusDetails = (status: Invoice['status']) => {
@@ -86,69 +90,62 @@ const InvoicesScreen = () => {
     return  [...userdoc.lastClearTimes].sort((a, b) => a.toMillis() - b.toMillis());
   }, [userdoc?.lastClearTimes]);
 
-useEffect(() => {
-  if (!userdoc?.uid) return
+  useEffect(() => {
+    if (!userdoc?.uid) return;
 
-  setInvoicesLoading(true)
-  let invoicesQuery = query(
-    collection(db, "invoices"),
-    where("createdBy", "==", userdoc.uid),
-    orderBy("createdAt", "desc") // Add ordering for better performance
-  );
+    setInvoicesLoading(true);
+    setError(null); // Reset error on new fetch
 
-  if (selectedTime !== "all" && userdoc.lastClearTimes && userdoc.lastClearTimes.length > 0) {
-    console.log("Fetching invoices for selected clear time:", selectedTime);
-    const sortedTimestamps = [...userdoc.lastClearTimes].sort((a, b) => a.toMillis() - b.toMillis());
-    
-    const selectedIndex = sortedTimestamps.findIndex(t => t.toMillis().toString() === selectedTime);
+    let invoicesQuery = query(
+      collection(db, "invoices"),
+      where("createdBy", "==", userdoc.uid),
+      orderBy("createdAt", "desc")
+    );
 
-    if (selectedIndex !== -1) {
-      const selectedTimestamp = sortedTimestamps[selectedIndex];
-      
-      // Convert Timestamp to ISO string for comparison since createdAt is stored as ISO string
-      const selectedDateISO = selectedTimestamp.toDate().toISOString();
-      
-      // Fetch invoices created up to and including the selected clear date.
-      invoicesQuery = query(
-        collection(db, "invoices"),
-        where("createdBy", "==", userdoc.uid),
-        where("createdAt", "<=", selectedDateISO),
-        orderBy("createdAt", "desc")
-      );
+    if (selectedTime !== "all" && userdoc.lastClearTimes && userdoc.lastClearTimes.length > 0) {
+      const sortedTimestamps = [...userdoc.lastClearTimes].sort((a, b) => a.toMillis() - b.toMillis());
+      const selectedIndex = sortedTimestamps.findIndex(t => t.toMillis().toString() === selectedTime);
 
-      // If there's a previous clear date, fetch invoices created after it.
-      if (selectedIndex > 0) {
-        const previousTimestamp = sortedTimestamps[selectedIndex - 1];
-        const previousDateISO = previousTimestamp.toDate().toISOString();
+      if (selectedIndex !== -1) {
+        const selectedTimestamp = sortedTimestamps[selectedIndex];
         
-        invoicesQuery = query(
+        // Fetch invoices created up to the selected clear date.
+        let baseQuery = query(
           collection(db, "invoices"),
           where("createdBy", "==", userdoc.uid),
-          where("createdAt", ">", previousDateISO),
-          where("createdAt", "<=", selectedDateISO),
-          orderBy("createdAt", "desc")
+          where("createdAt", "<=", selectedTimestamp) // Use Timestamp object directly
         );
+
+        // If there's a previous clear date, create a range.
+        if (selectedIndex > 0) {
+          const previousTimestamp = sortedTimestamps[selectedIndex - 1];
+          baseQuery = query(baseQuery, where("createdAt", ">", previousTimestamp));
+        }
+
+        // Apply final ordering
+        invoicesQuery = query(baseQuery, orderBy("createdAt", "desc"));
       }
     }
-  }
 
-  const unsubscribe = onSnapshot(
-    invoicesQuery,
-    (snapshot) => {
-      const fetchedInvoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice))
-      console.log("Fetched invoices:", fetchedInvoices.length);
-      setInvoices(fetchedInvoices)
-      setInvoicesLoading(false)
-    },
-    (error) => {
-      console.error("Error fetching invoices:", error)
-      setError("Failed to fetch invoices: " + error.message)
-      setInvoicesLoading(false)
-    }
-  )
+    // onSnapshot provides real-time updates
+    const unsubscribe = onSnapshot(
+      invoicesQuery,
+      (snapshot) => {
+        const fetchedInvoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+        setInvoices(fetchedInvoices);
+        setInvoicesLoading(false);
+      },
+      (err) => {
+        console.error("Error fetching invoices in real-time:", err);
+        setError("فشل في تحديث الفواتير: " + err.message);
+        setInvoicesLoading(false);
+      }
+    );
 
-  return () => unsubscribe()
-}, [userdoc?.uid, selectedTime, userdoc?.lastClearTimes])
+    // Cleanup subscription on component unmount or when dependencies change
+    return () => unsubscribe();
+  }, [userdoc?.uid, selectedTime, userdoc?.lastClearTimes]);
+
 
   const invoiceStats = useMemo(() => {
     return {
@@ -171,10 +168,17 @@ useEffect(() => {
                 </View>
             </View>
 
+            {/* Invoice ID Display */}
+            <View style={styles.invoiceIdContainer}>
+                <Text style={styles.invoiceIdLabel}>رقم الفاتورة:</Text>
+                <Text style={styles.invoiceIdText}>{item.id}</Text>
+            </View>
+
             <View style={styles.cardBody}>
                 <View style={styles.detailItem}>
                     <MaterialCommunityIcons name="cash" size={20} color="#16a085" />
-                    <Text style={styles.amountText}>{item.totalAmount.toFixed(2)} ر.س</Text>
+                    {/* Use formatCurrency for comma separation */}
+                    <Text style={styles.amountText}>{formatCurrency(item.totalAmount)} د.ع</Text>
                 </View>
                 <View style={styles.detailItem}>
                     <Feather name="calendar" size={16} color="#888" />
@@ -248,7 +252,7 @@ useEffect(() => {
       </View>
 
       {/* Summary Section */}
-      {invoices.length > 0 && (
+      {invoices.length > 0 && !invoicesLoading && (
         <View style={styles.summaryContainer}>
             <View style={styles.summaryBox}>
                 <Text style={styles.summaryLabel}>إجمالي الفواتير</Text>
@@ -256,7 +260,8 @@ useEffect(() => {
             </View>
             <View style={styles.summaryBox}>
                 <Text style={styles.summaryLabel}>المبلغ الإجمالي</Text>
-                <Text style={styles.summaryValue}>{invoiceStats.total.toFixed(2)} ر.س</Text>
+                {/* Use formatCurrency and corrected currency symbol */}
+                <Text style={styles.summaryValue}>{formatCurrency(invoiceStats.total)} د.ع</Text>
             </View>
         </View>
       )}
@@ -361,7 +366,7 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 10,
   },
   customerInfo: {
     flexDirection: 'row-reverse',
@@ -382,13 +387,31 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
+  // Styles for Invoice ID
+  invoiceIdContainer: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    marginBottom: 15,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme === 'dark' ? '#4a5568' : '#f0f0f0',
+  },
+  invoiceIdLabel: {
+    fontSize: 14,
+    color: theme === 'dark' ? '#a0aec0' : '#6c757d',
+    fontWeight: '600',
+  },
+  invoiceIdText: {
+    fontSize: 14,
+    color: theme === 'dark' ? '#cbd5e0' : '#333',
+    marginRight: 6,
+    flex: 1,
+    textAlign: 'left',
+  },
   cardBody: {
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: theme === 'dark' ? '#4a5568' : '#f0f0f0',
   },
   detailItem: {
     flexDirection: 'row-reverse',

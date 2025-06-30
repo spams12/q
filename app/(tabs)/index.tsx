@@ -7,7 +7,7 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import FilterDialog from '../../components/FilterDialog';
 import InfoCard from '../../components/InfoCard';
 import { handleAcceptTask, handleRejectTask } from '../../hooks/taskar';
@@ -184,6 +184,7 @@ const TasksScreen: React.FC = () => {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [actionLoadingTaskId, setActionLoadingTaskId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const {  userdoc, userUid } = usePermissions();
   const { theme } = useTheme();
@@ -207,8 +208,8 @@ const TasksScreen: React.FC = () => {
       const allRequests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
       const newData: CachedData = { New: [], Accepted: [], Completed: [] };
       allRequests.forEach(req => {
-        if (req.status === 'معلق') return;
-        if (req.status === 'مكتمل' || req.status === 'مغلق') {
+        if (req.status === 'معلق' || req.status === 'مغلق') return;
+        if (req.status === 'مكتمل') {
           newData.Completed.push(req);
         } else {
           const userResponse = req.userResponses?.find(res => res.userId === userUid);
@@ -284,6 +285,17 @@ const TasksScreen: React.FC = () => {
     setActiveTab(tab);
   }, [activeTab]);
 
+  const onRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    // Since we use a real-time listener (onSnapshot), the data is always live.
+    // This refresh is primarily for user experience, providing a visual confirmation
+    // that the app is active and connected. We'll just show the spinner for a
+    // short duration for perceived responsiveness.
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 1000);
+  }, []);
+
   const renderItem = useCallback(({ item }: { item: ServiceRequest }) => {
     const hasResponded = item.userResponses?.some(res => res.userId === userUid);
     const isActionLoading = actionLoadingTaskId === item.id;
@@ -299,8 +311,7 @@ const TasksScreen: React.FC = () => {
         isActionLoading={isActionLoading}
       />
     );
-  // FIX: Added `activeTab` to the dependency array to satisfy the linter.
-  }, [userUid, activeTab, actionLoadingTaskId, handleAcceptTask, handleRejectTask]);
+  }, [userUid, activeTab, actionLoadingTaskId, handleRejectTaskTEST, handleAcceptTaskTEST]);
 
   const keyExtractor = useCallback((item: ServiceRequest) => item.id, []);
   const toggleFilterPopup = useCallback(() => setIsFilterVisible(prev => !prev), []);
@@ -329,6 +340,14 @@ const TasksScreen: React.FC = () => {
         data={filteredServiceRequests}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            colors={[theme.tabActive]} // for Android
+            tintColor={theme.tabActive} // for iOS
+          />
+        }
         ListHeaderComponent={
           <>
             <View style={styles.headerTitleContainer}>

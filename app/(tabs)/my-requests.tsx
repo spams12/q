@@ -2,7 +2,8 @@ import { useTheme } from '@/context/ThemeContext';
 import useFirebaseAuth from '@/hooks/use-firebase-auth';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+// MODIFIED: Imported getDocs for the refresh action
+import { collection, getDocs, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -72,6 +73,7 @@ ActiveFilters.displayName = 'ActiveFilters';
 const MyRequestsScreen: React.FC = () => {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false); // ADDED: State for pull-to-refresh
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterVisible, setIsFilterVisible] = useState(false);
 
@@ -84,7 +86,7 @@ const MyRequestsScreen: React.FC = () => {
   const { theme } = useTheme();
   const router = useRouter();
 
-  // --- Data Fetching Logic ---
+  // --- Data Fetching Logic (Real-time listener) ---
   useEffect(() => {
     if (!user?.uid) return;
     const q = query(
@@ -109,6 +111,35 @@ const MyRequestsScreen: React.FC = () => {
   }, [user?.uid]);
 
   // --- Memoized Logic and Callbacks ---
+
+  // ADDED: Callback for the pull-to-refresh action
+  const onRefresh = useCallback(async () => {
+    if (!user?.uid) {
+      setIsRefreshing(false);
+      return;
+    }
+
+    setIsRefreshing(true);
+    try {
+      // Create the same query but use getDocs for a one-time fetch
+      const q = query(
+        collection(db, 'serviceRequests'),
+        where('creatorId', '==', user.uid),
+        orderBy('createdAt', 'desc'),
+        limit(10)
+      );
+      const querySnapshot = await getDocs(q);
+      const fetchedRequests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
+      setRequests(fetchedRequests); // Manually update the state with the fresh data
+    } catch (error) {
+      console.error("Error on refreshing requests:", error);
+      // You could add a user-facing error message here (e.g., using a toast)
+    } finally {
+      setIsRefreshing(false); // Ensure the refreshing indicator is always hidden
+    }
+  }, [user?.uid]);
+
+
   const filteredRequests = useMemo(() => {
     return requests.filter(req => {
       const matchesSearch = !searchQuery ||
@@ -145,6 +176,7 @@ const MyRequestsScreen: React.FC = () => {
   const onAddPress = useCallback(() => router.push('/create-request'), [router]);
 
   const renderListEmpty = useCallback(() => {
+    // The main loading indicator only shows on initial load, not during a refresh.
     if (isLoading) {
       return (
         <View style={styles.loadingContainer}>
@@ -171,6 +203,9 @@ const MyRequestsScreen: React.FC = () => {
         keyExtractor={keyExtractor}
         ListEmptyComponent={renderListEmpty}
         contentContainerStyle={styles.listContentContainer}
+        // ADDED: Props to enable pull-to-refresh
+        onRefresh={onRefresh}
+        refreshing={isRefreshing}
         ListHeaderComponent={
           <View style={styles.headerContainer}>
             {/* Title Section */}
