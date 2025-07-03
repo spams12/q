@@ -1,4 +1,4 @@
-package com.tmody.QMC
+package com.tmody.QTM
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

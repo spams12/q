@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "QTM",
-    "slug": "QMC",
+    "slug": "QTM",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/splashs.png",
@@ -24,13 +24,16 @@
       },
       "edgeToEdgeEnabled": true,
       "googleServicesFile": "./google-services.json",
-      "package": "com.tmody.QMC",
+      "package": "com.tmody.QTM",
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION"
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "versionCode": 2
+      "versionCode": 8
     },
     "web": {
       "bundler": "metro",
@@ -78,7 +81,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "5a8d250c-001e-4ce5-a0ad-b1cac3b8b785"
+        "projectId": "5a17568e-79f0-42cb-b1ea-f82a75841aa8"
       }
     }
   }

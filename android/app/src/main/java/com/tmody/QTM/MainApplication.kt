@@ -1,4 +1,4 @@
-package com.tmody.QMC
+package com.tmody.QTM
 
 import android.app.Application
 import android.content.res.Configuration
