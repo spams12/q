@@ -11,8 +11,15 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app uses your location to track your progress on assigned tasks.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location in the background to track your progress on assigned tasks.",
-        "NSLocationAlwaysUsageDescription": "This app uses your location in the background to track your progress on assigned tasks."
-      }
+        "NSLocationAlwaysUsageDescription": "This app uses your location in the background to track your progress on assigned tasks.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
+      },
+      "bundleIdentifier": "com.tmody.QTM",
+      "buildNumber": "2",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "splash": {
       "image": "./assets/images/splashs.png",
@@ -33,7 +40,7 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "versionCode": 8
+      "versionCode": 9
     },
     "web": {
       "bundler": "metro",
@@ -83,6 +90,9 @@
       "eas": {
         "projectId": "5a17568e-79f0-42cb-b1ea-f82a75841aa8"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/5a17568e-79f0-42cb-b1ea-f82a75841aa8"
     }
   }
 }

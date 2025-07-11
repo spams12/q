@@ -7,7 +7,8 @@ import { Timestamp } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 
-// Define the types provided for clarity and type safety
+// --- TYPE DEFINITIONS ---
+
 interface Comment {
   id: string;
   userId: string;
@@ -46,19 +47,25 @@ interface ServiceRequest {
   estimatedTime?: number;
 }
 
-// NEW: Define the type for an Announcement
+// Define the type for an Announcement, including optional fields
 interface Announcement {
-    head: string;
-    body: string;
-    assignedUsers: string[];
+  head: string;          // Corresponds to notification title
+  body: string;          // Corresponds to notification body
+  assignedUsers?: string[]; // Array of user IDs to notify
+  imageUrl?: string;     // Optional: URL for a notification image
 }
 
+
+// --- INITIALIZATION ---
 
 // Initialize the Firebase Admin SDK to access Firestore.
 admin.initializeApp();
 
 // Initialize the Expo SDK.
 const expo = new Expo();
+
+
+// --- HELPER FUNCTIONS ---
 
 /**
  * A reusable helper function to gather all valid push tokens for a list of user IDs
@@ -242,7 +249,7 @@ export const serviceRequestUpdateManager = onDocumentUpdated({ document: "servic
 });
 
 
-// --- NEW ANNOUNCEMENT TRIGGER ---
+// --- ANNOUNCEMENT TRIGGER ---
 
 /**
  * Cloud Function that triggers when a new announcement is created.
@@ -266,10 +273,17 @@ export const sendAnnouncementNotification = onDocumentCreated({ document: "annou
 
   logger.log(`New announcement received. Notifying users: ${assignedUsers.join(", ")}`);
 
-  // Use the helper function to build the notification messages.
+  // NOTE: The 'imageUrl' from the announcement is not used here because the
+  // current Expo-based notification helper ('getNotificationMessagesForUsers') does
+  // not support rich notifications with images out-of-the-box.
+  if (announcementData.imageUrl) {
+    logger.log(`Image URL found but will be ignored by this function: ${announcementData.imageUrl}`);
+  }
+
+  // Use the existing helper function to build the notification messages.
   const messages = await getNotificationMessagesForUsers(assignedUsers, {
-    title: announcementData.head,  // Use the 'head' field for the title
-    body: announcementData.body,    // Use the 'body' field for the body
+    title: announcementData.head,
+    body: announcementData.body,
     data: { type: "announcement", id: snapshot.id }, // Add data for client-side routing
   });
 

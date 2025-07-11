@@ -1,11 +1,21 @@
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
+import { db } from '@/lib/firebase'; // Make sure your firebase config is exported from here
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import {
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  Timestamp,
+  where
+} from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   FlatList,
   RefreshControl,
@@ -14,45 +24,26 @@ import {
   View
 } from 'react-native';
 
-// --- Constants ---
-const ASYNC_STORAGE_KEY = 'notifications';
-
 // --- Type Definitions ---
 type NotificationIconName =
   | 'checkmark-circle'
   | 'warning'
   | 'alert-circle'
   | 'notifications'
-  | 'notifications-off';
+  | 'megaphone-outline';
 
-/**
- * Represents a notification object, combining data from the push notification
- * payload and local state (e.g., 'read' status).
- */
 interface Notification {
-  id?: string;
+  id: string;
   title: string;
   body: string;
-  timestamp?: string;
-  read?: boolean;
-  type?: 'info' | 'warning' | 'success' | 'error';
-  request?: {
-    identifier: string; // The unique ID from the push notification system
-    content: {
-      data?: { id?: string };
-      dataString?: string; // Fallback: payload as a stringified JSON
-      title?: string;
-      body?: string;
-    };
-  };
+  timestamp: string;
+  type: 'info' | 'warning' | 'success' | 'error' | 'announcement';
+  source: 'announcement' | 'serviceRequest';
 }
 
 // --- Helper Functions ---
 
-/**
- * Returns the appropriate icon and color based on the notification type.
- */
-const getNotificationIcon = (theme: Theme, type?: string) => {
+const getNotificationIcon = (theme: Theme, type: Notification['type']) => {
   switch (type) {
     case 'success':
       return { name: 'checkmark-circle' as NotificationIconName, color: theme.success };
@@ -60,18 +51,17 @@ const getNotificationIcon = (theme: Theme, type?: string) => {
       return { name: 'warning' as NotificationIconName, color: theme.priorityHigh };
     case 'error':
       return { name: 'alert-circle' as NotificationIconName, color: theme.destructive };
+    case 'announcement':
+      return { name: 'megaphone-outline' as NotificationIconName, color: theme.primary };
     default:
-      return { name: 'notifications' as NotificationIconName, color: theme.primary };
+      return { name: 'notifications' as NotificationIconName, color: theme.icon };
   }
 };
 
-/**
- * Formats a timestamp into a human-readable "time ago" string.
- */
 const formatTimestamp = (timestamp?: string): string => {
-  if (!timestamp) return '';
+  if (!timestamp) return 'منذ فترة';
   const date = new Date(timestamp);
-  if (isNaN(date.getTime())) return ''; // Invalid date check
+  if (isNaN(date.getTime())) return '';
 
   const diff = Date.now() - date.getTime();
   const minutes = Math.floor(diff / 60000);
@@ -84,17 +74,13 @@ const formatTimestamp = (timestamp?: string): string => {
   return `منذ ${days} يوم`;
 };
 
-// --- Child Components ---
+// --- Child Components (Unchanged) ---
 
 interface NotificationItemProps {
   item: Notification;
   onPress: (item: Notification) => void;
 }
 
-/**
- * Renders a single notification item.
- * Memoized to prevent re-renders unless its props change.
- */
 const NotificationItem = React.memo(({ item, onPress }: NotificationItemProps) => {
   const { theme, themeName } = useTheme();
   const styles = getStyles(theme, themeName);
@@ -103,23 +89,19 @@ const NotificationItem = React.memo(({ item, onPress }: NotificationItemProps) =
   return (
     <View style={styles.notificationWrapper}>
       <TouchableOpacity
-        style={[styles.notificationItem, !item.read && styles.unreadNotification]}
+        style={styles.notificationItem}
         onPress={() => onPress(item)}
         activeOpacity={0.8}>
         <View style={styles.notificationContent}>
           <View style={styles.iconContainer}>
             <Ionicons name={icon.name} size={24} color={icon.color} />
-            {!item.read && <View style={styles.unreadDot} />}
           </View>
-
           <View style={styles.textContent}>
-            <ThemedText
-              type="defaultSemiBold"
-              style={[styles.notificationTitle, !item.read && styles.unreadTitle]}>
-              {item.request?.content?.title || item.title}
+            <ThemedText type="defaultSemiBold" style={styles.notificationTitle}>
+              {item.title}
             </ThemedText>
-            <ThemedText style={[styles.notificationBody, !item.read && styles.unreadBody]} numberOfLines={20}>
-              {item.request?.content?.body || item.body}
+            <ThemedText style={styles.notificationBody} numberOfLines={20}>
+              {item.body}
             </ThemedText>
             <ThemedText style={styles.timestamp}>{formatTimestamp(item.timestamp)}</ThemedText>
           </View>
@@ -129,10 +111,6 @@ const NotificationItem = React.memo(({ item, onPress }: NotificationItemProps) =
   );
 });
 
-/**
- * Renders the empty state for the notification list.
- * Memoized for performance.
- */
 const EmptyState = React.memo(() => {
   const { theme, themeName } = useTheme();
   const styles = getStyles(theme, themeName);
@@ -141,7 +119,7 @@ const EmptyState = React.memo(() => {
     <View style={styles.emptyContainer}>
       <Ionicons name="notifications-off" size={80} color={theme.icon} />
       <ThemedText style={styles.emptyTitle}>لا توجد إشعارات</ThemedText>
-      <ThemedText style={styles.emptySubtitle}>ستظهر إشعاراتك هنا عند وصولها</ThemedText>
+      <ThemedText style={styles.emptySubtitle}>ستظهر إشعاراتك الجديدة هنا</ThemedText>
     </View>
   );
 });
@@ -150,6 +128,7 @@ const EmptyState = React.memo(() => {
 
 export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const fadeAnim = useMemo(() => new Animated.Value(0), []);
 
@@ -157,22 +136,83 @@ export default function NotificationsScreen() {
   const { theme, themeName } = useTheme();
   const styles = getStyles(theme, themeName);
 
+  const {userdoc} = usePermissions()
+
   const fetchNotifications = useCallback(async () => {
-    try {
-      const storedNotifications = await AsyncStorage.getItem(ASYNC_STORAGE_KEY);
-      if (storedNotifications) {
-        const parsed = JSON.parse(storedNotifications) as Notification[];
-        // Sort notifications to show unread first, then by timestamp
-        const sorted = parsed.sort((a, b) => {
-          if (a.read !== b.read) return a.read ? 1 : -1;
-          return new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime();
-        });
-        setNotifications(sorted);
-      }
-    } catch (e) {
-      console.error('Failed to load notifications:', e);
+    if (!userdoc) {
+      console.warn("User ID is not available. Cannot fetch notifications.");
+      setLoading(false);
+      setRefreshing(false);
+      setNotifications([]); // Clear notifications if no user
+      return;
     }
-  }, []);
+
+    setLoading(true);
+    try {
+      // 1. Fetch Announcements
+      const announcementsQuery = query(
+        collection(db, 'announcements'),
+        where('assignedUsers', 'array-contains', userdoc.id),
+        orderBy('createdAt', 'desc')
+      );
+
+      // 2. Fetch Service Requests
+      const serviceRequestsQuery = query(
+        collection(db, 'serviceRequests'),
+        where('assignedUsers', 'array-contains', userdoc.id),
+        orderBy('createdAt', 'desc')
+      );
+
+      const [announcementsSnapshot, serviceRequestsSnapshot] = await Promise.all([
+        getDocs(announcementsQuery),
+        getDocs(serviceRequestsQuery),
+      ]);
+
+      // 3. Map Announcements
+      const announcementNotifications: Notification[] = announcementsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: data.head || 'إعلان جديد',
+          body: data.body || 'تفاصيل الإعلان غير متوفرة.',
+          timestamp: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          type: 'announcement',
+          source: 'announcement',
+        };
+      });
+
+      // --- MODIFIED ---
+      // 4. Map Service Requests with more detail from the schema
+      const serviceRequestNotifications: Notification[] = serviceRequestsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        const priority = data.priority || 'متوسط';
+        const requestType = data.type || 'غير محدد'; // --- ADDED: Get request type
+        const creator = data.creatorName || 'النظام'; // --- ADDED: Get creator name
+
+        // --- MODIFIED: Create a more descriptive body
+        const body = `النوع: ${requestType}. أنشأها: ${creator}. الأولوية: ${priority}.`;
+        
+        return {
+          id: doc.id,
+          title: `مهمة جديدة: ${data.title}`,
+          body: body,
+          timestamp: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          type: priority === 'عاجل' || priority === 'مرتفع' ? 'warning' : 'success',
+          source: 'serviceRequest',
+        };
+      });
+       const allNotifications = [...announcementNotifications, ...serviceRequestNotifications];
+      allNotifications.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+      setNotifications(allNotifications);
+    } catch (e) {
+      console.error('Failed to load notifications from Firestore:', e);
+      alert('حدث خطأ أثناء تحميل الإشعارات.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [userdoc.id]);
 
   useEffect(() => {
     fetchNotifications();
@@ -183,59 +223,36 @@ export default function NotificationsScreen() {
     }).start();
   }, [fetchNotifications, fadeAnim]);
 
-  const onRefresh = useCallback(async () => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
-    await fetchNotifications();
-    setRefreshing(false);
+    fetchNotifications();
   }, [fetchNotifications]);
 
-  /**
-   * Marks a notification as read and persists the change.
-   */
-  const markAsRead = useCallback(async (identifierToMark: string) => {
-    const updatedNotifications = notifications.map(n =>
-      n.request?.identifier === identifierToMark ? { ...n, read: true } : n
-    );
-    setNotifications(updatedNotifications);
-    await AsyncStorage.setItem(ASYNC_STORAGE_KEY, JSON.stringify(updatedNotifications));
-  }, [notifications]);
-
-  /**
-   * Handles notification press, marking it as read and navigating if applicable.
-   */
-  const handleNotificationPress = useCallback(async (item: Notification) => {
-    const uniqueIdentifier = item.request?.identifier;
-    if (!item.read && uniqueIdentifier) {
-      await markAsRead(uniqueIdentifier);
-    }
-
-    // Robustly extract serviceRequestId for navigation
-    let serviceRequestId: string | null = null;
-    if (item.request?.content?.data?.id) {
-      serviceRequestId = item.request.content.data.id;
-    } else if (item.request?.content?.dataString) {
-      try {
-        const parsedData = JSON.parse(item.request.content.dataString);
-        serviceRequestId = parsedData.id || null;
-      } catch (e) {
-        console.error('Failed to parse notification dataString:', e);
+  const handleNotificationPress = useCallback(
+    (item: Notification) => {
+      if (item.source === 'serviceRequest') {
+        router.push(`/tasks/${item.id}`);
       }
-    }
-
-    if (serviceRequestId) {
-      router.push(`/tasks/${serviceRequestId}`);
-    }
-  }, [markAsRead, router]);
+    },
+    [router]
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: Notification }) => <NotificationItem item={item} onPress={handleNotificationPress} />,
     [handleNotificationPress]
   );
 
-  const keyExtractor = useCallback(
-    (item: Notification) => item.request?.identifier || item.id || `fallback-${item.timestamp}`,
-    []
-  );
+  const keyExtractor = useCallback((item: Notification) => item.id, []);
+  
+  // --- RENDER LOGIC ---
+
+  if (loading && !refreshing) {
+    return (
+      <ThemedView style={styles.centered}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -254,26 +271,29 @@ export default function NotificationsScreen() {
             />
           }
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={notifications.length === 0 ? styles.emptyListContainer : undefined}
+          contentContainerStyle={notifications.length === 0 ? styles.emptyListContainer : { paddingTop: 8 }}
         />
       </Animated.View>
     </ThemedView>
   );
 }
 
-// --- Styles ---
+// --- Styles (Unchanged) ---
 const getStyles = (theme: Theme, themeName: 'light' | 'dark') =>
   StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: theme.background,
     },
-    listContainer: {
+    centered: {
       flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: theme.background,
     },
     notificationWrapper: {
       marginHorizontal: 16,
-      marginVertical: 4,
+      marginVertical: 6,
     },
     notificationItem: {
       backgroundColor: theme.card,
@@ -286,12 +306,6 @@ const getStyles = (theme: Theme, themeName: 'light' | 'dark') =>
       shadowOpacity: themeName === 'light' ? 0.08 : 0.2,
       shadowRadius: 4,
       elevation: 3,
-      borderLeftWidth: 4,
-      borderLeftColor: 'transparent',
-    },
-    unreadNotification: {
-      borderLeftColor: theme.primary,
-      backgroundColor: theme.blueTint,
     },
     notificationContent: {
       flexDirection: 'row',
@@ -300,39 +314,21 @@ const getStyles = (theme: Theme, themeName: 'light' | 'dark') =>
     iconContainer: {
       marginRight: 16,
       marginTop: 2,
-      position: 'relative',
-    },
-    unreadDot: {
-      position: 'absolute',
-      top: -2,
-      right: -2,
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-      backgroundColor: theme.destructive,
-      borderWidth: 1,
-      borderColor: theme.card,
     },
     textContent: {
       flex: 1,
     },
     notificationTitle: {
       fontSize: 16,
-      fontWeight: '600',
+      fontWeight: 'bold',
       color: theme.text,
       marginBottom: 4,
-    },
-    unreadTitle: {
-      fontWeight: 'bold',
     },
     notificationBody: {
       fontSize: 14,
       color: theme.textSecondary,
       lineHeight: 20,
       marginBottom: 8,
-    },
-    unreadBody: {
-      color: theme.text,
     },
     timestamp: {
       fontSize: 12,

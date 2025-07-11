@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { Alert } from 'react-native';
 
+import { usePermissions } from '@/context/PermissionsContext';
 import { db, rtdb } from '../lib/firebase';
 import { Comment, ServiceRequest, User } from '../lib/types';
 
@@ -29,8 +30,9 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
         const { locations } = data as { locations: Location.LocationObject[] };
         const auth = getAuth();
         const user = auth.currentUser;
+        const {userdoc} = usePermissions()
 
-        if (user && locations.length > 0) {
+        if (user && locations.length > 0 && userdoc) {
             const location = locations[0];
             const { latitude, longitude, speed, heading, accuracy } = location.coords;
             const locationData = {
@@ -43,9 +45,9 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
             };
             try {
                 // Update the activeTechnicians branch in RTDB for live tracking
-                const technicianRef = rtdbRef(rtdb, `activeTechnicians/${user.uid}/location`);
+                const technicianRef = rtdbRef(rtdb, `activeTechnicians/${userdoc.id}/location`);
                 await set(technicianRef, locationData);
-                console.log(`RTDB Location updated for user: ${user.uid}`);
+                console.log(`RTDB Location updated for user: ${userdoc.id}`);
             } catch (e) {
                 console.error("Failed to write location to RTDB from background task:", e);
             }
@@ -54,10 +56,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
 });
 
 
-/**
- * Accepts a task, updates Firestore, adds it to the active list in RTDB,
- * and starts background location tracking.
- */
+
 export const handleAcceptTask = async (
     id: string,
     userdoc: User,
@@ -119,7 +118,7 @@ export const handleAcceptTask = async (
         });
 
         // Add task to Realtime Database for live tracking
-        const technicianTaskRef = rtdbRef(rtdb, `activeTechnicians/${userdoc.uid}/activeTasks/${id}`);
+        const technicianTaskRef = rtdbRef(rtdb, `activeTechnicians/${userdoc.id}/activeTasks/${id}`);
         await set(technicianTaskRef, {
             title: taskTitle,
             acceptedAt: Date.now(),
@@ -165,7 +164,7 @@ export const handleRejectTask = async (
     setActionLoading('reject');
     try {
         // First, check if this task was active for the user and clean it up from RTDB
-        await cleanupTaskFromRtdb(userdoc.uid, id);
+        await cleanupTaskFromRtdb(userdoc.id, id);
 
         // Then, update Firestore to reflect the rejection
         await runTransaction(db, async (transaction) => {
@@ -267,7 +266,7 @@ export const handleMarkAsDone = async (
     setActionLoading('markAsDone');
     try {
         // Step 1: Clean up the task from Realtime Database. This also stops tracking if it's the last task.
-        await cleanupTaskFromRtdb(userdoc.uid, id);
+        await cleanupTaskFromRtdb(userdoc.id, id);
 
         // Step 2: Run Firestore transaction to update the task state.
         await runTransaction(db, async (transaction) => {
