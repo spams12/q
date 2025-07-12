@@ -2,6 +2,7 @@
   "expo": {
     "name": "QTM",
     "slug": "QTM",
+    "scheme": "qtm", 
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/splashs.png",
@@ -95,7 +96,9 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {},
+      "router": {
+        "origin": false 
+      },
       "eas": {
         "projectId": "5a17568e-79f0-42cb-b1ea-f82a75841aa8"
       }
