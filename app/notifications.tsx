@@ -10,7 +10,7 @@ import {
   getDocs,
   orderBy,
   query,
-  
+
   where
 } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -194,15 +194,12 @@ export default function NotificationsScreen() {
         };
       });
 
-      // --- MODIFIED ---
-      // 4. Map Service Requests with more detail from the schema
       const serviceRequestNotifications: Notification[] = serviceRequestsSnapshot.docs.map(doc => {
         const data = doc.data();
         const priority = data.priority || 'متوسط';
-        const requestType = data.type || 'غير محدد'; // --- ADDED: Get request type
-        const creator = data.creatorName || 'النظام'; // --- ADDED: Get creator name
+        const requestType = data.type || 'غير محدد'; 
+        const creator = data.creatorName || 'النظام'; 
 
-        // --- MODIFIED: Create a more descriptive body
         const body = `النوع: ${requestType}. أنشأها: ${creator}. الأولوية: ${priority}.`;
         let timestamp;
         if (data.createdAt && typeof data.createdAt.toDate === 'function') {

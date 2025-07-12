@@ -2,7 +2,7 @@
   "expo": {
     "name": "QTM",
     "slug": "QTM",
-    "scheme": "qtm", 
+    "scheme": "qtm",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/splashs.png",
@@ -18,7 +18,7 @@
         "policy": "appVersion"
       },
       "bundleIdentifier": "com.tmody.QTM",
-      "buildNumber": "8",
+      "buildNumber": "9",
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "splash": {
@@ -97,7 +97,7 @@
     },
     "extra": {
       "router": {
-        "origin": false 
+        "origin": false
       },
       "eas": {
         "projectId": "5a17568e-79f0-42cb-b1ea-f82a75841aa8"
