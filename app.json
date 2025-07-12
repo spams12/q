@@ -5,7 +5,6 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/splashs.png",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -18,7 +17,7 @@
         "policy": "appVersion"
       },
       "bundleIdentifier": "com.tmody.QTM",
-      "buildNumber": "2",
+      "buildNumber": "6",
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "splash": {
@@ -78,8 +77,14 @@
         }
       ],
       "expo-web-browser",
+      "@react-native-firebase/app",
       [
-        "@react-native-firebase/app"
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
       ]
     ],
     "experiments": {

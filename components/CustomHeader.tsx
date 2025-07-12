@@ -48,7 +48,7 @@ const CustomHeader = (props: CustomHeaderProps) => {
 
 const styles = StyleSheet.create({
     container: {
-        height: 70,
+        height: 100,
         paddingHorizontal: 15,
         flexDirection: 'row',
         justifyContent: 'space-between',

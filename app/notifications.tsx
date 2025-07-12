@@ -171,11 +171,22 @@ export default function NotificationsScreen() {
       // 3. Map Announcements
       const announcementNotifications: Notification[] = announcementsSnapshot.docs.map(doc => {
         const data = doc.data();
+        let timestamp;
+        if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+          timestamp = data.createdAt.toDate().toISOString();
+        } else {
+          const d = new Date(data.createdAt);
+          if (isNaN(d.getTime())) {
+            timestamp = new Date().toISOString();
+          } else {
+            timestamp = d.toISOString();
+          }
+        }
         return {
           id: doc.id,
           title: data.head || 'إعلان جديد',
           body: data.body || 'تفاصيل الإعلان غير متوفرة.',
-          timestamp: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          timestamp: timestamp,
           type: 'announcement',
           source: 'announcement',
         };
@@ -191,12 +202,22 @@ export default function NotificationsScreen() {
 
         // --- MODIFIED: Create a more descriptive body
         const body = `النوع: ${requestType}. أنشأها: ${creator}. الأولوية: ${priority}.`;
-        
+        let timestamp;
+        if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+          timestamp = data.createdAt.toDate().toISOString();
+        } else {
+          const d = new Date(data.createdAt);
+          if (isNaN(d.getTime())) {
+            timestamp = new Date().toISOString();
+          } else {
+            timestamp = d.toISOString();
+          }
+        }
         return {
           id: doc.id,
           title: `مهمة جديدة: ${data.title}`,
           body: body,
-          timestamp: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          timestamp: timestamp,
           type: priority === 'عاجل' || priority === 'مرتفع' ? 'warning' : 'success',
           source: 'serviceRequest',
         };

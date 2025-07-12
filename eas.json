@@ -4,13 +4,13 @@
       "distribution": "internal",
       "developmentClient": true,
       "android": {
-        "buildType": "apk",
+        "buildType": "apk"
       },
       "ios": {
-        "simulator": true,
+        "simulator": false,
         "image": "latest"
       },
-      channel: "development"
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
@@ -25,7 +25,7 @@
         "image": "latest",
         "autoIncrement": true
       },
-      channel: "preview"
+      "channel": "preview"
     },
     "production": {
       "android": {
@@ -34,13 +34,12 @@
       },
       "ios": {
         "simulator": false,
-        "image": "latest",
         "autoIncrement": true
       },
-      channel: "production"
+      "channel": "production"
     }
   },
-  cli: {
-    appVersionSource: "local"
+  "cli": {
+    "appVersionSource": "local"
   }
 }
