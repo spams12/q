@@ -179,10 +179,7 @@ interface TicketItemProps {
 }
 
 const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserDocId, router, styles, theme }) => {
-  const userResponse = ticket.userResponses?.find((r) => r.userId === currentUserDocId);
-  const hasAccepted = userResponse?.response === "accepted";
-  const hasRejected = userResponse?.response === "rejected";
-  const isCompleted = ticket.status === "مكتمل" || ticket.status === "مغلق";
+  
     
 
   const itemAnim = useRef(new Animated.Value(0)).current;
@@ -193,7 +190,7 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
       duration: 300,
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [itemAnim]);
 
   const getStatusBadgeStyle = (status: string) => {
     const statusStyles: { [key: string]: object } = {
@@ -558,7 +555,7 @@ function TechnicianDashboardScreen() {
         console.error("Error fetching tasks:", error);
         showDialog({status :"error" ,message:"فشل في جلب البيانات"})
     }
-  }, []);
+  }, [showDialog]);
 
   const loadData = useCallback(async () => {
     if (user) {

@@ -118,6 +118,7 @@ const FiberOpticLine = memo(
         clearTimeout(timer);
         clearInterval(interval);
       };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Dependency array is empty to ensure this only runs once
 
     const animatedStyle = useAnimatedStyle(() => ({
@@ -133,6 +134,7 @@ const FiberOpticLine = memo(
     return <Animated.View style={[lineStyle, animatedStyle]} />;
   }
 );
+FiberOpticLine.displayName = 'FiberOpticLine';
 
 const NetworkNode = memo(
   ({ size, left, top }: { size: number; left: DimensionValue; top: DimensionValue }) => {
@@ -143,6 +145,7 @@ const NetworkNode = memo(
       const duration = 2000 + Math.random() * 1000;
       scale.value = withRepeat(withTiming(1.3, { duration, easing: Easing.bezier(0.25, 0.1, 0.25, 1) }), -1, true);
       opacity.value = withRepeat(withTiming(1, { duration: duration * 0.75, easing: Easing.bezier(0.25, 0.1, 0.25, 1) }), -1, true);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Dependency array is empty to ensure this only runs once
 
     const animatedStyle = useAnimatedStyle(() => ({
@@ -157,6 +160,7 @@ const NetworkNode = memo(
     );
   }
 );
+NetworkNode.displayName = 'NetworkNode';
 
 
 // --- MAIN LOGIN SCREEN COMPONENT ---

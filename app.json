@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "qmc",
-    "slug": "qmc",
+    "name": "QTM",
+    "slug": "QTM",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/splashs.png",
@@ -16,7 +16,7 @@
       "runtimeVersion": {
         "policy": "appVersion"
       },
-      "bundleIdentifier": "com.tmody.qmc",
+      "bundleIdentifier": "com.tmody.QTM",
       "buildNumber": "7",
       "googleServicesFile": "./GoogleService-Info.plist"
     },
@@ -30,7 +30,7 @@
       },
       "edgeToEdgeEnabled": true,
       "googleServicesFile": "./google-services.json",
-      "package": "com.tmody.qmc",
+      "package": "com.tmody.QTM",
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
@@ -78,22 +78,9 @@
         }
       ],
       "expo-web-browser",
-      "react-native-maps",
       "expo-task-manager",
       "expo-document-picker",
-      "expo-sharing",
-      "expo-print",
-      "expo-clipboard",
-      "expo-haptics",
-      "expo-blur",
-      "expo-checkbox",
-      "expo-constants",
-      "expo-status-bar",
       "expo-system-ui",
-      "expo-device",
-      "expo-image",
-      "expo-linear-gradient",
-      "react-native-reanimated",
       "@react-native-firebase/app",
       [
         "expo-build-properties",

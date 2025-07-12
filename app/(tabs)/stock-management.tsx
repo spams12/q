@@ -81,7 +81,7 @@ const StockManagementScreen: React.FC = () => {
       unsubscribeUser();
       unsubscribeTransactions();
     };
-  }, [ userUid]);
+  }, [ userUid, showDialog]);
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);

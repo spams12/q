@@ -148,7 +148,7 @@ const SettingsPage = () => {
 
     return () => unsubscribe();
     // OPTIMIZATION: `setUserdoc` from context should be stable, so it can be removed from dependencies.
-  }, [realuserUid]);
+  }, [realuserUid, setUserdoc]);
 
   // --- Invoice Data Listener ---
   useEffect(() => {
@@ -174,7 +174,7 @@ const SettingsPage = () => {
     });
 
     return () => unsubscribe();
-  }, [ realuserUid, latestClearTimeString]);
+  }, [ realuserUid, latestClearTimeString, showDialog]);
   
   // OPTIMIZATION: Wrap all handlers in `useCallback` to prevent them from being
   // recreated on every render. This ensures stable props for child components.
@@ -223,7 +223,7 @@ const SettingsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [userdoc?.id]); // Dependency on what the function needs
+  }, [userdoc?.id, showDialog]); // Dependency on what the function needs
 
   const handleLogout = useCallback(() => {
     Alert.alert(
@@ -253,7 +253,7 @@ const SettingsPage = () => {
       setLoading(false);
       setPhoneModalVisible(false);
     }
-  }, [userdoc?.id]); // Dependency on userdoc.id
+  }, [userdoc?.id, showDialog]); // Dependency on userdoc.id
 
   const openPhoneModal = useCallback(() => setPhoneModalVisible(true), []);
   const closePhoneModal = useCallback(() => setPhoneModalVisible(false), []);

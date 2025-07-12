@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons"; // Using Feather icons
-import Checkbox from "expo-checkbox";
+import { Checkbox } from "expo-checkbox";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -1440,13 +1440,7 @@ function InvoiceForm({
       unitPrice: price,
       totalPrice: price * (prev.quantity || 1),
     }));
-  }, [
-    currentItem.connectorType,
-    currentItem.maintenanceType,
-    currentItem.type,
-    currentItem.quantity,
-    invoiceSettings,
-  ]);
+  }, [currentItem, invoiceSettings]);
 
   const handleSaveInvoice = async () => {
     if (!db) {

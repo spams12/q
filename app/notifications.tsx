@@ -10,7 +10,7 @@ import {
   getDocs,
   orderBy,
   query,
-  Timestamp,
+  
   where
 } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -110,6 +110,7 @@ const NotificationItem = React.memo(({ item, onPress }: NotificationItemProps) =
     </View>
   );
 });
+NotificationItem.displayName = 'NotificationItem';
 
 const EmptyState = React.memo(() => {
   const { theme, themeName } = useTheme();
@@ -123,6 +124,7 @@ const EmptyState = React.memo(() => {
     </View>
   );
 });
+EmptyState.displayName = 'EmptyState';
 
 // --- Main Screen Component ---
 
@@ -233,7 +235,7 @@ export default function NotificationsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [userdoc.id]);
+  }, [userdoc]);
 
   useEffect(() => {
     fetchNotifications();
