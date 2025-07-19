@@ -41,8 +41,8 @@ Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
     shouldSetBadge: true,
-    shouldShowBanner : true,
-    shouldShowList :true
+    shouldShowBanner: true,
+    shouldShowList: true
   }),
 });
 
@@ -140,7 +140,7 @@ const NotificationPermissionModal = ({
       animationType="fade"
       transparent={true}
       visible={visible}
-      onRequestClose={onMaybeLater} 
+      onRequestClose={onMaybeLater}
       statusBarTranslucent={Platform.OS === 'android'}
 
     >
@@ -155,7 +155,7 @@ const NotificationPermissionModal = ({
 
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.button} onPress={onGoToSettings}>
-              <Text style={[styles.buttonText, styles.primaryButtonText]}>
+              <Text style={[styles.buttonText]}>
                 الانتقال إلى الإعدادات
               </Text>
             </TouchableOpacity>
@@ -214,7 +214,7 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseUser | nul
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="tasks/[id]" options={{ headerShown: false }}/>
+        <Stack.Screen name="tasks/[id]" options={{ headerShown: false }} />
         <Stack.Screen
           name="create-request"
           options={{
@@ -224,15 +224,17 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseUser | nul
           }}
         />
         <Stack.Screen name="notifications" options={{
-            title: 'الاشعارات',
-            headerTitleAlign: 'center',
-            headerBackTitle: "رجوع",
-          }}/>
+          title: 'الاشعارات',
+          headerTitleAlign: 'center',
+          headerBackTitle: "رجوع",
+        }} />
         <Stack.Screen name="+not-found" />
-        <Stack.Screen name="family" options={{ headerBackTitle: "رجوع", title:"العائلة" }}/>
-        <Stack.Screen name="about" options={{ headerBackTitle: "رجوع",}}/>
-        <Stack.Screen name="invoices" options={{headerShown:false}}/>
-        <Stack.Screen name="complete-profile" options={{ headerBackTitle: "رجوع",headerTitle:"الملف الشخصي"}}/>
+        <Stack.Screen name="family" options={{ headerBackTitle: "رجوع", title: "العائلة" }} />
+        <Stack.Screen name="about" options={{ headerBackTitle: "رجوع", }} />
+        <Stack.Screen name="invoices" options={{
+          title: "الفواتير", headerBackTitle: "رجوع", headerTitleAlign: 'center',
+        }} />
+        <Stack.Screen name="complete-profile" options={{ headerShown: false }} />
       </Stack>
     </View>
   );
@@ -253,7 +255,7 @@ interface StoredNotification {
   request?: {
     identifier: string; // The unique ID from the push notification system
     content: {
-      data?: { id?: string; type?: string; [key: string]: any };
+      data?: { id?: string; type?: string;[key: string]: any };
       dataString?: string; // Fallback: payload as a stringified JSON
       title?: string;
       body?: string;
@@ -291,7 +293,7 @@ export default function RootLayout() {
       await registerPushToken(userDocId);
     }
   };
-  
+
   useEffect(() => {
     if (error) throw error;
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -303,7 +305,7 @@ export default function RootLayout() {
     });
     return () => unsubscribe();
   }, [error]);
-  
+
   useEffect(() => {
     if (!user) return;
 
@@ -326,7 +328,7 @@ export default function RootLayout() {
           return unsubscribeSnapshot;
         } else {
           console.warn("Firestore document not found for user UID:", user.uid);
-          setProfile(null); 
+          setProfile(null);
         }
       } catch (e) {
         console.error("Error finding user document or setting up listeners:", e);
@@ -357,7 +359,7 @@ export default function RootLayout() {
     return () => {
       subscription.remove();
     };
-  }, [profile]); 
+  }, [profile]);
 
   useEffect(() => {
     if (loaded && authLoaded) {
@@ -372,22 +374,22 @@ export default function RootLayout() {
 
       // Create a notification object matching the format used by NotificationsScreen
       const newNotification: StoredNotification = {
-          title: notification.request.content.title || 'إشعار جديد',
-          body: notification.request.content.body || 'لا يوجد محتوى',
-          timestamp: new Date(notification.date).toISOString(),
-          read: false,
-          type: (notification.request.content.data?.type as any) || 'info',
-          request: {
-              identifier: notification.request.identifier,
-              content: {
-                  title: notification.request.content.title || undefined,
-                  body: notification.request.content.body || undefined,
-                  data: notification.request.content.data || undefined,
-                  dataString: notification.request.content.data 
-                    ? JSON.stringify(notification.request.content.data) 
-                    : undefined,
-              },
+        title: notification.request.content.title || 'إشعار جديد',
+        body: notification.request.content.body || 'لا يوجد محتوى',
+        timestamp: new Date(notification.date).toISOString(),
+        read: false,
+        type: (notification.request.content.data?.type as any) || 'info',
+        request: {
+          identifier: notification.request.identifier,
+          content: {
+            title: notification.request.content.title || undefined,
+            body: notification.request.content.body || undefined,
+            data: notification.request.content.data || undefined,
+            dataString: notification.request.content.data
+              ? JSON.stringify(notification.request.content.data)
+              : undefined,
           },
+        },
       };
 
       try {
@@ -440,14 +442,14 @@ export default function RootLayout() {
               <GlobalStatusDialog />
               <NotificationPermissionModal
                 visible={isPermissionModalVisible}
-              onGoToSettings={() => {
-                setIsPermissionModalVisible(false);
-                Linking.openSettings();
-              }}
-              onMaybeLater={() => {
-                setIsPermissionModalVisible(false);
-              }}
-            />
+                onGoToSettings={() => {
+                  setIsPermissionModalVisible(false);
+                  Linking.openSettings();
+                }}
+                onMaybeLater={() => {
+                  setIsPermissionModalVisible(false);
+                }}
+              />
             </DialogProvider>
           </ThemeProvider>
         </KeyboardProvider>

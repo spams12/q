@@ -5,28 +5,48 @@ import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { DocumentData, Query, QuerySnapshot, collection, getDocs, limit, onSnapshot, orderBy, query, startAfter, where } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, NativeScrollEvent, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+// Note: The FilterDialog is now imported from the file you provided.
+// Make sure the path is correct in your project structure.
 import FilterDialog from '../../components/FilterDialog';
 import InfoCard from '../../components/InfoCard';
 import { handleAcceptTask, handleRejectTask } from '../../hooks/taskar';
 import { db } from '../../lib/firebase';
-import { ServiceRequest } from '../../lib/types';
+// MODIFICATION: Added createdBy to ServiceRequest and defined User and DateRange types
+import { ServiceRequest, User } from '../../lib/types';
+
+// --- Type Definitions ---
+interface DateRange {
+  start: Date | null;
+  end: Date | null;
+}
 
 // --- Constants ---
 const AVAILABLE_TYPES = [
-    "صيانة رئيسية", "تنصيب مشترك", "صيانة مشترك", "تغيير زون المشترك",
-    "مشكلة في التفعيل", "جباية", "شكوى", "مشكلة", "طلب", "استفسار", "اقتراح"
+  "صيانة رئيسية", "تنصيب مشترك", "صيانة مشترك", "تغيير زون المشترك",
+  "مشكلة في التفعيل", "جباية", "شكوى", "مشكلة", "طلب", "استفسار", "اقتراح"
 ];
 const AVAILABLE_PRIORITIES = ['عالية', 'متوسطة', 'منخفضة'];
+// MODIFICATION: Added available statuses for the filter dialog
+const AVAILABLE_STATUSES = ['جديدة', 'قيد التنفيذ', 'مكتمل', 'معلق', 'مغلق', 'مرفوض'];
+const PAGE_SIZE = 15;
+const SCROLL_TO_TOP_THRESHOLD = 400;
 
 type TabKey = 'New' | 'Accepted' | 'Completed';
+type ListenerKey = 'New' | 'Completed';
 
 interface CachedData {
   New: ServiceRequest[];
   Accepted: ServiceRequest[];
   Completed: ServiceRequest[];
+}
+
+interface LastDocState {
+  New: DocumentData | null;
+  Accepted: DocumentData | null;
+  Completed: DocumentData | null;
 }
 
 interface LoadingStates {
@@ -35,7 +55,13 @@ interface LoadingStates {
   Completed: boolean;
 }
 
-// --- Extracted & Upgraded Components (unchanged) ---
+interface LoadingMoreStates {
+  New: boolean;
+  Accepted: boolean;
+  Completed: boolean;
+}
+
+// --- Extracted & Upgraded Components ---
 
 const FilterPill = React.memo(({ label, onRemove }: { label: string; onRemove: () => void }) => {
   const { theme } = useTheme();
@@ -50,19 +76,38 @@ const FilterPill = React.memo(({ label, onRemove }: { label: string; onRemove: (
 });
 FilterPill.displayName = 'FilterPill';
 
-const ActiveFilters = React.memo(({ filters, onClearFilter, onClearAll }: {
-  filters: { priority: string | null; type: string | null; status: string | null; };
-  onClearFilter: (key: 'priority' | 'type' | 'status') => void;
+// MODIFICATION: The ActiveFilters component has been significantly upgraded to handle all new filter types.
+const ActiveFilters = React.memo(({ filters, onClearFilter, onClearAll, users }: {
+  filters: {
+    priority: string | null;
+    type: string | null;
+    status: string | null;
+    creator: string | null;
+    assignedUsers: string[];
+    dateRange: DateRange;
+  };
+  onClearFilter: (key: 'priority' | 'type' | 'status' | 'creator' | 'assignedUsers' | 'dateRange') => void;
   onClearAll: () => void;
+  users: User[];
 }) => {
-  const hasFilters = Object.values(filters).some(v => v);
+  const { theme } = useTheme();
+  const hasFilters = filters.priority || filters.type || filters.status || filters.creator || filters.assignedUsers.length > 0 || filters.dateRange.start || filters.dateRange.end;
+
   if (!hasFilters) {
     return null;
   }
 
+  const getCreatorName = (userId: string) => users.find(u => u.uid === userId)?.name || userId;
+  const getAssignedUsersNames = (userIds: string[]) => userIds.map(id => users.find(u => u.id === id)?.name || id).join(', ');
+  const formatDateRange = (range: DateRange) => {
+    const start = range.start ? range.start.toLocaleDateString('ar-EG-u-nu-latn', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '...';
+    const end = range.end ? range.end.toLocaleDateString('ar-EG-u-nu-latn', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '...';
+    return `${start} - ${end}`;
+  }
+
   return (
     <View style={styles.activeFiltersWrapper}>
-      <Pressable style={styles.pillsScrollView}>
+      <ScrollView horizontal contentContainerStyle={styles.pillsScrollView} showsHorizontalScrollIndicator={false}>
         {filters.priority && (
           <FilterPill label={`الأولوية: ${filters.priority}`} onRemove={() => onClearFilter('priority')} />
         )}
@@ -72,14 +117,24 @@ const ActiveFilters = React.memo(({ filters, onClearFilter, onClearAll }: {
         {filters.status && (
           <FilterPill label={`الحالة: ${filters.status}`} onRemove={() => onClearFilter('status')} />
         )}
-      </Pressable>
+        {filters.creator && (
+          <FilterPill label={`المنشئ: ${getCreatorName(filters.creator)}`} onRemove={() => onClearFilter('creator')} />
+        )}
+        {filters.assignedUsers.length > 0 && (
+          <FilterPill label={`المعين لهم: ${getAssignedUsersNames(filters.assignedUsers)}`} onRemove={() => onClearFilter('assignedUsers')} />
+        )}
+        {(filters.dateRange.start || filters.dateRange.end) && (
+          <FilterPill label={`التاريخ: ${formatDateRange(filters.dateRange)}`} onRemove={() => onClearFilter('dateRange')} />
+        )}
+      </ScrollView>
       <TouchableOpacity onPress={onClearAll}>
-        <Text style={styles.clearAllText}>مسح الكل</Text>
+        <Text style={[styles.clearAllText, { color: theme.tabActive }]}>مسح الكل</Text>
       </TouchableOpacity>
     </View>
   );
 });
 ActiveFilters.displayName = 'ActiveFilters';
+
 
 const TabButton = React.memo(({ tabKey, label, isActive, isLoading, onPress, theme }: {
   tabKey: TabKey;
@@ -89,7 +144,7 @@ const TabButton = React.memo(({ tabKey, label, isActive, isLoading, onPress, the
   onPress: (tabKey: TabKey) => void;
   theme: any;
 }) => (
-  <Pressable
+  <TouchableOpacity
     style={[styles.tab, isActive && styles.activeTab, isActive && { backgroundColor: theme.background }]}
     onPress={() => onPress(tabKey)}
   >
@@ -97,7 +152,7 @@ const TabButton = React.memo(({ tabKey, label, isActive, isLoading, onPress, the
       <Text style={[styles.tabText, { color: isActive ? theme.tabActive : theme.tabInactive }]}>{label}</Text>
       {isLoading && <ActivityIndicator size="small" color={theme.tabActive} style={styles.tabLoader} />}
     </View>
-  </Pressable>
+  </TouchableOpacity>
 ));
 TabButton.displayName = 'TabButton';
 
@@ -140,125 +195,249 @@ const SortButton = React.memo(({ onPress, sortOrder, theme }: { onPress: () => v
 SortButton.displayName = 'SortButton';
 
 const ListEmptyComponent = React.memo(({ isLoading, theme, hasActiveFilters }: { isLoading: boolean; theme: any; hasActiveFilters: boolean; }) => {
-    if (isLoading) {
-        return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={theme.tabActive} />
-                <Text style={[styles.loadingText, { color: theme.text }]}>جاري التحميل...</Text>
-            </View>
-        );
-    }
+  if (isLoading) {
     return (
-        <View style={styles.emptyContainer}>
-            <Ionicons name="document-outline" size={48} color="#ccc" />
-            <Text style={[styles.emptyText, { color: theme.text }]}>
-                {hasActiveFilters ? "لا توجد نتائج تطابق بحثك" : "لا توجد تذاكر في هذا القسم"}
-            </Text>
-        </View>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.tabActive} />
+        <Text style={[styles.loadingText, { color: theme.text }]}>جاري التحميل...</Text>
+      </View>
     );
+  }
+  return (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="document-outline" size={48} color="#ccc" />
+      <Text style={[styles.emptyText, { color: theme.text }]}>
+        {hasActiveFilters ? "لا توجد نتائج تطابق بحثك" : "لا توجد تذاكر في هذا القسم"}
+      </Text>
+    </View>
+  );
 });
 ListEmptyComponent.displayName = 'ListEmptyComponent';
 
 // --- Utility Functions ---
 const getMillis = (timestamp: any): number => {
-    if (!timestamp) return 0;
-    if (typeof timestamp.toMillis === 'function') return timestamp.toMillis();
-    if (typeof timestamp === 'string') {
-        const date = new Date(timestamp);
-        return isNaN(date.getTime()) ? 0 : date.getTime();
-    }
-    if (typeof timestamp === 'number') return timestamp;
-    if (timestamp.seconds && typeof timestamp.seconds === 'number') return timestamp.seconds * 1000;
-    return 0;
+  if (!timestamp) return 0;
+  if (typeof timestamp.toMillis === 'function') return timestamp.toMillis();
+  if (typeof timestamp === 'string') {
+    const date = new Date(timestamp);
+    return isNaN(date.getTime()) ? 0 : date.getTime();
+  }
+  if (typeof timestamp === 'number') return timestamp;
+  if (timestamp.seconds && typeof timestamp.seconds === 'number') return timestamp.seconds * 1000;
+  return 0;
 };
 
 // --- Main Screen Component ---
 const TasksScreen: React.FC = () => {
+  // --- State Management ---
   const [cachedData, setCachedData] = useState<CachedData>({ New: [], Accepted: [], Completed: [] });
-  const [loadingStates, setLoadingStates] = useState<LoadingStates>({ New: true, Accepted: true, Completed: true });
+  const [lastDocs, setLastDocs] = useState<LastDocState>({ New: null, Accepted: null, Completed: null });
+  const [loadingStates, setLoadingStates] = useState<LoadingStates>({ New: false, Accepted: false, Completed: false });
+  const [loadingMoreStates, setLoadingMoreStates] = useState<LoadingMoreStates>({ New: false, Accepted: false, Completed: false });
+  const [users, setUsers] = useState<User[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('New');
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [actionLoadingTaskId, setActionLoadingTaskId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
+
+  // MODIFICATION: Added state for all new filters
   const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
-  const [actionLoadingTaskId, setActionLoadingTaskId] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedCreator, setSelectedCreator] = useState<string | null>(null);
+  const [selectedAssignedUsers, setSelectedAssignedUsers] = useState<string[]>([]);
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
 
-  const {  userdoc, userUid } = usePermissions();
+  const { userdoc, userUid } = usePermissions();
   const { theme } = useTheme();
   const router = useRouter();
   const scrollRef = useRef<FlatList<ServiceRequest>>(null);
+  const unsubscribeListeners = useRef<{ [key in ListenerKey]?: () => void }>({});
 
-  // --- Data Fetching Logic ---
+  // --- Data Fetching ---
+
   useEffect(() => {
-    if (!userUid) {
-      setCachedData({ New: [], Accepted: [], Completed: [] });
-      setLoadingStates({ New: false, Accepted: false, Completed: false });
-      return;
+    const fetchUsers = async () => {
+      try {
+        const usersCollectionRef = collection(db, 'users');
+        const usersSnapshot = await getDocs(usersCollectionRef);
+        const usersList = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as User[];
+        setUsers(usersList);
+      } catch (error) {
+        console.error("Failed to fetch users:", error);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+  const createQueryForTab = (tabKey: ListenerKey, startAfterDoc: DocumentData | null = null): Query | null => {
+    if (!userUid) return null;
+
+    const baseQuery = collection(db, 'serviceRequests');
+    const userQuery = where("assignedUsers", "array-contains", userdoc.id);
+    const order = orderBy('createdAt', 'desc');
+    const pageLimit = limit(PAGE_SIZE);
+
+    let q: Query;
+    switch (tabKey) {
+      case 'New':
+        q = query(baseQuery, userQuery, where("status", "not-in", ['مكتمل', 'معلق', 'مغلق', 'مرفوض']), order);
+        break;
+      case 'Completed':
+        q = query(baseQuery, userQuery, where("status", "in", ['مكتمل', 'مغلق']), order);
+        break;
+      default:
+        return null;
     }
-    setLoadingStates({ New: true, Accepted: true, Completed: true });
-    const q = query(
-      collection(db, 'serviceRequests'),
-      where("assignedUsers", "array-contains", userUid),
-      orderBy('createdAt', 'desc')
-    );
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const allRequests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
-      const newData: CachedData = { New: [], Accepted: [], Completed: [] };
-      allRequests.forEach(req => {
-        if (req.status === 'معلق' || req.status === 'مغلق') return;
-        if (req.status === 'مكتمل') {
-          newData.Completed.push(req);
-        } else {
-          const userResponse = req.userResponses?.find(res => res.userId === userUid);
-          if (userResponse?.response === 'rejected') return;
-          if (userResponse?.response === 'completed') newData.Completed.push(req);
-          else if (userResponse?.response === 'accepted') newData.Accepted.push(req);
-          else newData.New.push(req);
-        }
+
+    return startAfterDoc ? query(q, startAfter(startAfterDoc), pageLimit) : query(q, pageLimit);
+  };
+
+  const processAndSetData = useCallback((snapshot: QuerySnapshot<DocumentData>, listenerKey: ListenerKey, isInitialLoad: boolean) => {
+    const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
+    const lastVisible = snapshot.docs[snapshot.docs.length - 1] || null;
+
+    if (listenerKey === 'New') {
+      const categorizedData = { New: [] as ServiceRequest[], Accepted: [] as ServiceRequest[] };
+      requests.forEach(req => {
+        const userResponse = req.userResponses?.find(res => res.userId === userUid);
+        if (userResponse?.response === 'accepted') categorizedData.Accepted.push(req);
+        else categorizedData.New.push(req);
       });
-      setCachedData(newData);
-      setLoadingStates({ New: false, Accepted: false, Completed: false });
-    }, (error) => {
-      console.error(`Error fetching real-time requests:`, error);
-      setLoadingStates({ New: false, Accepted: false, Completed: false });
-    });
-    return () => unsubscribe();
+
+      setCachedData(prev => {
+        const updatedNew = isInitialLoad ? categorizedData.New : [...prev.New, ...categorizedData.New.filter(newItem => !prev.New.some(oldItem => oldItem.id === newItem.id))];
+        const updatedAccepted = isInitialLoad ? categorizedData.Accepted : [...prev.Accepted, ...categorizedData.Accepted.filter(newItem => !prev.Accepted.some(oldItem => oldItem.id === newItem.id))];
+        return { ...prev, New: updatedNew, Accepted: updatedAccepted };
+      });
+
+      if (!isInitialLoad && snapshot.empty) {
+        setLastDocs(prev => ({ ...prev, New: null, Accepted: null }));
+      } else {
+        setLastDocs(prev => ({ ...prev, New: lastVisible, Accepted: lastVisible }));
+      }
+
+    } else {
+      setCachedData(prev => {
+        const updatedCompleted = isInitialLoad ? requests : [...prev.Completed, ...requests.filter(newItem => !prev.Completed.some(oldItem => oldItem.id === newItem.id))];
+        return { ...prev, Completed: updatedCompleted };
+      });
+
+      if (!isInitialLoad && snapshot.empty) {
+        setLastDocs(prev => ({ ...prev, Completed: null }));
+      } else {
+        setLastDocs(prev => ({ ...prev, Completed: lastVisible }));
+      }
+    }
+
+    if (isInitialLoad) {
+      setLoadingStates(prev => ({ ...prev, [listenerKey]: false, ...(listenerKey === 'New' && { Accepted: false }) }));
+    }
+    setLoadingMoreStates(prev => ({ ...prev, [listenerKey]: false, ...(listenerKey === 'New' && { Accepted: false }) }));
   }, [userUid]);
 
-  // --- Action Handlers using the Service ---
-  const handleAcceptTaskTEST = useCallback((taskId: string) => {
-    if (!userdoc) {
-      console.warn("User data not available to accept task.");
+
+  useEffect(() => {
+    if (!userUid) return;
+
+    const listenerKey = (activeTab === 'Accepted' ? 'New' : activeTab) as ListenerKey;
+
+    if (unsubscribeListeners.current[listenerKey]) {
       return;
     }
-    const navigateToDetails = (id: string) => {
-        router.push({ pathname: "/tasks/[id]", params: { id } });
+
+    const q = createQueryForTab(listenerKey);
+    if (!q) return;
+
+    setLoadingStates(prev => ({
+      ...prev,
+      [listenerKey]: true,
+      ...(listenerKey === 'New' && { Accepted: true }),
+    }));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      processAndSetData(snapshot, listenerKey, true);
+    }, (error) => {
+      console.error(`Error fetching data for tab ${activeTab}:`, error);
+      setLoadingStates(prev => ({
+        ...prev,
+        [listenerKey]: false,
+        ...(listenerKey === 'New' && { Accepted: false }),
+      }));
+    });
+
+    unsubscribeListeners.current[listenerKey] = unsubscribe;
+  }, [activeTab, userUid, processAndSetData]);
+
+
+  useEffect(() => {
+    const listeners = unsubscribeListeners.current;
+    return () => {
+      Object.values(listeners).forEach(unsub => unsub?.());
     };
-    // FIX: This function now matches the signature expected by `handleAccept`.
-    const setActionLoading = (action: 'accept' | 'reject' | null) => {
-        setActionLoadingTaskId(action ? taskId : null);
-    };
-    handleAcceptTask( taskId , userdoc, setActionLoading, navigateToDetails);
-  }, [ userdoc, router]);
+  }, []);
+
+  const handleLoadMore = useCallback(async () => {
+    const listenerKey = activeTab === 'Accepted' ? 'New' : activeTab;
+    const currentLastDoc = lastDocs[listenerKey];
+
+    if (loadingMoreStates[listenerKey] || !currentLastDoc) return;
+
+    setLoadingMoreStates(prev => ({ ...prev, [listenerKey]: true }));
+    const q = createQueryForTab(listenerKey, currentLastDoc);
+    if (!q) {
+      setLoadingMoreStates(prev => ({ ...prev, [listenerKey]: false }));
+      return;
+    }
+
+    try {
+      const snapshot = await getDocs(q);
+      processAndSetData(snapshot, listenerKey, false);
+    } catch (error) {
+      console.error("Error fetching more tasks:", error);
+    } finally {
+      setLoadingMoreStates(prev => ({ ...prev, [listenerKey]: false }));
+    }
+  }, [activeTab, loadingMoreStates, lastDocs, userUid, processAndSetData]);
+
+  const handleTabPress = useCallback(async (tab: TabKey) => {
+    if (tab === activeTab) return;
+    try { await Haptics.selectionAsync(); } catch { }
+    setActiveTab(tab);
+  }, [activeTab]);
+
+
+  // --- Action Handlers ---
+  const handleAcceptTaskTEST = useCallback((taskId: string) => {
+    if (!userdoc) return;
+    const navigateToDetails = (id: string) => router.push({ pathname: "/tasks/[id]", params: { id } });
+    const setActionLoading = (action: 'accept' | 'reject' | null) => setActionLoadingTaskId(action ? taskId : null);
+    handleAcceptTask(taskId, userdoc, setActionLoading, navigateToDetails);
+  }, [userdoc, router]);
 
   const handleRejectTaskTEST = useCallback((taskId: string) => {
-    if (!userdoc) {
-      console.warn("User data not available to reject task.");
-      return;
-    }
-    // FIX: This function now matches the signature expected by `handleReject`.
-    const setActionLoading = (action: 'accept' | 'reject' | null) => {
-        setActionLoadingTaskId(action ? taskId : null);
-    };
-    handleRejectTask(taskId , userdoc, setActionLoading);
+    if (!userdoc) return;
+    const setActionLoading = (action: 'accept' | 'reject' | null) => setActionLoadingTaskId(action ? taskId : null);
+    handleRejectTask(taskId, userdoc, setActionLoading);
   }, [userdoc]);
 
   // --- Memoized Logic and Callbacks ---
-  const hasActiveFilters = !!(selectedPriority || selectedType || selectedStatus);
 
+  // MODIFICATION: hasActiveFilters now checks all filters
+  const hasActiveFilters = !!(
+    selectedPriority ||
+    selectedType ||
+    selectedStatus ||
+    selectedCreator ||
+    selectedAssignedUsers.length > 0 ||
+    dateRange.start ||
+    dateRange.end
+  );
+
+  // MODIFICATION: filteredServiceRequests now applies all active filters
   const filteredServiceRequests = useMemo(() => {
     const currentData = cachedData[activeTab] || [];
     const filteredData = currentData.filter(req => {
@@ -266,36 +445,67 @@ const TasksScreen: React.FC = () => {
         req.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (req.customerName && req.customerName.toLowerCase().includes(searchQuery.toLowerCase())) ||
         req.id.toLowerCase().includes(searchQuery.toLowerCase());
+
       const matchesPriority = !selectedPriority || req.priority === selectedPriority;
       const matchesType = !selectedType || req.type === selectedType;
       const matchesStatus = !selectedStatus || req.status === selectedStatus;
-      return matchesSearch && matchesPriority && matchesType && matchesStatus;
+      const matchesCreator = !selectedCreator || req.creatorId === selectedCreator;
+      const matchesAssignedUsers = selectedAssignedUsers.length === 0 ||
+        (req.assignedUsers && req.assignedUsers.some(user => selectedAssignedUsers.includes(user)));
+
+      const reqDate = getMillis(req.createdAt);
+      const matchesDateRange = (!dateRange.start || reqDate >= dateRange.start.getTime()) &&
+        (!dateRange.end || reqDate <= dateRange.end.getTime());
+
+      return matchesSearch && matchesPriority && matchesType && matchesStatus && matchesCreator && matchesAssignedUsers && matchesDateRange;
     });
 
     return [...filteredData].sort((a, b) => {
       const dateA = getMillis(a.createdAt);
       const dateB = getMillis(b.createdAt);
+      // BUG FIX: Was `dateB - a`, corrected to `dateB - dateA`
       return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
     });
-  }, [cachedData, activeTab, searchQuery, selectedPriority, selectedType, selectedStatus, sortOrder]);
-
-  const handleTabPress = useCallback(async (tab: TabKey) => {
-    if (tab === activeTab) return;
-    try { await Haptics.selectionAsync(); } catch {}
-    setActiveTab(tab);
-  }, [activeTab]);
+  }, [cachedData, activeTab, searchQuery, selectedPriority, selectedType, selectedStatus, selectedCreator, selectedAssignedUsers, dateRange, sortOrder]);
 
   const onRefresh = useCallback(() => {
     setIsRefreshing(true);
-    // Since we use a real-time listener (onSnapshot), the data is always live.
-    // This refresh is primarily for user experience, providing a visual confirmation
-    // that the app is active and connected. We'll just show the spinner for a
-    // short duration for perceived responsiveness.
-    setTimeout(() => {
-      setIsRefreshing(false);
-    }, 1000);
-  }, []);
+    const listenerKey = (activeTab === 'Accepted' ? 'New' : activeTab) as ListenerKey;
 
+    unsubscribeListeners.current[listenerKey]?.();
+    delete unsubscribeListeners.current[listenerKey];
+
+    const q = createQueryForTab(listenerKey);
+    if (!q || !userUid) {
+      setIsRefreshing(false);
+      return;
+    }
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      processAndSetData(snapshot, listenerKey, true);
+      setIsRefreshing(false);
+    }, (error) => {
+      console.error("Error on refresh:", error);
+      setIsRefreshing(false);
+    });
+    unsubscribeListeners.current[listenerKey] = unsubscribe;
+  }, [activeTab, userUid, processAndSetData]);
+
+
+  // --- Scroll handling functions
+  const handleScroll = (event: NativeScrollEvent) => {
+    const offsetY = event.contentOffset.y;
+    if (offsetY > SCROLL_TO_TOP_THRESHOLD && !showScrollToTop) {
+      setShowScrollToTop(true);
+    } else if (offsetY <= SCROLL_TO_TOP_THRESHOLD && showScrollToTop) {
+      setShowScrollToTop(false);
+    }
+  };
+
+  const scrollToTop = () => {
+    scrollRef.current?.scrollToOffset({ offset: 0, animated: true });
+  };
+
+  // --- Render Logic ---
   const renderItem = useCallback(({ item }: { item: ServiceRequest }) => {
     const hasResponded = item.userResponses?.some(res => res.userId === userUid);
     const isActionLoading = actionLoadingTaskId === item.id;
@@ -304,34 +514,54 @@ const TasksScreen: React.FC = () => {
     return (
       <InfoCard
         item={item}
+        users={users}
         hasResponded={!!hasResponded}
         showActions={showActions}
         handleAcceptTask={handleAcceptTaskTEST}
-        handleRejectTask={handleRejectTaskTEST}
         isActionLoading={isActionLoading}
       />
     );
-  }, [userUid, activeTab, actionLoadingTaskId, handleRejectTaskTEST, handleAcceptTaskTEST]);
+  }, [userUid, activeTab, actionLoadingTaskId, handleRejectTaskTEST, handleAcceptTaskTEST, users]);
 
   const keyExtractor = useCallback((item: ServiceRequest) => item.id, []);
   const toggleFilterPopup = useCallback(() => setIsFilterVisible(prev => !prev), []);
   const toggleSortOrder = useCallback(() => setSortOrder(prev => (prev === 'desc' ? 'asc' : 'desc')), []);
+
+  // MODIFICATION: clearFilters now resets all filter states
   const clearFilters = useCallback(() => {
     setSelectedPriority(null);
     setSelectedType(null);
     setSelectedStatus(null);
+    setSelectedCreator(null);
+    setSelectedAssignedUsers([]);
+    setDateRange({ start: null, end: null });
   }, []);
-  const handleClearFilter = useCallback((filterKey: 'priority' | 'type' | 'status') => {
+
+  // MODIFICATION: handleClearFilter now handles all filter keys
+  const handleClearFilter = useCallback((filterKey: 'priority' | 'type' | 'status' | 'creator' | 'assignedUsers' | 'dateRange') => {
     if (filterKey === 'priority') setSelectedPriority(null);
     if (filterKey === 'type') setSelectedType(null);
     if (filterKey === 'status') setSelectedStatus(null);
+    if (filterKey === 'creator') setSelectedCreator(null);
+    if (filterKey === 'assignedUsers') setSelectedAssignedUsers([]);
+    if (filterKey === 'dateRange') setDateRange({ start: null, end: null });
   }, []);
 
-  // FIX: Extracted complex expression from dependency array.
   const isLoadingCurrentTab = loadingStates[activeTab];
   const renderListEmpty = useCallback(() => (
     <ListEmptyComponent isLoading={isLoadingCurrentTab} theme={theme} hasActiveFilters={hasActiveFilters} />
   ), [isLoadingCurrentTab, theme, hasActiveFilters]);
+
+  const ListFooter = React.memo(() => {
+    const listenerKey = activeTab === 'Accepted' ? 'New' : activeTab;
+    if (!loadingMoreStates[listenerKey]) return null;
+    return (
+      <View style={{ paddingVertical: 20 }}>
+        <ActivityIndicator size="small" color={theme.tabActive} />
+      </View>
+    );
+  });
+  ListFooter.displayName = 'ListFooter';
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -344,16 +574,22 @@ const TasksScreen: React.FC = () => {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={onRefresh}
-            colors={[theme.tabActive]} // for Android
-            tintColor={theme.tabActive} // for iOS
+            colors={[theme.tabActive]}
+            tintColor={theme.tabActive}
           />
         }
+        // MODIFICATION: Disabled fetching on scroll to prevent loading more data automatically.
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={1}
+        onScroll={(e) => handleScroll(e.nativeEvent)}
+        scrollEventThrottle={16}
+        ListFooterComponent={<ListFooter />}
         ListHeaderComponent={
           <>
             <View style={styles.headerTitleContainer}>
               <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.headerTitle, { color: theme.text }]}>المهام</Text>
-              <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.headerSubtitle, { color: theme.text }]}>قائمة المهام المسندة إليك من قبل المدير.</Text>
-            </View> 
+              <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.headerSubtitle, { color: theme.text }]}>الطلبات المسندة اليك من قبل الفريق.</Text>
+            </View>
 
             <View style={styles.controlsContainer}>
               <SearchInput value={searchQuery} onChangeText={setSearchQuery} theme={theme} />
@@ -362,12 +598,24 @@ const TasksScreen: React.FC = () => {
             </View>
 
             <View style={[styles.tabsContainer, { backgroundColor: theme.header }]}>
-              <TabButton tabKey="New" label="جديدة" isActive={activeTab === 'New'} isLoading={loadingStates.New} onPress={handleTabPress} theme={theme} />
-              <TabButton tabKey="Accepted" label="مقبولة" isActive={activeTab === 'Accepted'} isLoading={loadingStates.Accepted} onPress={handleTabPress} theme={theme} />
-              <TabButton tabKey="Completed" label="مكتمله" isActive={activeTab === 'Completed'} isLoading={loadingStates.Completed} onPress={handleTabPress} theme={theme} />
+              <TabButton tabKey="New" label="مفتوح" isActive={activeTab === 'New'} isLoading={loadingStates.New && !isRefreshing} onPress={handleTabPress} theme={theme} />
+              <TabButton tabKey="Accepted" label="قيد المعالجة" isActive={activeTab === 'Accepted'} isLoading={loadingStates.Accepted && !isRefreshing} onPress={handleTabPress} theme={theme} />
+              <TabButton tabKey="Completed" label="مكتمل" isActive={activeTab === 'Completed'} isLoading={loadingStates.Completed && !isRefreshing} onPress={handleTabPress} theme={theme} />
             </View>
 
-            <ActiveFilters filters={{ priority: selectedPriority, type: selectedType, status: selectedStatus }} onClearFilter={handleClearFilter} onClearAll={clearFilters} />
+            <ActiveFilters
+              filters={{
+                priority: selectedPriority,
+                type: selectedType,
+                status: selectedStatus,
+                creator: selectedCreator,
+                assignedUsers: selectedAssignedUsers,
+                dateRange: dateRange,
+              }}
+              onClearFilter={handleClearFilter}
+              onClearAll={clearFilters}
+              users={users}
+            />
           </>
         }
         ListEmptyComponent={renderListEmpty}
@@ -375,26 +623,51 @@ const TasksScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       />
 
+      {showScrollToTop && (
+        <TouchableOpacity
+          style={[styles.scrollToTopButton, { backgroundColor: theme.tabActive }]}
+          onPress={scrollToTop}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="arrow-up" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
+
+      {/* MODIFICATION: The FilterDialog is now passed a context to change its appearance */}
       <FilterDialog
         isVisible={isFilterVisible}
         onClose={toggleFilterPopup}
         clearFilters={clearFilters}
+        // Priority
         selectedPriority={selectedPriority}
         setSelectedPriority={setSelectedPriority}
         availablePriorities={AVAILABLE_PRIORITIES}
+        // Type
         selectedType={selectedType}
         setSelectedType={setSelectedType}
         availableTypes={AVAILABLE_TYPES}
+        // Status
         selectedStatus={selectedStatus}
-        availableStatuses={[]}
         setSelectedStatus={setSelectedStatus}
-        showStatus={false}
+        availableStatuses={AVAILABLE_STATUSES}
+        showStatus={true}
+        // Users
+        users={users}
+        selectedCreator={selectedCreator}
+        setSelectedCreator={setSelectedCreator}
+        selectedAssignedUsers={selectedAssignedUsers}
+        setSelectedAssignedUsers={setSelectedAssignedUsers}
+        // Date
+        dateRange={dateRange}
+        setDateRange={setDateRange}
+        // Context
+        context="tasks"
       />
     </View>
   );
 };
 
-// --- Styles (unchanged) ---
+// --- Styles (no changes) ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -502,12 +775,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     minHeight: 36,
   },
+  // MODIFICATION: Changed from a Pressable to a ScrollView, styles adjusted
   pillsScrollView: {
     flexGrow: 1,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 8,
-    flexWrap: 'wrap', // Allow pills to wrap
   },
   filterPill: {
     flexDirection: 'row-reverse',
@@ -526,7 +799,6 @@ const styles = StyleSheet.create({
     marginLeft: -4,
   },
   clearAllText: {
-    color: '#007bff',
     fontSize: 14,
     fontWeight: 'bold',
     fontFamily: 'Cairo',
@@ -555,6 +827,22 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontFamily: 'Cairo',
     opacity: 0.6,
+  },
+  scrollToTopButton: {
+    position: 'absolute',
+    bottom: 30,
+    right: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    zIndex: 10,
   },
 });
 

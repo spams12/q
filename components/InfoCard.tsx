@@ -20,6 +20,9 @@ interface InfoCardProps {
   isActionLoading?: boolean;
 }
 
+// ADDED: Array of ticket types for which client info should be hidden.
+const typesToHideClientInfo = ['اقتراح', 'استفسار', 'طلب', 'مشكلة'];
+
 const InfoCard: React.FC<InfoCardProps> = React.memo(({
   item,
   viewableItems,
@@ -31,6 +34,9 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
 }) => {
   const router = useRouter();
   const { theme } = useTheme();
+
+  // ADDED: Check if the current ticket type requires hiding client info.
+  const shouldHideClientInfo = typesToHideClientInfo.includes(item.type);
 
   const handleNavigate = () => {
     console.log('Navigating to task details:', item.id);
@@ -118,14 +124,12 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
   };
 
   return (
-    // CHANGED: The outer component is now a non-pressable Animated.View
     <Animated.View style={[
       styles.itemContainer,
       { backgroundColor: theme.header, shadowColor: theme.text },
       rStyle
     ]}>
-      
-      {/* ADDED: A new Pressable that only wraps the content you want to be clickable for navigation */}
+
       <Pressable onPress={handleNavigate} disabled={isActionLoading}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: theme.text }]} numberOfLines={2}>
@@ -142,11 +146,16 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
             </View>
           </View>
         </View>
-        
+
         <View style={styles.detailsContainer}>
-          <DetailRow label="العميل:" value={item.customerName || ''} theme={theme} />
-          <DetailRow label="رقم الهاتف:" value={item.customerPhone || ''} theme={theme} />
-          <DetailRow label="العنوان:" value={item.customerEmail || ''} theme={theme} />
+          {/* MODIFIED: Conditionally render client info based on the flag */}
+          {!shouldHideClientInfo && (
+            <>
+              <DetailRow label="العميل:" value={item.customerName || ''} theme={theme} />
+              <DetailRow label="رقم الهاتف:" value={item.customerPhone || ''} theme={theme} />
+              <DetailRow label="العنوان:" value={item.customerEmail || ''} theme={theme} />
+            </>
+          )}
           <DetailRow label="تاريخ الإنشاء:" value={formatTimestamp(item.createdAt)} theme={theme} />
           <View style={[styles.separator, { backgroundColor: theme.background }]} />
           <View style={styles.detailRow}>
@@ -157,9 +166,7 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
           </Text>
         </View>
       </Pressable>
-      {/* END ADDED WRAPPER */}
-      
-      {/* The action buttons are now outside the navigation Pressable, so their own onPress will work correctly. */}
+
       {showActions && !hasResponded && (
         <View style={styles.actionButtonsContainer}>
           <Pressable
@@ -179,12 +186,11 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
             onPress={() => handleRejectTask?.(item.id)}
             disabled={isActionLoading}
           >
-             {/* FIXED: Show loading indicator on reject button as well if needed, or just the icon */}
-             {isActionLoading ? (
-               <ActivityIndicator size="small" color="#fff" />
-             ) : (
+            {isActionLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
               <Ionicons name="close-circle" size={20} color="#fff" />
-             )}
+            )}
             <Text style={[styles.actionButtonText, rejectButtonTextStyle]}>رفض</Text>
           </Pressable>
         </View>
@@ -193,7 +199,6 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
   );
 });
 
-// Helper component for detail rows
 const DetailRow = React.memo(({ label, value, theme }: {
   label: string;
   value: string;
@@ -212,7 +217,6 @@ InfoCard.displayName = 'InfoCard';
 
 export default InfoCard;
 
-// ...styles remain the same...
 const styles = StyleSheet.create({
   itemContainer: {
     padding: 16,
@@ -297,7 +301,7 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    flexDirection: 'row-reverse', // Changed to row-reverse
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,

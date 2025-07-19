@@ -1,18 +1,19 @@
+import { UseDialog } from '@/context/DialogContext';
 import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
+// MODIFICATION: Added 'setDoc' for creating new time tracking documents
+import { Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
-// OPTIMIZATION: Import useMemo and useCallback
-import { UseDialog } from '@/context/DialogContext';
-import React, { Children, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Children, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
+  Modal,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
@@ -29,6 +30,17 @@ const SPACING = {
   s: 8,
   m: 16,
   l: 24,
+};
+
+// Helper function to format seconds into HH:MM:SS
+const formatDuration = (seconds: number) => {
+  if (isNaN(seconds) || seconds < 0) {
+    return '00:00:00';
+  }
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  return [h, m, s].map(v => v.toString().padStart(2, '0')).join(':');
 };
 
 
@@ -50,6 +62,15 @@ interface SettingRowProps {
   value?: string;
   onPress?: () => void;
   rightComponent?: React.ReactNode;
+}
+
+interface CustomDialogProps {
+  visible: boolean;
+  title: string;
+  message: string;
+  buttons: { text: string; onPress: () => void; style?: 'default' | 'destructive' }[];
+  onClose: () => void;
+  styles: any;
 }
 
 
@@ -105,36 +126,78 @@ const SettingRow = React.memo<SettingRowProps & { styles: any }>(({ icon, iconCo
 ));
 SettingRow.displayName = 'SettingRow';
 
+const CustomDialog = ({ visible, title, message, buttons, onClose, styles }: CustomDialogProps) => {
+  if (!visible) return null;
+
+  return (
+    <Modal
+      transparent={true}
+      animationType="fade"
+      visible={visible}
+      onRequestClose={onClose}
+      statusBarTranslucent={true}
+    >
+      <TouchableOpacity style={styles.dialogOverlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={styles.dialogContainer}>
+          <Text style={styles.dialogTitle}>{title}</Text>
+          <Text style={styles.dialogMessage}>{message}</Text>
+          <View style={styles.dialogButtonContainer}>
+            {buttons.slice().reverse().map((button, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.dialogButton,
+                  button.style === 'destructive' ? styles.destructiveButton : styles.defaultButton,
+                  index > 0 && { marginRight: SPACING.m }
+                ]}
+                onPress={button.onPress}
+              >
+                <Text style={[
+                  styles.dialogButtonText,
+                  button.style === 'destructive' ? styles.destructiveButtonText : styles.defaultButtonText
+                ]}>
+                  {button.text}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
 const SettingsPage = () => {
   const { themeName, toggleTheme, theme } = useTheme();
   const { showDialog } = UseDialog()
 
   const styles = useMemo(() => getStyles(theme), [theme]);
-  console.log("rednedr set")
   const [invoiceData, setInvoiceData] = useState({ total: 0, count: 0 });
   const { userdoc, setUserdoc, realuserUid } = usePermissions();
-  const [loading, setLoading] = useState(false);
+  // MODIFICATION: Replaced single loading state with two specific states
+  const [isActionLoading, setIsActionLoading] = useState(false);
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPhoneModalVisible, setPhoneModalVisible] = useState(false);
+  const [isLogoutDialogVisible, setLogoutDialogVisible] = useState(false);
   const router = useRouter();
+
+  // MODIFICATION: State for the new time tracking collection
+  const [timeTrackingData, setTimeTrackingData] = useState<{ sessions: any[], totalDurationSeconds: number }>({ sessions: [], totalDurationSeconds: 0 });
+  const [elapsedTime, setElapsedTime] = useState('00:00:00');
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const { latestClearTimeString, formattedDate } = useMemo(() => {
     const latestClearTime = (userdoc?.lastClearTimes && userdoc.lastClearTimes.length > 0)
       ? userdoc.lastClearTimes.reduce((latest, current) => (current.seconds > latest.seconds ? current : latest))
       : null;
-    
     const timeString = latestClearTime ? latestClearTime.toDate().toISOString() : new Date(0).toISOString();
-    
-    const dateString = latestClearTime ? new Intl.DateTimeFormat('ar-IQ', {
-        year: 'numeric', month: 'long', day: 'numeric',
-    }).format(latestClearTime.toDate()) : 'لا توجد تصفية سابقة';
-
+    const dateString = latestClearTime ? new Intl.DateTimeFormat('ar-IQ', { year: 'numeric', month: 'long', day: 'numeric' }).format(latestClearTime.toDate()) : 'لا توجد تصفية سابقة';
     return { latestClearTimeString: timeString, formattedDate: dateString };
   }, [userdoc]);
-  
-  // --- Real-time User Data Listener ---
+
   useEffect(() => {
     if (!realuserUid) return;
-
     const userDocRef = doc(db, 'users', realuserUid);
     const unsubscribe = onSnapshot(userDocRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -145,20 +208,37 @@ const SettingsPage = () => {
     }, (error) => {
       console.error("Error fetching user document:", error);
     });
-
     return () => unsubscribe();
-    // OPTIMIZATION: `setUserdoc` from context should be stable, so it can be removed from dependencies.
   }, [realuserUid, setUserdoc]);
 
-  // --- Invoice Data Listener ---
+  // MODIFICATION: New effect to fetch data from 'userTimeTracking' collection
+  useEffect(() => {
+    if (!realuserUid) return;
+
+    const timeTrackingDocRef = doc(db, 'userTimeTracking', realuserUid);
+    const unsubscribe = onSnapshot(timeTrackingDocRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setTimeTrackingData(snapshot.data() as { sessions: any[], totalDurationSeconds: number });
+      } else {
+        // If the document doesn't exist, use the default initial state
+        setTimeTrackingData({ sessions: [], totalDurationSeconds: 0 });
+        console.log("Time tracking document doesn't exist for this user yet.");
+      }
+    }, (error) => {
+      console.error("Error fetching time tracking data:", error);
+      showDialog({ status: 'error', message: 'فشل في جلب بيانات الدوام.' });
+    });
+
+    return () => unsubscribe();
+  }, [realuserUid, showDialog]);
+
+
   useEffect(() => {
     if (!realuserUid) {
       setInvoiceData({ total: 0, count: 0 });
       return;
     }
-    // Now this query uses the memoized `latestClearTimeString`
     const q = query(collection(db, 'invoices'), where('createdBy', '==', realuserUid), where('createdAt', '>=', latestClearTimeString));
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
       let total = 0;
       snapshot.forEach((doc) => {
@@ -167,26 +247,85 @@ const SettingsPage = () => {
       setInvoiceData({ total: total, count: snapshot.size });
     }, (error) => {
       console.error("Error fetching invoices: ", error);
-      showDialog({
-        status: 'error',
-        message: 'فشل في جلب بيانات الفواتير.',
-      });
+      showDialog({ status: 'error', message: 'فشل في جلب بيانات الفواتير.' });
     });
-
     return () => unsubscribe();
-  }, [ realuserUid, latestClearTimeString, showDialog]);
-  
-  // OPTIMIZATION: Wrap all handlers in `useCallback` to prevent them from being
-  // recreated on every render. This ensures stable props for child components.
+  }, [realuserUid, latestClearTimeString, showDialog]);
+
+  // MODIFICATION: Derive clock-in status from timeTrackingData
+  const isClockedIn = useMemo(() => {
+    return timeTrackingData.sessions.some(session => session.logInTime && !session.logOutTime);
+  }, [timeTrackingData]);
+
+  // MODIFICATION: Updated effect to use 'timeTrackingData' from the new collection
+  useEffect(() => {
+    const cleanupTimer = () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    };
+
+    const activeSession = timeTrackingData.sessions.find(session => session.logInTime && !session.logOutTime);
+
+    if (activeSession) {
+      cleanupTimer(); // Clear any existing timer before starting a new one
+      timerIntervalRef.current = setInterval(() => {
+        const now = new Date();
+        const start = (activeSession.logInTime as Timestamp).toDate();
+        const secondsElapsed = Math.floor((now.getTime() - start.getTime()) / 1000);
+        setElapsedTime(formatDuration(secondsElapsed));
+      }, 1000);
+    } else {
+      setElapsedTime('00:00:00');
+      cleanupTimer();
+    }
+
+    return cleanupTimer;
+  }, [timeTrackingData]);
+
+  const handleRefresh = useCallback(async () => {
+    if (!realuserUid) return;
+    setIsRefreshing(true);
+    try {
+      const userDocPromise = getDoc(doc(db, 'users', realuserUid));
+      const timeTrackingPromise = getDoc(doc(db, 'userTimeTracking', realuserUid));
+      const invoiceQuery = query(
+        collection(db, 'invoices'),
+        where('createdBy', '==', realuserUid),
+        where('createdAt', '>=', latestClearTimeString)
+      );
+      const invoiceSnapshotPromise = getDocs(invoiceQuery);
+
+      const [userDocSnapshot, timeTrackingSnapshot, invoiceSnapshot] = await Promise.all([userDocPromise, timeTrackingPromise, invoiceSnapshotPromise]);
+
+      if (userDocSnapshot.exists()) {
+        setUserdoc({ id: userDocSnapshot.id, ...userDocSnapshot.data() } as User);
+      }
+      if (timeTrackingSnapshot.exists()) {
+        setTimeTrackingData(timeTrackingSnapshot.data() as { sessions: any[], totalDurationSeconds: number });
+      }
+
+      let total = 0;
+      invoiceSnapshot.forEach((doc) => {
+        total += doc.data().totalAmount;
+      });
+      setInvoiceData({ total: total, count: invoiceSnapshot.size });
+    } catch (error) {
+      console.error("Error during refresh:", error);
+      showDialog({ status: 'error', message: 'فشل تحديث البيانات.' });
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [realuserUid, latestClearTimeString, setUserdoc, showDialog]);
+
   const handleImagePick = useCallback(async () => {
-    setLoading(true);
+    // MODIFICATION: Use image-specific loading state
+    setIsImageUploading(true);
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        showDialog({
-          status: 'error',
-          message:"نحتاج إلى صلاحية الوصول إلى الصور لتحديث صورتك الشخصية"
-        })
+        showDialog({ status: 'error', message: "نحتاج إلى صلاحية الوصول إلى الصور لتحديث صورتك الشخصية" });
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -196,7 +335,7 @@ const SettingsPage = () => {
         quality: 0.7,
       });
       if (result.canceled || !userdoc?.id) return;
-      
+
       const imageUri = result.assets[0].uri;
       const response = await fetch(imageUri);
       const blob = await response.blob();
@@ -204,63 +343,102 @@ const SettingsPage = () => {
       const storageRef = ref(storage, `profile_pictures/${userdoc.id}`);
       await uploadBytes(storageRef, blob);
       const downloadURL = await getDownloadURL(storageRef);
-      
+
       const userDocRef = doc(db, 'users', userdoc.id);
       await updateDoc(userDocRef, { photoURL: downloadURL });
-      showDialog({
-        status: 'success',
-        message: 'تم تحديث الصورة الشخصية بنجاح.',
-      })
-
-
+      showDialog({ status: 'success', message: 'تم تحديث الصورة الشخصية بنجاح.' });
     } catch (error) {
       console.error('Error uploading image: ', error);
-      showDialog({
-        status: 'error',
-        message: 'فشل تحميل الصورة.',
-      })
-
+      showDialog({ status: 'error', message: 'فشل تحميل الصورة.' });
     } finally {
-      setLoading(false);
+      // MODIFICATION: Use image-specific loading state
+      setIsImageUploading(false);
     }
-  }, [userdoc?.id, showDialog]); // Dependency on what the function needs
+  }, [userdoc?.id, showDialog]);
 
-  const handleLogout = useCallback(() => {
-    Alert.alert(
-      'تسجيل الخروج', 'هل أنت متأكد؟',
-      [{ text: 'إلغاء', style: 'cancel' }, { text: 'تسجيل الخروج', style: 'destructive', onPress: () => signOut(auth) }]
-    );
-  }, []); // No dependenciess
+  const showLogoutDialog = useCallback(() => setLogoutDialogVisible(true), []);
+  const cancelLogout = useCallback(() => setLogoutDialogVisible(false), []);
+  const confirmLogout = useCallback(() => {
+    setLogoutDialogVisible(false);
+    signOut(auth);
+  }, []);
 
   const handlePhoneUpdate = useCallback(async (newPhone: string) => {
     if (!userdoc?.id || !newPhone) {
       setPhoneModalVisible(false);
       return;
     }
-    setLoading(true);
+    // MODIFICATION: Use action-specific loading state
+    setIsActionLoading(true);
     try {
       const userDocRef = doc(db, 'users', userdoc.id);
       await updateDoc(userDocRef, { phone: newPhone });
-       // Again, onSnapshot will handle the state update.
-      showDialog({
-        status: 'success',
-        message: 'تم تحديث رقم الهاتف بنجاح.',
-      })
+      showDialog({ status: 'success', message: 'تم تحديث رقم الهاتف بنجاح.' });
     } catch (error) {
       console.error('Error updating phone number: ', error);
-      showDialog({status : "error", message:'فشل تحديث رقم الهاتف.'});
+      showDialog({ status: "error", message: 'فشل تحديث رقم الهاتف.' });
     } finally {
-      setLoading(false);
+      // MODIFICATION: Use action-specific loading state
+      setIsActionLoading(false);
       setPhoneModalVisible(false);
     }
-  }, [userdoc?.id, showDialog]); // Dependency on userdoc.id
+  }, [userdoc?.id, showDialog]);
+
+
+  // MODIFICATION: Rewritten handler to use 'userTimeTracking' and removed dialogs
+  const handleToggleClock = useCallback(async () => {
+    if (!realuserUid) return;
+    setIsActionLoading(true);
+    const timeTrackingDocRef = doc(db, 'userTimeTracking', realuserUid);
+
+    try {
+      const currentSessions = [...(timeTrackingData.sessions || [])];
+      const activeSessionIndex = currentSessions.findIndex(s => !s.logOutTime);
+
+      if (activeSessionIndex !== -1) {
+        // CLOCKING OUT
+        currentSessions[activeSessionIndex].logOutTime = Timestamp.now();
+
+        const totalSeconds = currentSessions.reduce((acc, session) => {
+          if (session.logInTime && session.logOutTime) {
+            const duration = session.logOutTime.seconds - session.logInTime.seconds;
+            return acc + (duration > 0 ? duration : 0);
+          }
+          return acc;
+        }, 0);
+
+        await updateDoc(timeTrackingDocRef, {
+          sessions: currentSessions,
+          totalDurationSeconds: totalSeconds,
+        });
+        // MODIFICATION: Removed success dialog
+      } else {
+        // CLOCKING IN
+        const newSession = { logInTime: Timestamp.now(), logOutTime: null };
+        const updatedSessions = [...currentSessions, newSession];
+
+        // Use setDoc with merge:true to create the doc if it doesn't exist
+        await setDoc(timeTrackingDocRef, {
+          userId: realuserUid,
+          sessions: updatedSessions,
+          totalDurationSeconds: timeTrackingData.totalDurationSeconds || 0,
+        }, { merge: true });
+        // MODIFICATION: Removed success dialog
+      }
+    } catch (error) {
+      console.error("Error updating time log:", error);
+      // MODIFICATION: Removed error dialog
+    } finally {
+      setIsActionLoading(false);
+    }
+  }, [realuserUid, timeTrackingData]);
+
 
   const openPhoneModal = useCallback(() => setPhoneModalVisible(true), []);
   const closePhoneModal = useCallback(() => setPhoneModalVisible(false), []);
   const goToInvoices = useCallback(() => router.push('/invoices'), [router]);
   const goToFamily = useCallback(() => router.push('/family'), [router]);
   const goToAbout = useCallback(() => router.push('/about'), [router]);
-
 
   if (!userdoc) {
     return (
@@ -272,13 +450,51 @@ const SettingsPage = () => {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-      
-      <ProfileHeader user={userdoc} onImagePick={handleImagePick} loading={loading} styles={styles} />
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
+        }
+      >
+        {/* MODIFICATION: Pass image-specific loading state */}
+        <ProfileHeader user={userdoc} onImagePick={handleImagePick} loading={isImageUploading} styles={styles} />
+        {/* MODIFICATION: Updated time tracking section UI */}
+        <SettingsGroup title="تسجيل الدوام" styles={styles}>
+          <View style={styles.timeTrackingContainer}>
+            <TouchableOpacity
+              style={[styles.clockButton, isClockedIn ? styles.clockOutButton : styles.clockInButton]}
+              onPress={handleToggleClock}
+              // MODIFICATION: Use action-specific loading state
+              disabled={isActionLoading}
+            >
+              {isActionLoading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.clockButtonText}>
+                  {isClockedIn ? 'إنهاء الدوام' : 'بدء الدوام'}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <View style={styles.timersContainer}>
+              <Text style={styles.timerLabel}>الوقت الإجمالي</Text>
+              <Text style={styles.totalTimerText}>{formatDuration(timeTrackingData.totalDurationSeconds)}</Text>
+              <Text style={styles.timerLabel}>الجلسة الحالية</Text>
+              <Text style={styles.timerText}>{elapsedTime}</Text>
+            </View>
+          </View>
+        </SettingsGroup>
 
-      {/* Wallet Card */}
-      <SettingsGroup title="المحفظة" styles={styles}>
-        <TouchableOpacity style={styles.invoiceCard} onPress={goToInvoices}>
+
+        <SettingsGroup title="المحفظة" styles={styles}>
+          <TouchableOpacity style={styles.invoiceCard} onPress={goToInvoices}>
             <View style={styles.invoiceCardContent}>
               <Ionicons name="receipt-outline" size={32} style={styles.invoiceIcon} />
               <View style={styles.invoiceCardText}>
@@ -290,56 +506,121 @@ const SettingsPage = () => {
               <Text style={styles.invoiceCardAmount}>{`${invoiceData.total.toLocaleString()} IQD`}</Text>
               <Ionicons name="chevron-back" size={24} style={styles.chevron} />
             </View>
-        </TouchableOpacity>
-      </SettingsGroup>
-      
-      {/* Personal Info Group */}
-      <SettingsGroup title="المعلومات الشخصية" styles={styles}>
-        <SettingRow styles={styles} icon="person-outline" title="الاسم الكامل" value={userdoc.name || ''} iconColor="#5856D6" />
-        <SettingRow styles={styles} icon="mail-outline" title="البريد الإلكتروني" value={userdoc.email || ''} iconColor="#007AFF" />
-        <SettingRow styles={styles} icon="call-outline" title="رقم الهاتف" value={userdoc.phone || 'غير محدد'} onPress={openPhoneModal} iconColor="#34C759" />
-        <SettingRow styles={styles} icon="people-outline" title="معرف الفريق" value={userdoc.teamId || 'غير محدد'} iconColor="#FF9500" />
-      </SettingsGroup>
+          </TouchableOpacity>
+        </SettingsGroup>
 
-      {/* App Settings Group */}
-      <SettingsGroup title="إعدادات التطبيق" styles={styles}>
+        <SettingsGroup title="المعلومات الشخصية" styles={styles}>
+          <SettingRow styles={styles} icon="person-outline" title="الاسم الكامل" value={userdoc.name || ''} iconColor="#5856D6" />
+          <SettingRow styles={styles} icon="mail-outline" title="البريد الإلكتروني" value={userdoc.email || ''} iconColor="#007AFF" />
+          <SettingRow styles={styles} icon="call-outline" title="رقم الهاتف" value={userdoc.phone || 'غير محدد'} onPress={openPhoneModal} iconColor="#34C759" />
+          <SettingRow styles={styles} icon="people-outline" title="معرف الفريق" value={userdoc.teamId || 'غير محدد'} iconColor="#FF9500" />
+        </SettingsGroup>
 
-        <SettingRow
-          styles={styles}
-          icon="moon-outline"
-          title="الوضع المظلم"
-          iconColor="#5856D6"
-          rightComponent={<Switch value={themeName === 'dark'} onValueChange={toggleTheme} trackColor={{ false: '#E9E9EA', true: theme.success }} thumbColor="#FFF" />}
+        <SettingsGroup title="إعدادات التطبيق" styles={styles}>
+          <SettingRow
+            styles={styles}
+            icon="moon-outline"
+            title="الوضع المظلم"
+            iconColor="#5856D6"
+            rightComponent={<Switch value={themeName === 'dark'} onValueChange={toggleTheme} trackColor={{ false: '#E9E9EA', true: theme.success }} thumbColor="#FFF" />}
+          />
+        </SettingsGroup>
+
+        <SettingsGroup styles={styles}>
+          <SettingRow styles={styles} icon="people-circle-outline" title="عائله القبس" onPress={goToFamily} iconColor="#FF69B4" />
+          <SettingRow styles={styles} icon="information-circle-outline" title="حول التطبيق" onPress={goToAbout} iconColor="#00BCD4" />
+          <TouchableOpacity onPress={showLogoutDialog} style={styles.logoutButtonRow}>
+            <View style={[styles.iconContainer, { backgroundColor: theme.destructive }]}>
+              <Ionicons name="log-out-outline" size={20} color="#FFF" />
+            </View>
+            <Text style={styles.logoutButtonText}>تسجيل الخروج</Text>
+          </TouchableOpacity>
+        </SettingsGroup>
+
+        <UpdatePhoneModal
+          visible={isPhoneModalVisible}
+          onClose={closePhoneModal}
+          onUpdate={handlePhoneUpdate}
+          currentPhone={userdoc.phone || ''}
+          // MODIFICATION: Pass action-specific loading state
+          loading={isActionLoading}
         />
-      </SettingsGroup>
+      </ScrollView>
 
-      {/* Other Group */}
-      <SettingsGroup styles={styles}>
-        <SettingRow styles={styles} icon="people-circle-outline" title="عائله القبس" onPress={goToFamily} iconColor="#FF69B4" />
-        <SettingRow styles={styles} icon="information-circle-outline" title="حول التطبيق" onPress={goToAbout} iconColor="#00BCD4" />
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutButtonRow}>
-          <View style={[styles.iconContainer, { backgroundColor: theme.destructive }]}>
-            <Ionicons name="log-out-outline" size={20} color="#FFF" />
-          </View>
-          <Text style={styles.logoutButtonText}>تسجيل الخروج</Text>
-        </TouchableOpacity>
-      </SettingsGroup>
-
-      <UpdatePhoneModal
-        visible={isPhoneModalVisible}
-        onClose={closePhoneModal}
-        onUpdate={handlePhoneUpdate}
-        currentPhone={userdoc.phone || ''}
-        loading={loading}
-        
+      <CustomDialog
+        visible={isLogoutDialogVisible}
+        title="تسجيل الخروج"
+        message="هل أنت متأكد أنك تريد تسجيل الخروج؟"
+        onClose={cancelLogout}
+        styles={styles}
+        buttons={[
+          { text: 'تسجيل الخروج', onPress: confirmLogout, style: 'destructive' },
+          { text: 'إلغاء', onPress: cancelLogout, style: 'default' },
+        ]}
       />
-    </ScrollView>
+    </>
   );
 };
 
-// ... (getStyles function remains the same)
 const getStyles = (theme: Theme) => StyleSheet.create({
-  // --- Global Styles ---
+  // MODIFICATION: New and updated styles for the time tracking section
+  timeTrackingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.l,
+    paddingHorizontal: SPACING.m,
+  },
+  timersContainer: {
+    alignItems: 'center',
+    flex: 1,
+    paddingRight: SPACING.m,
+  },
+  timerLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.textSecondary,
+    marginBottom: SPACING.s / 2,
+  },
+  totalTimerText: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: theme.text,
+    fontVariant: ['tabular-nums'],
+    marginBottom: SPACING.m,
+  },
+  timerText: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: theme.primary,
+    fontVariant: ['tabular-nums'],
+  },
+  clockButton: {
+    width: 140,
+    height: 140,
+    borderRadius: 70, // Half of width/height to make it a circle
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  clockInButton: {
+    backgroundColor: theme.success,
+  },
+  clockOutButton: {
+    backgroundColor: theme.destructive,
+  },
+  clockButtonText: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center'
+  },
+  // --- End of new styles ---
+
   container: {
     flex: 1,
     backgroundColor: theme.background,
@@ -357,7 +638,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     marginTop: SPACING.m,
     fontSize: 16,
     color: theme.textSecondary,
-    fontFamily: 'System', // Specify a font family
+    fontFamily: 'System',
   },
   chevron: {
     color: theme.textSecondary,
@@ -365,8 +646,6 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   icon: {
     color: theme.primary,
   },
-
-  // --- Profile Header Styles ---
   profileSection: {
     alignItems: 'center',
     paddingHorizontal: SPACING.l,
@@ -388,6 +667,11 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     borderColor: theme.card,
   },
   loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -419,8 +703,6 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     marginTop: SPACING.s / 2,
     textAlign: 'center',
   },
-
-  // --- Settings Group & Card Styles ---
   groupContainer: {
     marginHorizontal: SPACING.m,
     marginBottom: SPACING.l,
@@ -447,16 +729,14 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   separator: {
     height: 1,
     backgroundColor: theme.separator,
-    marginRight: 56, // Align with text, not icon
+    marginRight: 56,
   },
-
-  // --- Setting Row Styles ---
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: SPACING.m,
     paddingHorizontal: SPACING.m,
-    backgroundColor: 'transparent', // Handled by group card
+    backgroundColor: 'transparent',
   },
   iconContainer: {
     width: 32,
@@ -482,11 +762,9 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     textAlign: 'right',
     marginTop: 2,
   },
-
-  // --- Specific Card/Row Styles ---
   invoiceCard: {
     padding: SPACING.m,
-    backgroundColor: 'transparent', // Handled by group card
+    backgroundColor: 'transparent',
   },
   invoiceCardContent: {
     flexDirection: 'row',
@@ -515,7 +793,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   invoiceCardAmountContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end', // For RTL layout
+    justifyContent: 'flex-end',
     marginTop: SPACING.m,
     paddingTop: SPACING.m,
     borderTopWidth: 1,
@@ -525,7 +803,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: theme.primary,
-    marginLeft: SPACING.s, // Space between amount and arrow
+    marginLeft: SPACING.s,
   },
   logoutButtonRow: {
     flexDirection: 'row',
@@ -539,7 +817,68 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
   },
+  dialogOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.l,
+  },
+  dialogContainer: {
+    backgroundColor: theme.card,
+    borderRadius: 16,
+    padding: SPACING.l,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  dialogTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: theme.text,
+    textAlign: 'center',
+    marginBottom: SPACING.s,
+  },
+  dialogMessage: {
+    fontSize: 16,
+    color: theme.textSecondary,
+    textAlign: 'center',
+    marginBottom: SPACING.l,
+    lineHeight: 24,
+  },
+  dialogButtonContainer: {
+    flexDirection: 'row-reverse',
+    width: '100%',
+    justifyContent: 'space-between',
+  },
+  dialogButton: {
+    flex: 1,
+    paddingVertical: SPACING.m - 4,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  defaultButton: {
+    backgroundColor: theme.iconBackground,
+  },
+  destructiveButton: {
+    backgroundColor: theme.destructive,
+  },
+  dialogButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  defaultButtonText: {
+    color: theme.text,
+  },
+  destructiveButtonText: {
+    color: '#FFF',
+  },
 });
 
-// The final export remains the same
 export default React.memo(SettingsPage);

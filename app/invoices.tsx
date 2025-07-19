@@ -49,31 +49,31 @@ export interface Invoice {
 
 // Helper to format date for display
 const formatDate = (date: Timestamp | Date | string) => {
-    const d = date instanceof Timestamp ? date.toDate() : new Date(date);
-    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear() } ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  const d = date instanceof Timestamp ? date.toDate() : new Date(date);
+  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
 };
 
 // Helper to format currency with commas for thousands
 const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('en-US', {
-       
-    });
+  return amount.toLocaleString('en-US', {
+
+  });
 };
 
 
 // Helper for status badge styling and text
 const getStatusDetails = (status: Invoice['status']) => {
-    switch (status) {
-        case 'paid':
-            return { text: 'مدفوعة', color: '#28a745', backgroundColor: '#e9f7eb' };
-        case 'approved':
-            return { text: 'مقبولة', color: '#007bff', backgroundColor: '#e6f2ff' };
-        case 'submitted':
-            return { text: 'قيد المراجعة', color: '#ffc107', backgroundColor: '#fff8e1' };
-        case 'draft':
-        default:
-            return { text: 'مسودة', color: '#6c757d', backgroundColor: '#f8f9fa' };
-    }
+  switch (status) {
+    case 'paid':
+      return { text: 'مدفوعة', color: '#28a745', backgroundColor: '#e9f7eb' };
+    case 'approved':
+      return { text: 'مقبولة', color: '#007bff', backgroundColor: '#e6f2ff' };
+    case 'submitted':
+      return { text: 'قيد المراجعة', color: '#ffc107', backgroundColor: '#fff8e1' };
+    case 'draft':
+    default:
+      return { text: 'مسودة', color: '#6c757d', backgroundColor: '#f8f9fa' };
+  }
 };
 
 const InvoicesScreen = () => {
@@ -82,12 +82,12 @@ const InvoicesScreen = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const {userdoc} = usePermissions()
+  const { userdoc } = usePermissions()
   const [selectedTime, setSelectedTime] = useState<string>("all");
 
   const sortedClearTimes = useMemo(() => {
     if (!userdoc?.lastClearTimes) return [];
-    return  [...userdoc.lastClearTimes].sort((a, b) => a.toMillis() - b.toMillis());
+    return [...userdoc.lastClearTimes].sort((a, b) => a.toMillis() - b.toMillis());
   }, [userdoc?.lastClearTimes]);
 
   useEffect(() => {
@@ -108,7 +108,7 @@ const InvoicesScreen = () => {
 
       if (selectedIndex !== -1) {
         const selectedTimestamp = sortedTimestamps[selectedIndex];
-        
+
         // Fetch invoices created up to the selected clear date.
         let baseQuery = query(
           collection(db, "invoices"),
@@ -149,46 +149,46 @@ const InvoicesScreen = () => {
 
   const invoiceStats = useMemo(() => {
     return {
-        count: invoices.length,
-        total: invoices.reduce((acc, inv) => acc + inv.totalAmount, 0),
+      count: invoices.length,
+      total: invoices.reduce((acc, inv) => acc + inv.totalAmount, 0),
     };
   }, [invoices]);
 
   const renderInvoiceItem = ({ item }: { item: Invoice }) => {
     const status = getStatusDetails(item.status);
     return (
-        <TouchableOpacity style={styles.card} activeOpacity={0.8 } onPress={() => item.linkedServiceRequestId ? router.push(`/tasks/${item.linkedServiceRequestId}`) : null}>
-            <View style={styles.cardTopRow}>
-                <View style={styles.customerInfo}>
-                    <Feather name="user" size={16} color="#555" />
-                    <Text style={styles.customerName}>{item.customerName || 'عميل غير محدد'}</Text>
-                </View>
-                <View style={[styles.statusBadge, { backgroundColor: status.backgroundColor }]}>
-                    <Text style={[styles.statusText, { color: status.color }]}>{status.text}</Text>
-                </View>
-            </View>
+      <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => item.linkedServiceRequestId ? router.push(`/tasks/${item.linkedServiceRequestId}`) : null}>
+        <View style={styles.cardTopRow}>
+          <View style={styles.customerInfo}>
+            <Feather name="user" size={16} color="#555" />
+            <Text style={styles.customerName}>{item.customerName || 'عميل غير محدد'}</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: status.backgroundColor }]}>
+            <Text style={[styles.statusText, { color: status.color }]}>{status.text}</Text>
+          </View>
+        </View>
 
-            {/* Invoice ID Display */}
-            <View style={styles.invoiceIdContainer}>
-                <Text style={styles.invoiceIdLabel}>رقم الفاتورة:</Text>
-                <Text style={styles.invoiceIdText}>{item.id}</Text>
-            </View>
+        {/* Invoice ID Display */}
+        <View style={styles.invoiceIdContainer}>
+          <Text style={styles.invoiceIdLabel}>رقم الفاتورة:</Text>
+          <Text style={styles.invoiceIdText}>{item.id}</Text>
+        </View>
 
-            <View style={styles.cardBody}>
-                <View style={styles.detailItem}>
-                    <MaterialCommunityIcons name="cash" size={20} color="#16a085" />
-                    {/* Use formatCurrency for comma separation */}
-                    <Text style={styles.amountText}>{formatCurrency(item.totalAmount)} د.ع</Text>
-                </View>
-                <View style={styles.detailItem}>
-                    <Feather name="calendar" size={16} color="#888" />
-                    <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
-                </View>
-            </View>
-        </TouchableOpacity>
+        <View style={styles.cardBody}>
+          <View style={styles.detailItem}>
+            <MaterialCommunityIcons name="cash" size={20} color="#16a085" />
+            {/* Use formatCurrency for comma separation */}
+            <Text style={styles.amountText}>{formatCurrency(item.totalAmount)} د.ع</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Feather name="calendar" size={16} color="#888" />
+            <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
     );
   };
-  
+
   const renderContent = () => {
     if (invoicesLoading) {
       return <ActivityIndicator size="large" color="#007bff" style={{ marginTop: 50 }} />;
@@ -199,9 +199,9 @@ const InvoicesScreen = () => {
     if (invoices.length === 0) {
       return (
         <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons name="file-document-outline" size={60} color="#ccc" />
-            <Text style={styles.infoText}>لا توجد فواتير لعرضها</Text>
-            <Text style={styles.infoSubText}>جرّب تغيير فلتر التاريخ أو قم بإنشاء فاتورة جديدة.</Text>
+          <MaterialCommunityIcons name="file-document-outline" size={60} color="#ccc" />
+          <Text style={styles.infoText}>لا توجد فواتير لعرضها</Text>
+          <Text style={styles.infoSubText}>جرّب تغيير فلتر التاريخ أو قم بإنشاء فاتورة جديدة.</Text>
         </View>
       );
     }
@@ -217,52 +217,46 @@ const InvoicesScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>الفواتير</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Feather name="arrow-right" size={24} color={themeName === 'dark' ? '#e2e8f0' : '#1a2533'} />
-        </TouchableOpacity>
-      </View>
 
-      {/* Date Filter */}
+
       <View>
         <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterContainer}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterContainer}
         >
+          <TouchableOpacity
+            style={[styles.filterButton, selectedTime === "all" && styles.filterButtonActive]}
+            onPress={() => setSelectedTime("all")}
+          >
+            <Text style={[styles.filterText, selectedTime === "all" && styles.filterTextActive]}>الكل</Text>
+          </TouchableOpacity>
+          {[...sortedClearTimes].reverse().map((time) => (
             <TouchableOpacity
-                style={[styles.filterButton, selectedTime === "all" && styles.filterButtonActive]}
-                onPress={() => setSelectedTime("all")}
+              key={time.toMillis()}
+              style={[styles.filterButton, selectedTime === time.toMillis().toString() && styles.filterButtonActive]}
+              onPress={() => setSelectedTime(time.toMillis().toString())}
             >
-                <Text style={[styles.filterText, selectedTime === "all" && styles.filterTextActive]}>الكل</Text>
+              <Text style={[styles.filterText, selectedTime === time.toMillis().toString() && styles.filterTextActive]}>
+                حتى {formatDate(time.toDate())}
+              </Text>
             </TouchableOpacity>
-            {[...sortedClearTimes].reverse().map((time) => (
-                <TouchableOpacity
-                    key={time.toMillis()}
-                    style={[styles.filterButton, selectedTime === time.toMillis().toString() && styles.filterButtonActive]}
-                    onPress={() => setSelectedTime(time.toMillis().toString())}
-                >
-                    <Text style={[styles.filterText, selectedTime === time.toMillis().toString() && styles.filterTextActive]}>
-                        حتى {formatDate(time.toDate())}
-                    </Text>
-                </TouchableOpacity>
-            ))}
+          ))}
         </ScrollView>
       </View>
 
       {/* Summary Section */}
       {invoices.length > 0 && !invoicesLoading && (
         <View style={styles.summaryContainer}>
-            <View style={styles.summaryBox}>
-                <Text style={styles.summaryLabel}>إجمالي الفواتير</Text>
-                <Text style={styles.summaryValue}>{invoiceStats.count}</Text>
-            </View>
-            <View style={styles.summaryBox}>
-                <Text style={styles.summaryLabel}>المبلغ الإجمالي</Text>
-                {/* Use formatCurrency and corrected currency symbol */}
-                <Text style={styles.summaryValue}>{formatCurrency(invoiceStats.total)} د.ع</Text>
-            </View>
+          <View style={styles.summaryBox}>
+            <Text style={styles.summaryLabel}>إجمالي الفواتير</Text>
+            <Text style={styles.summaryValue}>{invoiceStats.count}</Text>
+          </View>
+          <View style={styles.summaryBox}>
+            <Text style={styles.summaryLabel}>المبلغ الإجمالي</Text>
+            {/* Use formatCurrency and corrected currency symbol */}
+            <Text style={styles.summaryValue}>{formatCurrency(invoiceStats.total)} د.ع</Text>
+          </View>
         </View>
       )}
 
@@ -288,7 +282,7 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
     color: theme === 'dark' ? '#e2e8f0' : '#1a2533',
-    textAlign: 'right',
+    textAlign: 'center',
   },
   backButton: {
     padding: 5,

@@ -2,9 +2,19 @@ import { useTheme } from '@/context/ThemeContext';
 import useFirebaseAuth from '@/hooks/use-firebase-auth';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-// MODIFIED: Imported getDocs for the refresh action
-import { collection, getDocs, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  collection,
+  DocumentData,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  QueryDocumentSnapshot,
+  startAfter,
+  where,
+} from 'firebase/firestore';
+// MODIFIED: Added useRef for the FlatList reference
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -16,17 +26,23 @@ import {
   View,
 } from 'react-native';
 
-import FilterDialog from '../../components/FilterDialog';
-import InfoCard from '../../components/InfoCard'; // Assuming InfoCard is updated to not require `viewableItems`
+import FilterDialog, { User } from '../../components/FilterDialog'; // Assuming User is exported
+import InfoCard from '../../components/InfoCard';
 import { db } from '../../lib/firebase';
 import { ServiceRequest } from '../../lib/types';
 
+// --- Interfaces (defined here for type safety, could be imported) ---
+interface DateRange {
+  start: Date | null;
+  end: Date | null;
+}
+
 // --- Constants ---
-const AVAILABLE_TYPES = ['مشكلة', 'طلب جديد', 'طلب', 'شكوى'];
+// AVAILABLE_TYPES is removed as the dialog has its own hardcoded list.
 const AVAILABLE_STATUSES = ['مفتوح', 'قيد المعالجة', 'معلق', 'مكتمل', 'مغلق'];
 const AVAILABLE_PRIORITIES = ['عالية', 'متوسطة', 'منخفضة'];
 
-// --- Reusable Sub-components ---
+// --- Sub-components ---
 const FilterPill = React.memo(({ label, onRemove }: { label: string; onRemove: () => void }) => {
   const { theme } = useTheme();
   return (
@@ -40,12 +56,39 @@ const FilterPill = React.memo(({ label, onRemove }: { label: string; onRemove: (
 });
 FilterPill.displayName = 'FilterPill';
 
-const ActiveFilters = React.memo(({ filters, onClearFilter, onClearAll }: {
-  filters: { priority: string | null; type: string | null; status: string | null; };
-  onClearFilter: (key: 'priority' | 'type' | 'status') => void;
+// MODIFIED: ActiveFilters now supports all new filter types
+type FilterKeys = 'priority' | 'type' | 'status' | 'creator' | 'assigned' | 'date';
+const ActiveFilters = React.memo(({
+  filters,
+  users,
+  onClearFilter,
+  onClearAll,
+}: {
+  filters: {
+    priority: string | null;
+    type: string | null;
+    status: string | null;
+    creator: string | null;
+    assigned: string[];
+    dateRange: DateRange;
+  };
+  users: User[];
+  onClearFilter: (key: FilterKeys) => void;
   onClearAll: () => void;
 }) => {
-  const hasFilters = Object.values(filters).some(v => v);
+  const creatorName = useMemo(() => {
+    if (!filters.creator) return null;
+    return users.find(u => u.uid === filters.creator)?.name || '...';
+  }, [filters.creator, users]);
+
+  const hasFilters =
+    !!filters.priority ||
+    !!filters.type ||
+    !!filters.status ||
+    !!filters.creator ||
+    filters.assigned.length > 0 ||
+    !!filters.dateRange.start;
+
   if (!hasFilters) return null;
 
   return (
@@ -60,6 +103,15 @@ const ActiveFilters = React.memo(({ filters, onClearFilter, onClearAll }: {
         {filters.status && (
           <FilterPill label={`الحالة: ${filters.status}`} onRemove={() => onClearFilter('status')} />
         )}
+        {creatorName && (
+          <FilterPill label={`المنشئ: ${creatorName}`} onRemove={() => onClearFilter('creator')} />
+        )}
+        {filters.assigned.length > 0 && (
+          <FilterPill label={`مُعين لـ: ${filters.assigned.length}`} onRemove={() => onClearFilter('assigned')} />
+        )}
+        {filters.dateRange.start && (
+          <FilterPill label={`النطاق: ${filters.dateRange.start.toLocaleDateString('ar-EG')}`} onRemove={() => onClearFilter('date')} />
+        )}
       </ScrollView>
       <TouchableOpacity onPress={onClearAll}>
         <Text style={styles.clearAllText}>مسح الكل</Text>
@@ -73,72 +125,120 @@ ActiveFilters.displayName = 'ActiveFilters';
 const MyRequestsScreen: React.FC = () => {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false); // ADDED: State for pull-to-refresh
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isPaginating, setIsPaginating] = useState(false);
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [allDataLoaded, setAllDataLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterVisible, setIsFilterVisible] = useState(false);
 
-  // Filter States
+  // --- MODIFIED: Consolidated Filter States ---
+  const [usersList, setUsersList] = useState<User[]>([]);
   const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [selectedCreator, setSelectedCreator] = useState<string | null>(null);
+  const [selectedAssignedUsers, setSelectedAssignedUsers] = useState<string[]>([]);
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
+
+  // --- NEW: State and Ref for Scroll-to-Top Button ---
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const flatListRef = useRef<FlatList<ServiceRequest>>(null);
 
   const { user } = useFirebaseAuth();
   const { theme } = useTheme();
   const router = useRouter();
 
-  // --- Data Fetching Logic (Real-time listener) ---
+  const PAGE_SIZE = 10;
+
+  // --- NEW: Fetch users for the filter dialog ---
   useEffect(() => {
-    if (!user?.uid) return;
-    const q = query(
-      collection(db, 'serviceRequests'),
-      where('creatorId', '==', user.uid),
-      orderBy('createdAt', 'desc'),
-      limit(10)
-    );
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const fetchedRequests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
-      setRequests(fetchedRequests);
-      setIsLoading(false);
-    }, (error) => {
-      console.error(`Error fetching requests:`, error);
-      setRequests([]);
-      setIsLoading(false);
-    });
-    return () => {
-      unsubscribe();
-      setRequests([]);
+    const fetchUsers = async () => {
+      try {
+        const usersSnapshot = await getDocs(collection(db, 'users'));
+        const allUsers = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        setUsersList(allUsers);
+      } catch (error) {
+        console.error("Error fetching users for filter:", error);
+      }
     };
-  }, [user?.uid]);
+    fetchUsers();
+  }, []); // Run only once
 
-  // --- Memoized Logic and Callbacks ---
+  // --- Data Fetching Logic (Unchanged) ---
+  const loadMoreRequests = useCallback(async () => {
+    if (isPaginating || allDataLoaded || !user?.uid || !lastDoc) return;
+    setIsPaginating(true);
+    try {
+      const q = query(collection(db, 'serviceRequests'), where('creatorId', '==', user.uid), orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(PAGE_SIZE));
+      const querySnapshot = await getDocs(q);
+      const newRequests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
+      if (newRequests.length > 0) {
+        setRequests(prev => [...prev, ...newRequests]);
+        setLastDoc(querySnapshot.docs[querySnapshot.docs.length - 1]);
+      }
+      if (querySnapshot.docs.length < PAGE_SIZE) setAllDataLoaded(true);
+    } catch (error) {
+      console.error("Error loading more requests:", error);
+    } finally {
+      setIsPaginating(false);
+    }
+  }, [user?.uid, isPaginating, allDataLoaded, lastDoc]);
 
-  // ADDED: Callback for the pull-to-refresh action
   const onRefresh = useCallback(async () => {
     if (!user?.uid) {
       setIsRefreshing(false);
       return;
     }
-
     setIsRefreshing(true);
+    setAllDataLoaded(false);
+    setLastDoc(null);
     try {
-      // Create the same query but use getDocs for a one-time fetch
-      const q = query(
-        collection(db, 'serviceRequests'),
-        where('creatorId', '==', user.uid),
-        orderBy('createdAt', 'desc'),
-        limit(10)
-      );
+      const q = query(collection(db, 'serviceRequests'), where('creatorId', '==', user.uid), orderBy('createdAt', 'desc'), limit(PAGE_SIZE));
       const querySnapshot = await getDocs(q);
-      const fetchedRequests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
-      setRequests(fetchedRequests); // Manually update the state with the fresh data
+      const initialRequests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
+      setRequests(initialRequests);
+      setLastDoc(querySnapshot.docs[querySnapshot.docs.length - 1] ?? null);
+      if (querySnapshot.docs.length < PAGE_SIZE) setAllDataLoaded(true);
     } catch (error) {
       console.error("Error on refreshing requests:", error);
-      // You could add a user-facing error message here (e.g., using a toast)
     } finally {
-      setIsRefreshing(false); // Ensure the refreshing indicator is always hidden
+      setIsRefreshing(false);
     }
   }, [user?.uid]);
 
+  useEffect(() => {
+    if (user?.uid) {
+      setIsLoading(true);
+      onRefresh().finally(() => setIsLoading(false));
+    } else {
+      setRequests([]);
+      setIsLoading(false);
+    }
+  }, [user?.uid, onRefresh]);
+
+  // --- MODIFIED: Memoized Logic and Callbacks ---
+  const hasActiveFilters = useMemo(() => !!(
+    selectedPriority || selectedType || selectedStatus || selectedCreator || selectedAssignedUsers.length > 0 || dateRange.start
+  ), [selectedPriority, selectedType, selectedStatus, selectedCreator, selectedAssignedUsers, dateRange]);
+
+  const clearFilters = useCallback(() => {
+    setSelectedPriority(null);
+    setSelectedType(null);
+    setSelectedStatus(null);
+    setSelectedCreator(null);
+    setSelectedAssignedUsers([]);
+    setDateRange({ start: null, end: null });
+  }, []);
+
+  const handleClearFilter = useCallback((filterKey: FilterKeys) => {
+    if (filterKey === 'priority') setSelectedPriority(null);
+    if (filterKey === 'type') setSelectedType(null);
+    if (filterKey === 'status') setSelectedStatus(null);
+    if (filterKey === 'creator') setSelectedCreator(null);
+    if (filterKey === 'assigned') setSelectedAssignedUsers([]);
+    if (filterKey === 'date') setDateRange({ start: null, end: null });
+  }, []);
 
   const filteredRequests = useMemo(() => {
     return requests.filter(req => {
@@ -149,34 +249,48 @@ const MyRequestsScreen: React.FC = () => {
       const matchesPriority = !selectedPriority || req.priority === selectedPriority;
       const matchesType = !selectedType || req.type === selectedType;
       const matchesStatus = !selectedStatus || req.status === selectedStatus;
-      return matchesSearch && matchesPriority && matchesType && matchesStatus;
+      // --- NEW: Advanced filter logic ---
+      const matchesCreator = !selectedCreator || req.creatorId === selectedCreator;
+      const matchesAssignedUsers = !selectedAssignedUsers.length || (Array.isArray(req.assignedTo) && selectedAssignedUsers.some(uid => req.assignedTo.includes(uid)));
+      const matchesDateRange = (() => {
+        if (!dateRange.start && !dateRange.end) return true;
+        if (!req.createdAt?.toDate) return false;
+        const reqDate = req.createdAt.toDate();
+        const matchesStart = !dateRange.start || reqDate >= dateRange.start;
+        const matchesEnd = !dateRange.end || reqDate <= dateRange.end;
+        return matchesStart && matchesEnd;
+      })();
+
+      return matchesSearch && matchesPriority && matchesType && matchesStatus && matchesCreator && matchesAssignedUsers && matchesDateRange;
     });
-  }, [requests, searchQuery, selectedPriority, selectedType, selectedStatus]);
+  }, [requests, searchQuery, selectedPriority, selectedType, selectedStatus, selectedCreator, selectedAssignedUsers, dateRange]);
 
-  const hasActiveFilters = !!(selectedPriority || selectedType || selectedStatus);
 
-  const clearFilters = useCallback(() => {
-    setSelectedPriority(null);
-    setSelectedType(null);
-    setSelectedStatus(null);
+  // --- NEW: Handlers for Scroll-to-Top button ---
+  const handleScrollToTop = useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, []);
 
-  const handleClearFilter = useCallback((filterKey: 'priority' | 'type' | 'status') => {
-    if (filterKey === 'priority') setSelectedPriority(null);
-    if (filterKey === 'type') setSelectedType(null);
-    if (filterKey === 'status') setSelectedStatus(null);
+  const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
+    // Show button if scrolled more than a screen height (approx 400px)
+    if (event.nativeEvent.contentOffset.y > 400) {
+      setShowScrollToTop(true);
+    } else {
+      setShowScrollToTop(false);
+    }
   }, []);
 
-  const renderItem = useCallback(({ item }: { item: ServiceRequest }) => (
-    <InfoCard item={item} showActions={false} />
-  ), []);
-
+  const renderItem = useCallback(({ item }: { item: ServiceRequest }) => <InfoCard item={item} showActions={false} />, []);
   const keyExtractor = (item: ServiceRequest) => item.id;
   const toggleFilterPopup = useCallback(() => setIsFilterVisible(prev => !prev), []);
   const onAddPress = useCallback(() => router.push('/create-request'), [router]);
 
+  const renderListFooter = useCallback(() => {
+    if (!isPaginating) return null;
+    return <View style={styles.footerLoadingContainer}><ActivityIndicator size="small" color={theme.tabActive} /></View>;
+  }, [isPaginating, theme.tabActive]);
+
   const renderListEmpty = useCallback(() => {
-    // The main loading indicator only shows on initial load, not during a refresh.
     if (isLoading) {
       return (
         <View style={styles.loadingContainer}>
@@ -198,17 +312,23 @@ const MyRequestsScreen: React.FC = () => {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <FlatList
+        // --- NEW: Add ref and scroll handlers to FlatList ---
+        ref={flatListRef}
+        onScroll={handleScroll}
+        scrollEventThrottle={16} // Important for onScroll to fire frequently on Android
+        // --- End of new props ---
         data={filteredRequests}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         ListEmptyComponent={renderListEmpty}
         contentContainerStyle={styles.listContentContainer}
-        // ADDED: Props to enable pull-to-refresh
         onRefresh={onRefresh}
         refreshing={isRefreshing}
+        onEndReached={loadMoreRequests}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={renderListFooter}
         ListHeaderComponent={
           <View style={styles.headerContainer}>
-            {/* Title Section */}
             <View style={styles.titleSection}>
               <View style={styles.headerRow}>
                 <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.headerTitle, { color: theme.text }]}>التكتات</Text>
@@ -216,12 +336,11 @@ const MyRequestsScreen: React.FC = () => {
                   <Text adjustsFontSizeToFit numberOfLines={1} style={styles.addButtonText}>انشاء تكت</Text>
                 </TouchableOpacity>
               </View>
-              <Text  adjustsFontSizeToFit numberOfLines={1} style={[styles.headerSubtitle, { color: theme.text }]}>
+              <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.headerSubtitle, { color: theme.text }]}>
                 قائمة التكتات التي قمت بإنشائها.
               </Text>
             </View>
 
-            {/* Controls Section (Search, Filter, etc.) */}
             <View style={styles.controlsSection}>
               <View style={styles.controlsContainer}>
                 <View style={[styles.searchContainer, { backgroundColor: theme.header }]}>
@@ -235,11 +354,7 @@ const MyRequestsScreen: React.FC = () => {
                     returnKeyType="search"
                   />
                 </View>
-                <TouchableOpacity
-                  style={[styles.iconButton, { backgroundColor: theme.header }]}
-                  onPress={toggleFilterPopup}
-                  activeOpacity={0.7}
-                >
+                <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.header }]} onPress={toggleFilterPopup} activeOpacity={0.7}>
                   <Ionicons name="filter" size={22} color={hasActiveFilters ? theme.tabActive : theme.icon} />
                   {hasActiveFilters && <View style={[styles.filterDot, { backgroundColor: theme.tabActive }]} />}
                 </TouchableOpacity>
@@ -249,7 +364,15 @@ const MyRequestsScreen: React.FC = () => {
               </View>
 
               <ActiveFilters
-                filters={{ priority: selectedPriority, type: selectedType, status: selectedStatus }}
+                filters={{
+                  priority: selectedPriority,
+                  type: selectedType,
+                  status: selectedStatus,
+                  creator: selectedCreator,
+                  assigned: selectedAssignedUsers,
+                  dateRange,
+                }}
+                users={usersList}
                 onClearFilter={handleClearFilter}
                 onClearAll={clearFilters}
               />
@@ -258,45 +381,66 @@ const MyRequestsScreen: React.FC = () => {
         }
       />
 
+      {/* --- NEW: Conditionally render the scroll-to-top button --- */}
+      {showScrollToTop && (
+        <TouchableOpacity
+          style={[styles.scrollToTopButton, { backgroundColor: theme.tabActive }]}
+          onPress={handleScrollToTop}
+          activeOpacity={0.8}>
+          <Ionicons name="arrow-up" size={24} color="white" />
+        </TouchableOpacity>
+      )}
+
       <FilterDialog
         isVisible={isFilterVisible}
         onClose={toggleFilterPopup}
-        clearFilters={clearFilters}
+        // Priorities
         selectedPriority={selectedPriority}
         setSelectedPriority={setSelectedPriority}
         availablePriorities={AVAILABLE_PRIORITIES}
+        // Types
         selectedType={selectedType}
         setSelectedType={setSelectedType}
-        availableTypes={AVAILABLE_TYPES}
+        availableTypes={[]} // Ignored by component, uses its own hardcoded list
+        // Statuses
         selectedStatus={selectedStatus}
         setSelectedStatus={setSelectedStatus}
         availableStatuses={AVAILABLE_STATUSES}
+        // Users
+        users={usersList}
+        selectedCreator={selectedCreator}
+        setSelectedCreator={setSelectedCreator}
+        selectedAssignedUsers={selectedAssignedUsers}
+        setSelectedAssignedUsers={setSelectedAssignedUsers}
+        // Date
+        dateRange={dateRange}
+        setDateRange={setDateRange}
+        // Actions
+        clearFilters={clearFilters}
+        // Configuration
+        context="tickets"
+        showStatus={true}
       />
     </View>
   );
 };
 
-// --- Styles ---
+// --- Styles (Added scrollToTopButton style) ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  // Container for all header content, used in ListHeaderComponent
   headerContainer: {
-    paddingBottom: 8, // Space between header and first list item
+    paddingBottom: 8,
   },
-  // Style for the content of the FlatList
   listContentContainer: {
     paddingHorizontal: 16,
     paddingBottom: 32,
   },
   titleSection: {
     paddingVertical: 16,
-    // The horizontal padding is now handled by listContentContainer
   },
-  controlsSection: {
-    // The horizontal padding is now handled by listContentContainer
-  },
+  controlsSection: {},
   headerRow: {
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
@@ -429,6 +573,25 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontFamily: 'Cairo',
     opacity: 0.6,
+  },
+  footerLoadingContainer: {
+    paddingVertical: 20,
+  },
+  // --- NEW: Style for the scroll-to-top floating action button ---
+  scrollToTopButton: {
+    position: 'absolute',
+    bottom: 30,
+    right: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25, // Makes it a circle
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8, // Shadow for Android
+    shadowColor: '#000', // Shadow for iOS
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
 });
 

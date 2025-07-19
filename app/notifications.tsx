@@ -4,27 +4,36 @@ import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
 import { db } from '@/lib/firebase'; // Make sure your firebase config is exported from here
 import { Ionicons } from '@expo/vector-icons';
+// --- NEW/MODIFIED IMPORTS ---
+import { Video } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
+import { shareAsync } from 'expo-sharing'; // Added for the new save function
 import {
   collection,
-  getDocs,
+  onSnapshot, // MODIFIED: Using onSnapshot for real-time updates
   orderBy,
   query,
-
-  where
+  where,
 } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   FlatList,
+  Image,
+  Modal,
+  Platform,
   RefreshControl,
   StyleSheet,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
+// If you use a progress bar library, import it here
+// import * as Progress from 'react-native-progress';
 
-// --- Type Definitions ---
+
 type NotificationIconName =
   | 'checkmark-circle'
   | 'warning'
@@ -39,9 +48,14 @@ interface Notification {
   timestamp: string;
   type: 'info' | 'warning' | 'success' | 'error' | 'announcement';
   source: 'announcement' | 'serviceRequest';
+  imageUrl?: string;
 }
 
-// --- Helper Functions ---
+// --- Helper Functions (Unchanged) ---
+const isVideoUrl = (url?: string): boolean => {
+  if (!url) return false;
+  return /\.(mp4|mov|mkv|webm)$/i.test(url);
+};
 
 const getNotificationIcon = (theme: Theme, type: Notification['type']) => {
   switch (type) {
@@ -74,17 +88,20 @@ const formatTimestamp = (timestamp?: string): string => {
   return `منذ ${days} يوم`;
 };
 
+
 // --- Child Components (Unchanged) ---
 
 interface NotificationItemProps {
   item: Notification;
   onPress: (item: Notification) => void;
+  onMediaPress: (url: string) => void;
 }
 
-const NotificationItem = React.memo(({ item, onPress }: NotificationItemProps) => {
+const NotificationItem = React.memo(({ item, onPress, onMediaPress }: NotificationItemProps) => {
   const { theme, themeName } = useTheme();
   const styles = getStyles(theme, themeName);
   const icon = getNotificationIcon(theme, item.type);
+  const isVideo = isVideoUrl(item.imageUrl);
 
   return (
     <View style={styles.notificationWrapper}>
@@ -103,6 +120,25 @@ const NotificationItem = React.memo(({ item, onPress }: NotificationItemProps) =
             <ThemedText style={styles.notificationBody} numberOfLines={20}>
               {item.body}
             </ThemedText>
+            {item.imageUrl && (
+              <TouchableOpacity onPress={() => onMediaPress(item.imageUrl!)} style={styles.mediaContainer}>
+                {isVideo ? (
+                  <View>
+                    <Video
+                      source={{ uri: item.imageUrl }}
+                      style={styles.mediaPreview}
+                      resizeMode="cover"
+                      isMuted
+                    />
+                    <View style={styles.playIconOverlay}>
+                      <Ionicons name="play-circle" size={48} color="rgba(255, 255, 255, 0.8)" />
+                    </View>
+                  </View>
+                ) : (
+                  <Image source={{ uri: item.imageUrl }} style={styles.mediaPreview} resizeMode="cover" />
+                )}
+              </TouchableOpacity>
+            )}
             <ThemedText style={styles.timestamp}>{formatTimestamp(item.timestamp)}</ThemedText>
           </View>
         </View>
@@ -111,6 +147,7 @@ const NotificationItem = React.memo(({ item, onPress }: NotificationItemProps) =
   );
 });
 NotificationItem.displayName = 'NotificationItem';
+
 
 const EmptyState = React.memo(() => {
   const { theme, themeName } = useTheme();
@@ -126,145 +163,221 @@ const EmptyState = React.memo(() => {
 });
 EmptyState.displayName = 'EmptyState';
 
-// --- Main Screen Component ---
+// --- MAIN SCREEN COMPONENT (HEAVILY MODIFIED) ---
 
 export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  // State for each data source to handle real-time merging
+  const [announcementNotifs, setAnnouncementNotifs] = useState<Notification[]>([]);
+  const [serviceRequestNotifs, setServiceRequestNotifs] = useState<Notification[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const fadeAnim = useMemo(() => new Animated.Value(0), []);
 
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [selectedMediaUrl, setSelectedMediaUrl] = useState<string | null>(null);
+  const [downloadDialogVisible, setDownloadDialogVisible] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadInfo, setDownloadInfo] = useState<{ fileName: string; totalSize: number } | null>(null);
+
   const router = useRouter();
   const { theme, themeName } = useTheme();
   const styles = getStyles(theme, themeName);
+  const { userdoc } = usePermissions();
 
-  const {userdoc} = usePermissions()
-
-  const fetchNotifications = useCallback(async () => {
-    if (!userdoc) {
-      console.warn("User ID is not available. Cannot fetch notifications.");
+  // --- EFFECT 1: Set up real-time Firestore listeners ---
+  useEffect(() => {
+    if (!userdoc?.id) {
+      setNotifications([]);
       setLoading(false);
-      setRefreshing(false);
-      setNotifications([]); // Clear notifications if no user
       return;
     }
 
     setLoading(true);
-    try {
-      // 1. Fetch Announcements
-      const announcementsQuery = query(
-        collection(db, 'announcements'),
-        where('assignedUsers', 'array-contains', userdoc.id),
-        orderBy('createdAt', 'desc')
-      );
 
-      // 2. Fetch Service Requests
-      const serviceRequestsQuery = query(
-        collection(db, 'serviceRequests'),
-        where('assignedUsers', 'array-contains', userdoc.id),
-        orderBy('createdAt', 'desc')
-      );
+    const announcementsQuery = query(
+      collection(db, 'announcements'),
+      where('assignedUsers', 'array-contains', userdoc.id),
+      orderBy('createdAt', 'desc')
+    );
 
-      const [announcementsSnapshot, serviceRequestsSnapshot] = await Promise.all([
-        getDocs(announcementsQuery),
-        getDocs(serviceRequestsQuery),
-      ]);
+    const serviceRequestsQuery = query(
+      collection(db, 'serviceRequests'),
+      where('assignedUsers', 'array-contains', userdoc.id),
+      orderBy('createdAt', 'desc')
+    );
 
-      // 3. Map Announcements
-      const announcementNotifications: Notification[] = announcementsSnapshot.docs.map(doc => {
+    const unsubscribeAnnouncements = onSnapshot(announcementsQuery, (snapshot) => {
+      const announcementData: Notification[] = snapshot.docs.map(doc => {
         const data = doc.data();
-        let timestamp;
-        if (data.createdAt && typeof data.createdAt.toDate === 'function') {
-          timestamp = data.createdAt.toDate().toISOString();
-        } else {
-          const d = new Date(data.createdAt);
-          if (isNaN(d.getTime())) {
-            timestamp = new Date().toISOString();
-          } else {
-            timestamp = d.toISOString();
-          }
-        }
+        const timestamp = data.createdAt?.toDate?.().toISOString() || new Date().toISOString();
         return {
           id: doc.id,
           title: data.head || 'إعلان جديد',
           body: data.body || 'تفاصيل الإعلان غير متوفرة.',
-          timestamp: timestamp,
+          timestamp,
           type: 'announcement',
           source: 'announcement',
+          imageUrl: data.imageUrl,
         };
       });
+      setAnnouncementNotifs(announcementData);
+    }, (error) => {
+      console.error("Error fetching announcements snapshot:", error);
+      Alert.alert("خطأ", "لا يمكن تحميل الإعلانات.");
+    });
 
-      const serviceRequestNotifications: Notification[] = serviceRequestsSnapshot.docs.map(doc => {
+    const unsubscribeServiceRequests = onSnapshot(serviceRequestsQuery, (snapshot) => {
+      const serviceRequestData: Notification[] = snapshot.docs.map(doc => {
         const data = doc.data();
         const priority = data.priority || 'متوسط';
-        const requestType = data.type || 'غير محدد'; 
-        const creator = data.creatorName || 'النظام'; 
-
-        const body = `النوع: ${requestType}. أنشأها: ${creator}. الأولوية: ${priority}.`;
-        let timestamp;
-        if (data.createdAt && typeof data.createdAt.toDate === 'function') {
-          timestamp = data.createdAt.toDate().toISOString();
-        } else {
-          const d = new Date(data.createdAt);
-          if (isNaN(d.getTime())) {
-            timestamp = new Date().toISOString();
-          } else {
-            timestamp = d.toISOString();
-          }
-        }
+        const timestamp = data.createdAt?.toDate?.().toISOString() || new Date().toISOString();
         return {
           id: doc.id,
           title: `مهمة جديدة: ${data.title}`,
-          body: body,
-          timestamp: timestamp,
+          body: `النوع: ${data.type || 'غير محدد'}. أنشأها: ${data.creatorName || 'النظام'}. الأولوية: ${priority}.`,
+          timestamp,
           type: priority === 'عاجل' || priority === 'مرتفع' ? 'warning' : 'success',
           source: 'serviceRequest',
         };
       });
-       const allNotifications = [...announcementNotifications, ...serviceRequestNotifications];
-      allNotifications.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setServiceRequestNotifs(serviceRequestData);
+    }, (error) => {
+      console.error("Error fetching service requests snapshot:", error);
+      Alert.alert("خطأ", "لا يمكن تحميل المهام.");
+    });
 
-      setNotifications(allNotifications);
-    } catch (e) {
-      console.error('Failed to load notifications from Firestore:', e);
-      alert('حدث خطأ أثناء تحميل الإشعارات.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [userdoc]);
+    // Cleanup function to unsubscribe when the component unmounts
+    return () => {
+      unsubscribeAnnouncements();
+      unsubscribeServiceRequests();
+    };
+  }, [userdoc?.id]); // Rerun if user changes
 
+  // --- EFFECT 2: Merge and sort data from both listeners ---
   useEffect(() => {
-    fetchNotifications();
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
-  }, [fetchNotifications, fadeAnim]);
+    const allNotifications = [...announcementNotifs, ...serviceRequestNotifs];
+    allNotifications.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    setNotifications(allNotifications);
 
+    // Stop loading indicator once we have processed data
+    if (loading) {
+      setLoading(false);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [announcementNotifs, serviceRequestNotifs, fadeAnim]);
+
+  // --- MODIFIED: onRefresh is now just for UX feedback, as data is live ---
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchNotifications();
-  }, [fetchNotifications]);
+    // Data updates automatically, so just show the spinner for a short time
+    setTimeout(() => setRefreshing(false), 1000);
+  }, []);
 
-  const handleNotificationPress = useCallback(
-    (item: Notification) => {
-      if (item.source === 'serviceRequest') {
-        router.push(`/tasks/${item.id}`);
+  const handleNotificationPress = useCallback((item: Notification) => {
+    if (item.source === 'serviceRequest') {
+      router.push(`/tasks/${item.id}`);
+    }
+  }, [router]);
+
+  const handleMediaPress = useCallback((url: string) => {
+    setSelectedMediaUrl(url);
+    setModalVisible(true);
+  }, []);
+
+  const closeMediaModal = () => {
+    setModalVisible(false);
+    setSelectedMediaUrl(null);
+  };
+
+  // --- NEW: Modern, permission-friendly saveFile function ---
+  const saveFile = async (fileUri: string, fileName: string, mimeType?: string) => {
+    if (Platform.OS === 'android') {
+      try {
+        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (permissions.granted) {
+          const base64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
+          await FileSystem.StorageAccessFramework.createFileAsync(permissions.directoryUri, fileName, mimeType || 'application/octet-stream')
+            .then(async (newFileUri) => {
+              await FileSystem.writeAsStringAsync(newFileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
+              Alert.alert('نجاح', 'تم حفظ الملف بنجاح في المجلد الذي اخترته!');
+            })
+            .catch((e) => {
+              console.error(e);
+              Alert.alert('خطأ', 'حدث خطأ أثناء إنشاء الملف.');
+            });
+        } else {
+          // Fallback to share sheet if user denies permission
+          await shareAsync(fileUri, { dialogTitle: 'مشاركة أو حفظ هذا الملف' });
+        }
+      } catch (e) {
+        console.error(e);
+        Alert.alert('خطأ', 'حدث خطأ أثناء حفظ الملف.');
+        // Fallback to share sheet on any other error
+        await shareAsync(fileUri, { dialogTitle: 'مشاركة أو حفظ هذا الملف' }).catch(shareError => console.error(shareError));
       }
-    },
-    [router]
-  );
+    } else {
+      // iOS and other platforms use the share sheet
+      await shareAsync(fileUri, { dialogTitle: 'مشاركة أو حفظ هذا الملف' });
+    }
+  };
+
+  const handleDownload = async (url?: string) => {
+    const downloadUrl = url || selectedMediaUrl;
+    if (!downloadUrl) return;
+
+    closeMediaModal();
+
+    const fileExtension = downloadUrl.split('.').pop()?.split('?')[0] || 'tmp';
+    const fileName = `download-${Date.now()}.${fileExtension}`;
+    const tempFileUri = FileSystem.cacheDirectory + fileName;
+
+    setDownloadProgress(0);
+    setDownloadInfo({ fileName, totalSize: 0 });
+    setDownloadDialogVisible(true);
+
+    const downloadResumable = FileSystem.createDownloadResumable(
+      downloadUrl,
+      tempFileUri,
+      {},
+      (progress) => {
+        const percentage = progress.totalBytesWritten / progress.totalBytesExpectedToWrite;
+        setDownloadProgress(percentage);
+      }
+    );
+
+    try {
+      const result = await downloadResumable.downloadAsync();
+      if (result) {
+        setDownloadDialogVisible(false);
+        await saveFile(result.uri, fileName, result.mimeType);
+      } else {
+        throw new Error('فشل التحميل: لم يتم إرجاع نتيجة.');
+      }
+    } catch (error) {
+      console.error(error);
+      setDownloadDialogVisible(false);
+      Alert.alert('خطأ', 'لا يمكن تحميل الملف.');
+    }
+  };
 
   const renderItem = useCallback(
-    ({ item }: { item: Notification }) => <NotificationItem item={item} onPress={handleNotificationPress} />,
-    [handleNotificationPress]
+    ({ item }: { item: Notification }) => (
+      <NotificationItem
+        item={item}
+        onPress={handleNotificationPress}
+        onMediaPress={handleMediaPress}
+      />
+    ),
+    [handleNotificationPress, handleMediaPress]
   );
 
   const keyExtractor = useCallback((item: Notification) => item.id, []);
-  
-  // --- RENDER LOGIC ---
 
   if (loading && !refreshing) {
     return (
@@ -294,6 +407,46 @@ export default function NotificationsScreen() {
           contentContainerStyle={notifications.length === 0 ? styles.emptyListContainer : { paddingTop: 8 }}
         />
       </Animated.View>
+
+      {/* Media Viewer Modal */}
+      <Modal visible={isModalVisible} transparent={true} animationType="fade">
+        <View style={styles.modalContainer}>
+          <TouchableOpacity style={styles.modalCloseButton} onPress={closeMediaModal}>
+            <Ionicons name="close-circle" size={32} color={theme.white} />
+          </TouchableOpacity>
+          {selectedMediaUrl && (
+            isVideoUrl(selectedMediaUrl) ? (
+              <Video
+                source={{ uri: selectedMediaUrl }}
+                style={styles.modalMedia}
+                resizeMode="contain"
+                useNativeControls
+                shouldPlay
+              />
+            ) : (
+              <Image source={{ uri: selectedMediaUrl }} style={styles.modalMedia} resizeMode="contain" />
+            )
+          )}
+          <TouchableOpacity style={styles.modalDownloadButton} onPress={() => handleDownload()}>
+            <Ionicons name="download-outline" size={24} color={theme.white} style={{ marginRight: 8 }} />
+            <ThemedText style={{ color: theme.white, fontWeight: 'bold' }}>تحميل</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* Download Progress Dialog */}
+      <Modal visible={downloadDialogVisible} transparent={true} animationType="fade">
+        <View style={styles.dialogContainer}>
+          <View style={styles.dialogContent}>
+            <ThemedText style={styles.dialogTitle}>جاري التحميل...</ThemedText>
+            {downloadInfo && <ThemedText style={styles.dialogText}>{downloadInfo.fileName}</ThemedText>}
+            <View style={styles.progressBarContainer}>
+              <View style={[styles.progressBar, { width: `${downloadProgress * 100}%` }]} />
+            </View>
+            <ThemedText style={styles.dialogText}>{`${Math.round(downloadProgress * 100)}%`}</ThemedText>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -353,6 +506,7 @@ const getStyles = (theme: Theme, themeName: 'light' | 'dark') =>
     timestamp: {
       fontSize: 12,
       color: theme.textSecondary,
+      marginTop: 8,
     },
     emptyListContainer: {
       flexGrow: 1,
@@ -375,5 +529,82 @@ const getStyles = (theme: Theme, themeName: 'light' | 'dark') =>
       color: theme.textSecondary,
       textAlign: 'center',
       lineHeight: 24,
+    },
+    mediaContainer: {
+      marginTop: 8,
+      borderRadius: 12,
+      overflow: 'hidden',
+      backgroundColor: theme.border,
+    },
+    mediaPreview: {
+      width: '100%',
+      height: 180,
+    },
+    playIconOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalContainer: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.9)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalMedia: {
+      width: '100%',
+      height: '80%',
+    },
+    modalCloseButton: {
+      position: 'absolute',
+      top: Platform.OS === 'ios' ? 60 : 40,
+      right: 20,
+      zIndex: 1,
+    },
+    modalDownloadButton: {
+      position: 'absolute',
+      bottom: Platform.OS === 'ios' ? 60 : 40,
+      backgroundColor: theme.primary,
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      borderRadius: 30,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    dialogContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    dialogContent: {
+      width: '80%',
+      backgroundColor: theme.card,
+      borderRadius: 12,
+      padding: 20,
+      alignItems: 'center',
+    },
+    dialogTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      marginBottom: 10,
+    },
+    dialogText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginBottom: 15,
+    },
+    progressBarContainer: {
+      height: 10,
+      width: '100%',
+      backgroundColor: theme.border,
+      borderRadius: 5,
+      overflow: 'hidden',
+      marginBottom: 10,
+    },
+    progressBar: {
+      height: '100%',
+      backgroundColor: theme.primary,
+      borderRadius: 5,
     },
   });

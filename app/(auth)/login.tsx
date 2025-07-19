@@ -1,9 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 // HIGHLIGHT: expo-blur is no longer needed
-// import { BlurView } from 'expo-blur'; 
+// import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+// --- MODIFIED ---: Added signOut for role-based auth
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+// --- NEW ---: Added Firestore imports to check user roles
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import React, { memo, useEffect, useState } from 'react'; // HIGHLIGHT: Imported 'memo'
+// --- NEW ---: Added useRouter for manual navigation
+import { useRouter } from 'expo-router';
 import {
   DimensionValue,
   Keyboard,
@@ -32,7 +37,11 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { UseDialog } from '@/context/DialogContext';
-import { auth } from '@/lib/firebase';
+// --- MODIFIED ---: Imported 'db' from firebase config
+import { auth, db } from '@/lib/firebase';
+
+// --- NEW ---: Define the roles that are allowed to access this app.
+const ALLOWED_ROLES = ['فني', 'تسويق', "Developer"];
 
 const theme = {
   background: ['#0a0e1a', '#1a1f2e', '#0f1419'],
@@ -128,8 +137,8 @@ const FiberOpticLine = memo(
 
     const lineStyle =
       direction === 'horizontal' ? styles.fiberLineHorizontal
-      : direction === 'vertical' ? styles.fiberLineVertical
-      : styles.fiberLineDiagonal;
+        : direction === 'vertical' ? styles.fiberLineVertical
+          : styles.fiberLineDiagonal;
 
     return <Animated.View style={[lineStyle, animatedStyle]} />;
   }
@@ -172,6 +181,8 @@ const LoginScreen: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const { width, height } = useWindowDimensions();
   const { showDialog } = UseDialog();
+  // --- NEW ---
+  const router = useRouter();
 
   // --- Animations ---
   const logoScale = useSharedValue(1);
@@ -182,7 +193,7 @@ const LoginScreen: React.FC = () => {
     logoScale.value = withRepeat(withTiming(1.05, { duration: 2500, easing: Easing.bezier(0.4, 0, 0.6, 1) }), -1, true);
   }, [logoScale]);
 
-  // --- LOGIC BUG FIX: Added setIsLoading(false) on success ---
+  // --- MODIFIED ---: Added role-based authorization logic
   const handleLogin = async () => {
     Keyboard.dismiss();
     if (!email || !password) {
@@ -196,20 +207,55 @@ const LoginScreen: React.FC = () => {
     setIsLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      showDialog({
-        status: 'success',
-        message: 'تم تسجيل الدخول بنجاح!',
-        duration: 1500,
-      });
+      // Step 1: Authenticate with Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const user = userCredential.user;
+
+      if (user) {
+        // Step 2: Check user's role in Firestore
+        const usersCollectionRef = collection(db, 'users');
+        const q = query(usersCollectionRef, where('uid', '==', user.uid));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          const userDoc = querySnapshot.docs[0];
+          const userData = userDoc.data();
+          const userRole = userData.role;
+
+          // Step 3: Authorize based on role
+          if (ALLOWED_ROLES.includes(userRole)) {
+            showDialog({
+              status: 'success',
+              message: 'تم تسجيل الدخول بنجاح! جاري التوجيه...',
+              duration: 1500,
+            });
+            // Navigate to a default screen after successful login
+            router.replace('/(tabs)/');
+          } else {
+            // Not authorized: sign out and show error
+            await signOut(auth);
+            showDialog({
+              status: 'error',
+              message: 'ليس لديك الصلاحية للوصول إلى هذا التطبيق.',
+            });
+          }
+        } else {
+          // User document not found in Firestore (configuration error)
+          await signOut(auth);
+          showDialog({
+            status: 'error',
+            message: 'لم يتم العثور على بيانات المستخدم. يرجى الاتصال بالدعم.',
+          });
+        }
+      }
     } catch (error: any) {
+      // Handle auth errors like wrong password
       const errorMessage = firebaseErrorToArabic(error.code);
       showDialog({
         status: 'error',
         message: errorMessage,
       });
     } finally {
-      // Set loading to false regardless of success or failure
       setIsLoading(false);
     }
   };
@@ -245,7 +291,7 @@ const LoginScreen: React.FC = () => {
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(400).duration(800)}>
-              <ThemedText type="title">نظام الصيانة التقنية</ThemedText>
+              <ThemedText type="title"> تطبيق الصيانة التقنية</ThemedText>
               <ThemedText type="subtitle">لشبكة الألياف البصرية</ThemedText>
             </Animated.View>
 
@@ -413,9 +459,10 @@ const styles = StyleSheet.create({
   },
   buttonIcon: {
     marginRight: 0,
+    color: "black"
   },
   buttonText: {
-    color: theme.text,
+    color: "black",
     fontSize: 18,
     fontWeight: 'bold',
   },

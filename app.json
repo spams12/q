@@ -18,7 +18,7 @@
         "policy": "appVersion"
       },
       "bundleIdentifier": "com.tmody.QTM",
-      "buildNumber": "9",
+      "buildNumber": "10",
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "splash": {
@@ -40,7 +40,7 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "versionCode": 9
+      "versionCode": 10
     },
     "web": {
       "bundler": "metro",
@@ -67,6 +67,13 @@
         "expo-image-picker",
         {
           "photosPermission": "The app accesses your photos to let you share them with your friends."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save photos and videos to your device.",
+          "isAccessMediaLocationEnabled": true
         }
       ],
       "expo-video",

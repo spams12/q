@@ -1,9 +1,13 @@
+import { Ionicons } from '@expo/vector-icons';
 import { format, isSameDay, isToday, isYesterday } from 'date-fns';
-import { enGB } from 'date-fns/locale';
+import { arSA } from 'date-fns/locale';
+import * as FileSystem from 'expo-file-system';
 import { LinearGradient } from 'expo-linear-gradient';
+import { shareAsync } from 'expo-sharing';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Dimensions,
   Image,
   Linking,
@@ -12,18 +16,17 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-
-import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '../context/ThemeContext';
 import { Comment, User } from '../lib/types';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-// Helper to get initials from a name for the avatar fallback
+// --- All your helper functions remain the same ---
+// getAvatarFallback, getCommentDate, formatDateHeader
 const getAvatarFallback = (name: string = 'مستخدم غير معروف') => {
   if (!name) return 'م م';
   return name
@@ -34,7 +37,6 @@ const getAvatarFallback = (name: string = 'مستخدم غير معروف') => {
     .substring(0, 2);
 };
 
-// Helper to reliably parse the timestamp
 const getCommentDate = (timestamp: any): Date => {
   if (!timestamp) return new Date();
   if (typeof timestamp.toDate === 'function') {
@@ -55,16 +57,16 @@ const getCommentDate = (timestamp: any): Date => {
   return new Date();
 };
 
-// Helper to format the date header in a WhatsApp-like style
 const formatDateHeader = (date: Date): string => {
   if (isToday(date)) {
     return 'اليوم';
   }
   if (isYesterday(date)) {
-    return 'امس';
+    return 'أمس';
   }
-  return format(date, 'MMMM d, yyyy', { locale: enGB });
+  return format(date, 'd MMMM yyyy', { locale: arSA });
 };
+
 
 interface CommentSectionProps {
   comments: Comment[];
@@ -117,6 +119,7 @@ const AutoSizedImage: React.FC<{
   );
 };
 
+
 const CommentSection: React.FC<CommentSectionProps> = ({
   comments,
   users,
@@ -127,8 +130,14 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [allImages, setAllImages] = useState<string[]>([]);
+  const [menuVisible, setMenuVisible] = useState(false);
   const { theme } = useTheme();
   const styles = getStyles(theme);
+
+  // --- NEW STATE for download progress dialog ---
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [isDownloadDialogVisible, setDownloadDialogVisible] = useState(false);
+  const [downloadInfo, setDownloadInfo] = useState({ fileName: '', totalSize: 0 });
 
   const modalPlayer = useVideoPlayer(selectedVideo || '', (player) => {
     if (selectedVideo) {
@@ -143,24 +152,95 @@ const CommentSection: React.FC<CommentSectionProps> = ({
       setSelectedVideo(null);
       setAllImages([]);
       setSelectedImageIndex(0);
+      setMenuVisible(false);
     }
   }, [modalVisible]);
+
+  const saveFile = async (fileUri: string, fileName: string, mimeType?: string) => {
+    if (Platform.OS === 'android') {
+      try {
+        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (permissions.granted) {
+          const base64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
+          const newFileUri = await FileSystem.StorageAccessFramework.createFileAsync(permissions.directoryUri, fileName, mimeType || 'application/octet-stream');
+          await FileSystem.writeAsStringAsync(newFileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
+          Alert.alert('نجاح', 'تم حفظ الملف بنجاح في المجلد الذي اخترته!');
+        } else {
+          await shareAsync(fileUri, { dialogTitle: 'مشاركة أو حفظ هذا الملف' });
+        }
+      } catch (e) {
+        console.error(e);
+        Alert.alert('خطأ', 'حدث خطأ أثناء حفظ الملف.');
+      }
+    } else {
+      await shareAsync(fileUri, { dialogTitle: 'مشاركة أو حفظ هذا الملف' });
+    }
+  };
+
+  // --- UPDATED download handler ---
+  const handleDownload = async (url?: string, providedFileName?: string) => {
+    const downloadUrl = url || selectedImage || selectedVideo;
+
+    if (!downloadUrl) {
+      Alert.alert('خطأ', 'لم يتم تحديد أي ملف للتحميل.');
+      return;
+    }
+    setMenuVisible(false); // Close the options menu if it's open
+
+    const fileName = `download-${Date.now()}`;
+    const tempFileUri = FileSystem.cacheDirectory + fileName;
+
+    // Reset progress and show dialog
+    setDownloadProgress(0);
+    setDownloadInfo({ fileName, totalSize: 0 }); // Set filename, size will be updated
+    setDownloadDialogVisible(true);
+
+
+    // Create a progress callback
+    const progressCallback: FileSystem.DownloadProgressCallback = (progress) => {
+      const totalSize = progress.totalBytesExpectedToWrite;
+      const percentage = progress.totalBytesWritten / totalSize;
+      setDownloadProgress(percentage);
+      // Update total size on first callback
+      if (downloadInfo.totalSize === 0) {
+        setDownloadInfo({ fileName, totalSize });
+      }
+    };
+
+    // Create a resumable download object
+    const downloadResumable = FileSystem.createDownloadResumable(
+      downloadUrl,
+      tempFileUri,
+      {},
+      progressCallback
+    );
+
+    try {
+      const result = await downloadResumable.downloadAsync();
+      if (result) {
+        console.log('اكتمل التنزيل إلى:', result.uri);
+        // Hide dialog before showing save options
+        setDownloadDialogVisible(false);
+        await saveFile(result.uri, fileName, result.mimeType);
+      } else {
+        throw new Error('فشل التحميل: لم يتم إرجاع نتيجة.');
+      }
+    } catch (error) {
+      console.error(error);
+      setDownloadDialogVisible(false); // Hide dialog on error
+      Alert.alert('خطأ', 'لا يمكن تحميل الملف.');
+    }
+  };
+
 
   const navigateImage = useCallback(
     (direction: 'next' | 'prev') => {
       if (!allImages.length) return;
-      
-      let newIndex = selectedImageIndex;
-      
-      if (direction === 'next' && selectedImageIndex < allImages.length - 1) {
-        newIndex = selectedImageIndex + 1;
-      } else if (direction === 'prev' && selectedImageIndex > 0) {
-        newIndex = selectedImageIndex - 1;
-      } else {
-        return;
-      }
+      const newIndex = direction === 'next'
+        ? (selectedImageIndex + 1) % allImages.length
+        : (selectedImageIndex - 1 + allImages.length) % allImages.length;
 
-      if (newIndex >= 0 && newIndex < allImages.length && allImages[newIndex]) {
+      if (allImages[newIndex]) {
         setSelectedImageIndex(newIndex);
         setSelectedImage(allImages[newIndex]);
       }
@@ -172,35 +252,23 @@ const CommentSection: React.FC<CommentSectionProps> = ({
     () =>
       Gesture.Pan()
         .onEnd(event => {
-          if (!modalVisible || !selectedImage || allImages.length <= 1) {
-            return;
-          }
-
+          if (!modalVisible || !selectedImage || allImages.length <= 1) return;
           const threshold = 50;
-          if (Math.abs(event.translationX) > threshold) {
-            if (event.translationX < -threshold) {
-              navigateImage('next');
-            } else if (event.translationX > threshold) {
-              navigateImage('prev');
-            }
-          }
+          if (event.translationX < -threshold) navigateImage('next');
+          if (event.translationX > threshold) navigateImage('prev');
         })
         .failOffsetY([-50, 50]),
     [modalVisible, selectedImage, allImages.length, navigateImage]
   );
 
   const getUser = (userId: string) => users.find(u => u.id === userId);
-  
+
   const filteredAndSortedComments = useMemo(() => comments
     .filter(comment => {
       const content = comment.content || '';
-      if ( (content.startsWith('قام') && content.includes('بتغيير حالة التكت من'))) {
-        return false;
-      }
-      const keywordsToHide = [ 'بتغيير عنوان التذكرة', 'بإلغاء إسناد التذكرة', 'بإسناد التذكرة إلى', ];
-      if (keywordsToHide.some(keyword => content.includes(keyword))) {
-        return false;
-      }
+      if ((content.startsWith('قام') && content.includes('بتغيير حالة التكت من'))) return false;
+      const keywordsToHide = ['بتغيير عنوان التذكرة', 'بإلغاء إسناد التذكرة', 'بإسناد التذكرة إلى'];
+      if (keywordsToHide.some(keyword => content.includes(keyword))) return false;
       return true;
     })
     .sort((a, b) => getCommentDate(a.timestamp).getTime() - getCommentDate(b.timestamp).getTime()),
@@ -210,7 +278,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const handleImagePress = (imageUrl: string, images: string[], index: number) => {
     if (!imageUrl || !Array.isArray(images) || images.length === 0) return;
     const validIndex = Math.max(0, Math.min(index, images.length - 1));
-    
+
     setSelectedImage(imageUrl);
     setSelectedVideo(null);
     setAllImages(images);
@@ -220,7 +288,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 
   const handleVideoPress = (videoUrl: string) => {
     if (!videoUrl) return;
-    
     setSelectedVideo(videoUrl);
     setSelectedImage(null);
     setAllImages([]);
@@ -233,19 +300,53 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   };
 
   const handleLocationPress = (latitude: number, longitude: number) => {
-    const label = 'Shared Location';
+    const label = 'موقع تمت مشاركته';
     const url = Platform.select({
       ios: `maps://?q=${label}&ll=${latitude},${longitude}`,
       android: `geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`,
     });
-
-    if (url) {
-      Linking.openURL(url).catch(err => console.error("Couldn't load page", err));
-    }
+    if (url) Linking.openURL(url).catch(err => console.error("تعذر تحميل الصفحة", err));
   };
+
+  const formatBytes = (bytes: number, decimals = 2) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  }
+
 
   return (
     <View style={styles.container}>
+      {/* --- NEW Download Progress Dialog --- */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isDownloadDialogVisible}
+        onRequestClose={() => { /* Prevent closing by back button */ }}
+      >
+        <View style={styles.dialogOverlay}>
+          <View style={styles.dialogContainer}>
+            <Text style={styles.dialogTitle}>جاري تحميل الملف...</Text>
+            <Text style={styles.dialogFileName} numberOfLines={1}>{downloadInfo.fileName}</Text>
+
+            <View style={styles.progressBarContainer}>
+              <View style={[styles.progressBarFill, { width: `${downloadProgress * 100}%` }]} />
+            </View>
+
+            <View style={styles.progressTextContainer}>
+              <Text style={styles.progressPercentage}>{`${Math.round(downloadProgress * 100)}%`}</Text>
+              <Text style={styles.progressSize}>
+                {`${formatBytes(downloadProgress * downloadInfo.totalSize)} / ${formatBytes(downloadInfo.totalSize)}`}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Existing Image/Video Viewer Modal */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -255,6 +356,14 @@ const CommentSection: React.FC<CommentSectionProps> = ({
       >
         <GestureHandlerRootView style={{ flex: 1 }}>
           <View style={styles.modalOverlay}>
+            {menuVisible && (
+              <TouchableOpacity
+                style={StyleSheet.absoluteFill}
+                onPress={() => setMenuVisible(false)}
+                activeOpacity={1}
+              />
+            )}
+
             {selectedImage ? (
               <GestureDetector gesture={pan}>
                 <Image
@@ -273,13 +382,26 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             ) : null}
 
             <View style={styles.modalHeader}>
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={closeModal}
-              >
+              <TouchableOpacity style={styles.modalButton} onPress={closeModal}>
                 <Ionicons name="close" size={32} color="white" />
               </TouchableOpacity>
+
+              <TouchableOpacity style={styles.modalButton} onPress={() => setMenuVisible(true)}>
+                <Ionicons name="ellipsis-vertical" size={28} color="white" />
+              </TouchableOpacity>
             </View>
+
+            {menuVisible && (
+              <View style={styles.menuContainer}>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => handleDownload(selectedImage || selectedVideo)}
+                >
+                  <Text style={styles.menuItemText}>تحميل</Text>
+                  <Ionicons name="download-outline" size={20} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+            )}
 
             {selectedImage && allImages.length > 1 && (
               <View style={styles.imageCounter}>
@@ -292,14 +414,13 @@ const CommentSection: React.FC<CommentSectionProps> = ({
         </GestureHandlerRootView>
       </Modal>
 
+      {/* --- Main Component JSX (unchanged) --- */}
       <View style={styles.commentsList}>
         {filteredAndSortedComments.length === 0 ? (
           <View style={styles.emptyCommentsContainer}>
             <Ionicons name="chatbubbles-outline" size={48} color={theme.textSecondary} style={{ opacity: 0.5 }} />
             <Text style={styles.emptyCommentsText}>لا توجد تعليقات بعد</Text>
-            <Text style={styles.emptyCommentsSubText}>
-              كن أول من يضيف تعليقًا!
-            </Text>
+            <Text style={styles.emptyCommentsSubText}>كن أول من يضيف تعليقًا!</Text>
           </View>
         ) : (
           filteredAndSortedComments.map((comment, index) => {
@@ -315,88 +436,53 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             if (!previousCommentDate || !isSameDay(commentDate, previousCommentDate)) {
               dateHeader = (
                 <View style={styles.dateHeader}>
-                  <Text style={styles.dateHeaderText}>
-                    {formatDateHeader(commentDate)}
-                  </Text>
+                  <Text style={styles.dateHeaderText}>{formatDateHeader(commentDate)}</Text>
                 </View>
               );
             }
 
-            const isImageOnlyComment =
-              !comment.content?.trim() &&
-              (!comment.location) &&
-              comment.attachments &&
-              comment.attachments.length > 0 &&
-              comment.attachments.every(att => {
-                const isImage =
-                  att.fileType === 'image' || (/\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
-                return isImage;
-              });
-            
-            const isLocationOnlyComment = !comment.content?.trim() && !(comment.attachments && comment.attachments.length > 0) && !!comment.location;
+            const isImageOnlyComment = !comment.content?.trim() && !comment.location && comment.attachments?.length > 0 &&
+              comment.attachments.every(att => att.fileType === 'image' || (/\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName)));
 
-            const commentImages = comment.attachments?.filter(att => {
-              return att.fileType === 'image' || /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName);
-            }).map(att => att.fileUrl).filter((url): url is string => !!url) || [];
+            const isLocationOnlyComment = !comment.content?.trim() && !comment.attachments?.length && !!comment.location;
+
+            const commentImages = comment.attachments?.filter(att => att.fileType === 'image' || /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName))
+              .map(att => att.fileUrl).filter((url): url is string => !!url) || [];
 
             return (
               <React.Fragment key={comment.id}>
                 {dateHeader}
-                <View
-                  style={[
-                    styles.messageRow,
-                    isCurrentUser ? styles.messageRowRight : styles.messageRowLeft
-                  ]}
-                >
+                <View style={[styles.messageRow, isCurrentUser ? styles.messageRowRight : styles.messageRowLeft]}>
                   {!isCurrentUser && (
                     <View style={styles.avatarContainer}>
                       {user?.photoURL ? (
                         <Image source={{ uri: user.photoURL }} style={styles.avatar} />
                       ) : (
                         <View style={[styles.avatar, styles.avatarFallback]}>
-                          <Text style={styles.avatarFallbackText}>
-                            {getAvatarFallback(userName)}
-                          </Text>
+                          <Text style={styles.avatarFallbackText}>{getAvatarFallback(userName)}</Text>
                         </View>
                       )}
                     </View>
                   )}
 
-                  <View
-                    style={[
-                      styles.commentBubble,
-                      isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble,
-                      (isImageOnlyComment || isLocationOnlyComment) && styles.unwrappedContentBubble,
-                      isCurrentUser && theme.themeName === 'dark' && !isImageOnlyComment && !isLocationOnlyComment && { backgroundColor: 'transparent' },
-                    ]}
-                  >
-                    {/* MODIFICATION 1: Prevent gradient on image/location only comments */}
+                  <View style={[
+                    styles.commentBubble,
+                    isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble,
+                    (isImageOnlyComment || isLocationOnlyComment) && styles.unwrappedContentBubble,
+                    isCurrentUser && theme.themeName === 'dark' && !isImageOnlyComment && !isLocationOnlyComment && { backgroundColor: 'transparent' },
+                  ]}>
                     {isCurrentUser && theme.themeName === 'dark' && !isImageOnlyComment && !isLocationOnlyComment ? (
-                      <LinearGradient
-                        colors={theme.currentUserBubbleGradient as any}
-                        style={StyleSheet.absoluteFill}
-                      />
+                      <LinearGradient colors={theme.currentUserBubbleGradient as any} style={StyleSheet.absoluteFill} />
                     ) : null}
 
-                    {!isCurrentUser && (
-                      <Text style={styles.userName}>{userName}</Text>
-                    )}
-                    
-                    {comment.content ? (
-                      <Text style={[
-                        styles.messageText,
-                        isCurrentUser ? styles.currentUserText : styles.otherUserText
-                      ]}>
-                        {comment.content}
-                      </Text>
-                    ) : null}
+                    {!isCurrentUser && (<Text style={styles.userName}>{userName}</Text>)}
+                    {comment.content ? (<Text style={[styles.messageText, isCurrentUser ? styles.currentUserText : styles.otherUserText]}>{comment.content}</Text>) : null}
 
                     {comment.attachments && comment.attachments.length > 0 && (
                       <View style={[styles.attachmentsContainer, isImageOnlyComment && { marginTop: 0, gap: 2 }]}>
                         {comment.attachments.map((att, attIndex) => {
                           const isImage = att.fileType === 'image' || (/\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
                           const isVideo = att.fileType === 'video' || (/\.(mp4|mov|avi|mkv)$/i.test(att.fileName));
-                          
                           const mediaUrl = att.fileUrl;
 
                           return (
@@ -405,12 +491,12 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                               onPress={() => {
                                 if (isImage && mediaUrl) {
                                   const currentImageIndex = commentImages.indexOf(mediaUrl);
-                                  const validIndex = currentImageIndex >= 0 ? currentImageIndex : 0;
-                                  handleImagePress(mediaUrl, commentImages, validIndex);
+                                  handleImagePress(mediaUrl, commentImages, currentImageIndex >= 0 ? currentImageIndex : 0);
                                 } else if (isVideo && mediaUrl) {
                                   handleVideoPress(mediaUrl);
                                 } else if (mediaUrl) {
-                                  Linking.openURL(mediaUrl);
+                                  // This now calls the updated handler
+                                  handleDownload(mediaUrl, att.fileName);
                                 }
                               }}
                               style={[styles.attachmentItem, isImageOnlyComment && { borderRadius: 12, overflow: 'hidden' }]}
@@ -419,18 +505,10 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                               {isImage && mediaUrl ? (
                                 <View style={styles.imageAttachmentContainer}>
                                   {isImageOnlyComment ? (
-                                    <AutoSizedImage
-                                      uri={mediaUrl}
-                                      style={styles.fullWidthImage}
-                                      resizeMode="contain"
-                                    />
+                                    <AutoSizedImage uri={mediaUrl} style={styles.fullWidthImage} resizeMode="contain" />
                                   ) : (
                                     <>
-                                      <Image
-                                        source={{ uri: mediaUrl }}
-                                        style={styles.attachmentImage}
-                                        resizeMode="cover"
-                                      />
+                                      <Image source={{ uri: mediaUrl }} style={styles.attachmentImage} resizeMode="cover" />
                                       <View style={styles.imageOverlay}>
                                         <Ionicons name="expand-outline" size={20} color="white" />
                                       </View>
@@ -446,18 +524,10 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                                 </View>
                               ) : (
                                 <View style={styles.fileAttachment}>
-                                  <View style={styles.fileIcon}>
-                                    <Ionicons name="document-text-outline" size={24} color={theme.primary} />
-                                  </View>
+                                  <View style={styles.fileIcon}><Ionicons name="document-text-outline" size={24} color={theme.primary} /></View>
                                   <View style={styles.fileInfo}>
-                                    <Text style={styles.fileName} numberOfLines={1}>
-                                      {att.fileName}
-                                    </Text>
-                                    {(att.fileSize) && (
-                                      <Text style={styles.fileSize}>
-                                        {(att.fileSize / 1024).toFixed(1)} كيلوبايت
-                                      </Text>
-                                    )}
+                                    <Text style={styles.fileName} numberOfLines={1}>{att.fileName}</Text>
+                                    {att.fileSize && (<Text style={styles.fileSize}>{(att.fileSize / 1024).toFixed(1)} كيلوبايت</Text>)}
                                   </View>
                                   <Ionicons name="download-outline" size={20} color={theme.primary} />
                                 </View>
@@ -470,27 +540,17 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 
                     {comment.location && (
                       <TouchableOpacity
-                        onPress={() => {
-                          if (comment.location) {
-                            handleLocationPress(comment.location.latitude, comment.location.longitude)
-                          }
-                        }}
-                        style={[
-                          styles.locationAttachment,
-                          isLocationOnlyComment && { marginTop: 0, width: screenWidth * 0.65 }
-                        ]}
+                        onPress={() => { if (comment.location) handleLocationPress(comment.location.latitude, comment.location.longitude) }}
+                        style={[styles.locationAttachment, isLocationOnlyComment && { marginTop: 0, width: screenWidth * 0.65 }]}
                       >
                         <Ionicons name="map-outline" size={24} color={theme.primary} />
                         <View style={styles.locationInfo}>
-                          <Text style={styles.locationText}>Location Shared</Text>
-                          <Text style={styles.locationCoords}>
-                            {comment.location.latitude.toFixed(4)}, {comment.location.longitude.toFixed(4)}
-                          </Text>
+                          <Text style={styles.locationText}>تمت مشاركة الموقع</Text>
+                          <Text style={styles.locationCoords}>{comment.location.latitude.toFixed(4)}, {comment.location.longitude.toFixed(4)}</Text>
                         </View>
                       </TouchableOpacity>
                     )}
-                    
-                    {/* MODIFICATION 2: Hide timestamp container for location-only comments */}
+
                     {!isLocationOnlyComment && (
                       <View style={styles.timestampContainer}>
                         <Text style={[
@@ -498,11 +558,11 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                           isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp,
                           isImageOnlyComment && styles.imageOnlyTimestamp,
                         ]}>
-                        {format(commentDate, 'h:mm aaa', { locale: enGB })}
+                          {format(commentDate, 'h:mm aaa', { locale: arSA })}
                         </Text>
                       </View>
                     )}
-                 </View>
+                  </View>
                 </View>
               </React.Fragment>
             );
@@ -513,8 +573,72 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   );
 };
 
-// I renamed `imageOnlyBubble` to `unwrappedContentBubble` for clarity, as it now applies to more than just images.
+// --- Add NEW styles for the dialog ---
 const getStyles = (theme: any) => StyleSheet.create({
+  // ... (all your existing styles)
+  // --- NEW DIALOG STYLES ---
+  dialogOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 30,
+  },
+  dialogContainer: {
+    backgroundColor: theme.background,
+    borderRadius: 15,
+    padding: 20,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  dialogTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme.text,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  dialogFileName: {
+    fontSize: 14,
+    color: theme.textSecondary,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  progressBarContainer: {
+    height: 8,
+    backgroundColor: theme.border,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: theme.primary,
+    borderRadius: 4,
+  },
+  progressTextContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  progressPercentage: {
+    fontSize: 13,
+    color: theme.text,
+    fontWeight: '500',
+  },
+  progressSize: {
+    fontSize: 12,
+    color: theme.textSecondary,
+  },
+
+  // --- EXISTING STYLES (unchanged) ---
   dateHeader: {
     alignSelf: 'center',
     backgroundColor: theme.themeName === 'dark' ? '#2c2c2e' : '#e5e5ea',
@@ -581,7 +705,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     maxWidth: '100%',
     overflow: 'hidden',
   },
-  unwrappedContentBubble: { // Renamed from imageOnlyBubble
+  unwrappedContentBubble: {
     padding: 0,
     backgroundColor: 'transparent',
     shadowOpacity: 0,
@@ -761,7 +885,11 @@ const getStyles = (theme: any) => StyleSheet.create({
     position: 'absolute',
     top: Platform.OS === 'ios' ? 50 : 20,
     left: 10,
-    zIndex: 1,
+    right: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 10,
   },
   modalButton: {
     padding: 8,
@@ -783,6 +911,29 @@ const getStyles = (theme: any) => StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '500',
+  },
+  menuContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 100 : 70,
+    right: 15,
+    backgroundColor: theme.themeName === 'dark' ? '#2c2c2e' : 'white',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 10,
+    zIndex: 20,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  menuItemText: {
+    color: theme.text,
+    fontSize: 16,
   },
 });
 

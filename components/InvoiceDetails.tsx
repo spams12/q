@@ -17,6 +17,7 @@ import {
 
 import { Theme, useTheme } from "@/context/ThemeContext";
 import { Invoice } from "@/lib/types";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 interface InvoiceDetailsProps {
   invoice: Invoice;
@@ -238,95 +239,85 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
                 <td style="text-align: left;">المجموع</td>
               </tr>
               ${invoice.items
-                .map((item) => {
-                  let subDetails = "";
-                  if (item.type === "newCustomerInstallation") {
-                    subDetails = `
-                            <br><small style="color: #6B7280;">الباقة: ${
-                              item.packageType
-                            }</small>
-                            ${
-                              item.cableLength
-                                ? `<br><small style="color: #6B7280;">طول الكيبل: ${item.cableLength} متر</small>`
-                                : ""
-                            }
-                            ${
-                              item.connectorType
-                                ? `<br><small style="color: #6B7280;">نوع الكونيكتر: ${item.connectorType}</small>`
-                                : ""
-                            }
-                            ${
-                              item.receiverDevice
-                                ? `<br><small style="color: #6B7280;">جهاز الاستقبال: ${item.receiverDevice}</small>`
-                                : ""
-                            }
-                            ${
-                              item.numHooks || item.numHooks === 0
-                                ? `<br><small style="color: #6B7280;">عدد الهوكات: ${item.numHooks}</small>`
-                                : ""
-                            }
-                            ${
-                              item.numBags || item.numBags === 0
-                                ? `<br><small style="color: #6B7280;">عدد الشناطات: ${item.numBags}</small>`
-                                : ""
-                            }
+        .map((item) => {
+          let subDetails = "";
+          if (item.type === "newCustomerInstallation") {
+            subDetails = `
+                            <br><small style="color: #6B7280;">الباقة: ${item.packageType
+              }</small>
+                            ${item.cableLength
+                ? `<br><small style="color: #6B7280;">طول الكيبل: ${item.cableLength} متر</small>`
+                : ""
+              }
+                            ${item.connectorType
+                ? `<br><small style="color: #6B7280;">نوع الكونيكتر: ${item.connectorType}</small>`
+                : ""
+              }
+                            ${item.receiverDevice
+                ? `<br><small style="color: #6B7280;">جهاز الاستقبال: ${item.receiverDevice}</small>`
+                : ""
+              }
+                            ${item.numHooks || item.numHooks === 0
+                ? `<br><small style="color: #6B7280;">عدد الهوكات: ${item.numHooks}</small>`
+                : ""
+              }
+                            ${item.numBags || item.numBags === 0
+                ? `<br><small style="color: #6B7280;">عدد الشناطات: ${item.numBags}</small>`
+                : ""
+              }
                         `;
-                  } else if (
-                    item.type === "maintenance" &&
-                    item.maintenanceType
-                  ) {
-                    subDetails = `
-                            <br><small style="color: #6B7280;">نوع الصيانة: ${
-                              item.maintenanceType === "cableReplacement"
-                                ? "استبدال كيبل"
-                                : item.maintenanceType === "connectorReplacement"
-                                ? "استبدال كونيكتر"
-                                : item.maintenanceType === "deviceReplacement"
-                                ? "استبدال جهاز"
-                                : "صيانة أخرى"
-                            }</small>
-                            ${
-                              item.deviceModel
-                                ? `<br><small style="color: #6B7280;">نوع الجهاز: ${item.deviceModel}</small>`
-                                : ""
-                            }
+          } else if (
+            item.type === "maintenance" &&
+            item.maintenanceType
+          ) {
+            subDetails = `
+                            <br><small style="color: #6B7280;">نوع الصيانة: ${item.maintenanceType === "cableReplacement"
+                ? "استبدال كيبل"
+                : item.maintenanceType === "connectorReplacement"
+                  ? "استبدال كونيكتر"
+                  : item.maintenanceType === "deviceReplacement"
+                    ? "استبدال جهاز"
+                    : "صيانة أخرى"
+              }</small>
+                            ${item.deviceModel
+                ? `<br><small style="color: #6B7280;">نوع الجهاز: ${item.deviceModel}</small>`
+                : ""
+              }
                         `;
-                  }
+          }
 
-                  return `
+          return `
                         <tr class="item">
                           <td>
                             ${item.description}
-                            ${
-                              item.additionalNotes
-                                ? `<br><small style="color: #6B7280;">${item.additionalNotes}</small>`
-                                : ""
-                            }
+                            ${item.additionalNotes
+              ? `<br><small style="color: #6B7280;">${item.additionalNotes}</small>`
+              : ""
+            }
                             ${subDetails}
                           </td>
                           <td style="text-align: center;">${item.quantity}</td>
                           <td style="text-align: center;">${formatPrice(
-                            item.unitPrice
-                          )}</td>
+              item.unitPrice
+            )}</td>
                           <td style="text-align: left;">${formatPrice(
-                            item.totalPrice
-                          )}</td>
+              item.totalPrice
+            )}</td>
                         </tr>
                       `;
-                })
-                .join("")}
+        })
+        .join("")}
               <tr class="total">
                 <td colspan="3" style="text-align: left; font-weight: bold;">الإجمالي</td>
                 <td style="text-align: left; font-weight: bold;">${formatPrice(
-                  invoice.totalAmount
-                )}</td>
+          invoice.totalAmount
+        )}</td>
               </tr>
             </table>
-            ${
-              invoice.notes
-                ? `<div style="margin-top: 20px;"><strong>ملاحظات:</strong><br>${invoice.notes}</div>`
-                : ""
-            }
+            ${invoice.notes
+        ? `<div style="margin-top: 20px;"><strong>ملاحظات:</strong><br>${invoice.notes}</div>`
+        : ""
+      }
             ${subscriberNoticeHtml}
             ${footerNoticeHtml}
           </div>
@@ -354,7 +345,9 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+
+    <SafeAreaView style={styles.container}>
+
       <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>تفاصيل الفاتورة</Text>
         <Pressable onPress={onClose}>
@@ -365,7 +358,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
         {/* Invoice Header with Logo */}
         <View style={styles.invoiceHeader}>
           <View style={styles.logoContainer}>
-         
+
           </View>
           <Text style={styles.companyName}>
             المشروع الوطني للانترنت - فرع واسط
@@ -518,7 +511,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
           <Text style={styles.buttonText}>تصدير كـ PDF</Text>
         </Pressable>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 

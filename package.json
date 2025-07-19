@@ -67,7 +67,8 @@
     "react-native-web": "~0.20.0",
     "react-native-webview": "13.13.5",
     "uuid": "^11.1.0",
-    "zod": "^3.25.64"
+    "zod": "^3.25.64",
+    "expo-media-library": "~17.1.7"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
