@@ -17,9 +17,6 @@ import {
 } from "firebase-functions/v2/firestore";
 
 // --- TYPE DEFINITIONS ---
-
-// ... (Your existing interfaces: Comment, UserResponse, ServiceRequest, Announcement) ...
-// (No changes needed for the interfaces, they are included for completeness)
 interface Comment {
   id: string;
   userId: string;
@@ -35,7 +32,6 @@ interface UserResponse {
   userId: string;
   userName: string;
 }
-
 interface ServiceRequest {
   onLocation: boolean;
   id: string;
@@ -64,63 +60,113 @@ interface ServiceRequest {
   estimatedTime?: number;
   userResponses?: UserResponse[];
 }
-
-// Define the type for an Announcement, including optional fields
 interface Announcement {
-  head: string; // Corresponds to notification title
-  body: string; // Corresponds to notification body
-  assignedUsers?: string[]; // Array of user IDs to notify
-  imageUrl?: string; // Optional: URL for a notification image
+  head: string;
+  body: string;
+  assignedUsers?: string[];
+  imageUrl?: string;
 }
 
 // --- INITIALIZATION ---
-
 admin.initializeApp();
 const expo = new Expo();
 
-// --- NEW: ROBUST NOTIFICATION SENDING AND CLEANUP ---
+// --- ROBUST NOTIFICATION SENDING AND CLEANUP ---
 
 /**
- * Fetches user tokens and creates a map to track which token belongs to which user.
- * This is crucial for cleaning up expired tokens later.
- * @param {string[]} userIds An array of user document IDs.
- * @returns {Promise<{messages: ExpoPushMessage[], tokenToUserMap: Map<string, string>}>}
+ * [MODIFIED] Fetches user tokens and groups the resulting messages by Expo Project ID.
+ * This prevents mixing tokens from different projects in the same API request.
+ * @param {string[]} userIdentifiers An array of user identifiers.
+ * @param {object} payload The notification payload.
+ * @returns {Promise<{
+ *   messagesByProject: Map<string, ExpoPushMessage[]>,
+ *   tokenToUserMap: Map<string, string>
+ * }>} An object containing messages grouped by project ID and a map of tokens to user IDs.
  */
 async function getMessagesAndTokenMap(
-  userIds: string[],
+  userIdentifiers: string[],
   payload: { title: string; body: string; data: { [key: string]: any } }
 ): Promise<{
-  messages: ExpoPushMessage[];
+  messagesByProject: Map<string, ExpoPushMessage[]>;
   tokenToUserMap: Map<string, string>;
 }> {
-  const messages: ExpoPushMessage[] = [];
+  const messagesByProject = new Map<string, ExpoPushMessage[]>();
   const tokenToUserMap = new Map<string, string>();
 
-  if (!userIds || userIds.length === 0) {
-    return { messages, tokenToUserMap };
+  if (!userIdentifiers || userIdentifiers.length === 0) {
+    return { messagesByProject, tokenToUserMap };
   }
 
-  const userDocs = await Promise.all(
-    userIds.map((id) => admin.firestore().collection("users").doc(id).get())
-  );
+  const usersRef = admin.firestore().collection("users");
+  const uniqueUserDocs = new Map<string, admin.firestore.DocumentSnapshot>();
 
-  for (const userDoc of userDocs) {
+  const docIdQuery = usersRef
+    .where(admin.firestore.FieldPath.documentId(), "in", userIdentifiers)
+    .get();
+  const uidQuery = usersRef.where("uid", "in", userIdentifiers).get();
+  const [docIdSnapshot, uidSnapshot] = await Promise.all([
+    docIdQuery,
+    uidQuery,
+  ]);
+
+  docIdSnapshot.forEach((doc) => uniqueUserDocs.set(doc.id, doc));
+  uidSnapshot.forEach((doc) => uniqueUserDocs.set(doc.id, doc));
+
+  for (const userDoc of uniqueUserDocs.values()) {
     if (!userDoc.exists) continue;
     const userData = userDoc.data();
-    if (!userData || !Array.isArray(userData.expoPushTokens)) continue;
+    if (!userData) continue;
 
-    for (const token of userData.expoPushTokens) {
-      if (Expo.isExpoPushToken(token)) {
-        messages.push({ to: token, sound: "default", ...payload });
-        tokenToUserMap.set(token, userDoc.id); // Map token back to user ID
+    const userTokensMap = userData.expoPushTokens;
+
+    if (
+      typeof userTokensMap !== "object" ||
+      userTokensMap === null ||
+      Array.isArray(userTokensMap)
+    ) {
+      logger.warn(
+        `User ${userDoc.id} has expoPushTokens in an unexpected format. Expected a map.`,
+        userTokensMap
+      );
+      continue;
+    }
+
+    // Iterate over project IDs and their corresponding token arrays
+    for (const [projectId, tokenArray] of Object.entries(userTokensMap)) {
+      if (!Array.isArray(tokenArray)) {
+        logger.warn(
+          `Expected an array of tokens for project ${projectId} for user ${userDoc.id}, but got something else.`,
+          tokenArray
+        );
+        continue;
+      }
+
+      // Ensure a message array exists for this project ID
+      if (!messagesByProject.has(projectId)) {
+        messagesByProject.set(projectId, []);
+      }
+      const projectMessages = messagesByProject.get(projectId)!;
+
+      for (const token of tokenArray) {
+        if (Expo.isExpoPushToken(token)) {
+          projectMessages.push({ to: token, sound: "default", ...payload });
+          tokenToUserMap.set(token, userDoc.id);
+        } else {
+          logger.warn(
+            `Invalid token format found for user ${userDoc.id}:`,
+            token
+          );
+        }
       }
     }
   }
-  return { messages, tokenToUserMap };
+
+  return { messagesByProject, tokenToUserMap };
 }
 
 /**
  * Processes push receipts to find and flag expired tokens for removal.
+ * (No changes needed in this function)
  * @param {ExpoPushReceipt[]} receipts The receipts for those tickets.
  * @param {Map<string, string>} ticketIdToTokenMap A map of push ticket IDs to tokens.
  * @param {Map<string, string>} tokenToUserMap A map of push tokens to user IDs.
@@ -157,8 +203,8 @@ function flagInvalidTokens(
 }
 
 /**
- * Orchestrates sending notifications, handling retries, and cleaning up invalid tokens.
- * This is the new main function to call from your triggers.
+ * [MODIFIED] Orchestrates sending notifications by project, handling retries,
+ * and cleaning up invalid tokens from the correct map field in Firestore.
  * @param {string[]} userIds Array of user IDs to notify.
  * @param {object} payload Notification content.
  * @param {string} logContext A descriptive context for logging.
@@ -168,109 +214,148 @@ async function sendNotificationsAndCleanUp(
   payload: { title: string; body: string; data: { [key: string]: any } },
   logContext: string
 ) {
-  const { messages, tokenToUserMap } = await getMessagesAndTokenMap(
+  const { messagesByProject, tokenToUserMap } = await getMessagesAndTokenMap(
     userIds,
     payload
   );
-  if (messages.length === 0) {
+
+  if (messagesByProject.size === 0) {
     logger.log(
       `No valid push tokens found for users in context: ${logContext}.`
     );
     return;
   }
 
-  const chunks = expo.chunkPushNotifications(messages);
   const allTickets: ExpoPushTicket[] = [];
-  const ticketIdToTokenMap = new Map<string, string>(); // New map
+  const ticketIdToTokenMap = new Map<string, string>();
+  const tokenToProjectMap = new Map<string, string>(); // To track which project a token belongs to
   const maxRetries = 3;
-  const baseDelay = 1000; // 1 second
+  const baseDelay = 1000;
 
+  let totalMessages = 0;
+  messagesByProject.forEach((messages) => (totalMessages += messages.length));
   logger.log(
-    `Sending ${messages.length} notifications in ${chunks.length} chunk(s) for ${logContext}.`
+    `Sending ${totalMessages} notifications across ${messagesByProject.size} project(s) for ${logContext}.`
   );
 
-  for (const chunk of chunks) {
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        const tickets = await expo.sendPushNotificationsAsync(chunk);
-        allTickets.push(...tickets);
+  // Iterate over each project and send its notifications separately
+  for (const [projectId, messages] of messagesByProject.entries()) {
+    logger.log(
+      `Processing ${messages.length} notifications for project: ${projectId}`
+    );
+    const chunks = expo.chunkPushNotifications(messages);
 
-        // --- New: Map ticket IDs to tokens ---
-        tickets.forEach((ticket, i) => {
-          if (ticket.status === "ok") {
-            const token = chunk[i].to as string;
-            ticketIdToTokenMap.set(ticket.id, token);
-          }
-        });
-        // -------------------------------------
+    for (const chunk of chunks) {
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const tickets = await expo.sendPushNotificationsAsync(chunk);
+          allTickets.push(...tickets);
 
-        logger.log(`Chunk sent successfully on attempt ${attempt + 1}.`);
-        break; // Success, exit retry loop for this chunk
-      } catch (error) {
-        logger.error(`Error sending chunk on attempt ${attempt + 1}:`, error);
-        if (attempt === maxRetries - 1) {
-          logger.error(
-            "Chunk failed after all retries. Giving up on this chunk."
+          tickets.forEach((ticket, i) => {
+            if (ticket.status === "ok") {
+              const token = (chunk[i] as ExpoPushMessage).to as string;
+              ticketIdToTokenMap.set(
+                (ticket as ExpoPushSuccessTicket).id,
+                token
+              );
+              // Also map the token to its project for easy cleanup later
+              tokenToProjectMap.set(token, projectId);
+            }
+          });
+
+          logger.log(
+            `Chunk for project ${projectId} sent successfully on attempt ${
+              attempt + 1
+            }.`
           );
-        } else {
-          const delay = baseDelay * Math.pow(2, attempt);
-          logger.log(`Retrying in ${delay}ms...`);
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          break; // Success, exit retry loop
+        } catch (error) {
+          logger.error(
+            `Error sending chunk for project ${projectId} on attempt ${
+              attempt + 1
+            }:`,
+            error
+          );
+          if (attempt === maxRetries - 1) {
+            logger.error(
+              `Chunk for ${projectId} failed after all retries. Giving up on this chunk.`
+            );
+          } else {
+            const delay = baseDelay * Math.pow(2, attempt);
+            logger.log(`Retrying in ${delay}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          }
         }
       }
     }
   }
 
-  // --- Process receipts for cleanup ---
   const receiptIds = allTickets
     .filter((ticket): ticket is ExpoPushSuccessTicket => ticket.status === "ok")
     .map((ticket) => ticket.id);
 
   if (receiptIds.length === 0) {
-    logger.log("No valid tickets to check for receipts.");
+    logger.log("No successful tickets to check for receipts.");
     return;
   }
 
   const receiptIdChunks = expo.chunkPushNotificationReceiptIds(receiptIds);
-  let allTokensToRemove = new Map<string, string[]>();
+  let allTokensToRemoveByUser = new Map<string, string[]>();
 
   for (const chunk of receiptIdChunks) {
     try {
       const receipts = await expo.getPushNotificationReceiptsAsync(chunk);
       const tokensToRemove = flagInvalidTokens(
         receipts,
-        ticketIdToTokenMap, // Pass the new map
+        ticketIdToTokenMap,
         tokenToUserMap
       );
-
-      // Merge results
+      // Merge results into the main map
       tokensToRemove.forEach((tokens, userId) => {
-        if (!allTokensToRemove.has(userId)) allTokensToRemove.set(userId, []);
-        allTokensToRemove.get(userId)!.push(...tokens);
+        if (!allTokensToRemoveByUser.has(userId)) {
+          allTokensToRemoveByUser.set(userId, []);
+        }
+        allTokensToRemoveByUser.get(userId)!.push(...tokens);
       });
     } catch (error) {
       logger.error("Error fetching receipts:", error);
     }
   }
 
-  // --- Perform Firestore cleanup ---
-  if (allTokensToRemove.size > 0) {
-    logger.log(`Found ${allTokensToRemove.size} users with expired tokens.`);
+  if (allTokensToRemoveByUser.size > 0) {
+    logger.log(
+      `Found ${allTokensToRemoveByUser.size} users with expired tokens to remove.`
+    );
     const cleanupPromises: Promise<any>[] = [];
-    allTokensToRemove.forEach((tokens, userId) => {
+    allTokensToRemoveByUser.forEach((tokens, userId) => {
       const userRef = admin.firestore().collection("users").doc(userId);
-      const promise = userRef.update({
-        expoPushTokens: FieldValue.arrayRemove(...tokens),
-      });
-      cleanupPromises.push(promise);
-      logger.log(`Removing ${tokens.length} token(s) for user ${userId}.`);
+      const updates: { [key: string]: FieldValue } = {};
+
+      // Group tokens by project to build the correct update payload
+      for (const token of tokens) {
+        const projectId = tokenToProjectMap.get(token);
+        if (projectId) {
+          const fieldPath = `expoPushTokens.${projectId}`;
+          // Use FieldValue.arrayRemove on the specific nested array
+          updates[fieldPath] = FieldValue.arrayRemove(token);
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        cleanupPromises.push(userRef.update(updates));
+        logger.log(
+          `Removing tokens for user ${userId} from relevant projects.`
+        );
+      }
     });
+
     await Promise.all(cleanupPromises);
     logger.log("Finished removing all flagged tokens from Firestore.");
   }
 }
 
 // --- REFACTORED TRIGGERS ---
+// (No changes needed in your triggers)
 
 export const sendNewRequestNotificationOnCreate = onDocumentCreated(
   { document: "serviceRequests/{requestId}", region: "europe-west1" },

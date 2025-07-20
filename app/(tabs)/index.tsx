@@ -14,7 +14,6 @@ import FilterDialog from '../../components/FilterDialog';
 import InfoCard from '../../components/InfoCard';
 import { handleAcceptTask, handleRejectTask } from '../../hooks/taskar';
 import { db } from '../../lib/firebase';
-// MODIFICATION: Added createdBy to ServiceRequest and defined User and DateRange types
 import { ServiceRequest, User } from '../../lib/types';
 
 // --- Type Definitions ---
@@ -29,8 +28,7 @@ const AVAILABLE_TYPES = [
   "مشكلة في التفعيل", "جباية", "شكوى", "مشكلة", "طلب", "استفسار", "اقتراح"
 ];
 const AVAILABLE_PRIORITIES = ['عالية', 'متوسطة', 'منخفضة'];
-// MODIFICATION: Added available statuses for the filter dialog
-const AVAILABLE_STATUSES = ['جديدة', 'قيد التنفيذ', 'مكتمل', 'معلق', 'مغلق', 'مرفوض'];
+const AVAILABLE_STATUSES = ['مفتوح', 'قيد المعالجة', 'معلق', 'مكتمل', 'مغلق'];
 const PAGE_SIZE = 15;
 const SCROLL_TO_TOP_THRESHOLD = 400;
 
@@ -76,7 +74,6 @@ const FilterPill = React.memo(({ label, onRemove }: { label: string; onRemove: (
 });
 FilterPill.displayName = 'FilterPill';
 
-// MODIFICATION: The ActiveFilters component has been significantly upgraded to handle all new filter types.
 const ActiveFilters = React.memo(({ filters, onClearFilter, onClearAll, users }: {
   filters: {
     priority: string | null;
@@ -239,11 +236,9 @@ const TasksScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-  const [actionLoadingTaskId, setActionLoadingTaskId] = useState<string | null>(null);
+  const [actionLoadingState, setActionLoadingState] = useState<{ id: string; type: 'accept' | 'reject' } | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
-
-  // MODIFICATION: Added state for all new filters
   const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
@@ -278,16 +273,17 @@ const TasksScreen: React.FC = () => {
 
     const baseQuery = collection(db, 'serviceRequests');
     const userQuery = where("assignedUsers", "array-contains", userdoc.id);
+    const notDeletedQuery = where("deleted", "==", false);
     const order = orderBy('createdAt', 'desc');
     const pageLimit = limit(PAGE_SIZE);
 
     let q: Query;
     switch (tabKey) {
       case 'New':
-        q = query(baseQuery, userQuery, where("status", "not-in", ['مكتمل', 'معلق', 'مغلق', 'مرفوض']), order);
+        q = query(baseQuery, userQuery, notDeletedQuery, where("status", "not-in", ['مكتمل', 'معلق', 'مغلق', 'مرفوض']), order);
         break;
       case 'Completed':
-        q = query(baseQuery, userQuery, where("status", "in", ['مكتمل', 'مغلق']), order);
+        q = query(baseQuery, userQuery, notDeletedQuery, where("status", "in", ['مكتمل', 'مغلق']), order);
         break;
       default:
         return null;
@@ -304,8 +300,17 @@ const TasksScreen: React.FC = () => {
       const categorizedData = { New: [] as ServiceRequest[], Accepted: [] as ServiceRequest[] };
       requests.forEach(req => {
         const userResponse = req.userResponses?.find(res => res.userId === userUid);
-        if (userResponse?.response === 'accepted') categorizedData.Accepted.push(req);
-        else categorizedData.New.push(req);
+
+        // MODIFICATION: Categorize tasks, ignoring rejected ones for the current user.
+        if (userResponse?.response === 'accepted') {
+          // Task is accepted by the user -> "Accepted" tab.
+          categorizedData.Accepted.push(req);
+        } else if (userResponse?.response === 'rejected') {
+          // Task is rejected by the user -> Do not display it.
+        } else {
+          // No response from this user yet -> "New" tab.
+          categorizedData.New.push(req);
+        }
       });
 
       setCachedData(prev => {
@@ -414,19 +419,18 @@ const TasksScreen: React.FC = () => {
   const handleAcceptTaskTEST = useCallback((taskId: string) => {
     if (!userdoc) return;
     const navigateToDetails = (id: string) => router.push({ pathname: "/tasks/[id]", params: { id } });
-    const setActionLoading = (action: 'accept' | 'reject' | null) => setActionLoadingTaskId(action ? taskId : null);
+    const setActionLoading = (action: 'accept' | 'reject' | null) => setActionLoadingState(action ? { id: taskId, type: action } : null);
     handleAcceptTask(taskId, userdoc, setActionLoading, navigateToDetails);
   }, [userdoc, router]);
 
   const handleRejectTaskTEST = useCallback((taskId: string) => {
     if (!userdoc) return;
-    const setActionLoading = (action: 'accept' | 'reject' | null) => setActionLoadingTaskId(action ? taskId : null);
+    const setActionLoading = (action: 'accept' | 'reject' | null) => setActionLoadingState(action ? { id: taskId, type: action } : null);
     handleRejectTask(taskId, userdoc, setActionLoading);
   }, [userdoc]);
 
   // --- Memoized Logic and Callbacks ---
 
-  // MODIFICATION: hasActiveFilters now checks all filters
   const hasActiveFilters = !!(
     selectedPriority ||
     selectedType ||
@@ -437,7 +441,6 @@ const TasksScreen: React.FC = () => {
     dateRange.end
   );
 
-  // MODIFICATION: filteredServiceRequests now applies all active filters
   const filteredServiceRequests = useMemo(() => {
     const currentData = cachedData[activeTab] || [];
     const filteredData = currentData.filter(req => {
@@ -463,7 +466,6 @@ const TasksScreen: React.FC = () => {
     return [...filteredData].sort((a, b) => {
       const dateA = getMillis(a.createdAt);
       const dateB = getMillis(b.createdAt);
-      // BUG FIX: Was `dateB - a`, corrected to `dateB - dateA`
       return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
     });
   }, [cachedData, activeTab, searchQuery, selectedPriority, selectedType, selectedStatus, selectedCreator, selectedAssignedUsers, dateRange, sortOrder]);
@@ -508,7 +510,8 @@ const TasksScreen: React.FC = () => {
   // --- Render Logic ---
   const renderItem = useCallback(({ item }: { item: ServiceRequest }) => {
     const hasResponded = item.userResponses?.some(res => res.userId === userUid);
-    const isActionLoading = actionLoadingTaskId === item.id;
+    const isAcceptLoading = actionLoadingState?.id === item.id && actionLoadingState?.type === 'accept';
+    const isRejectLoading = actionLoadingState?.id === item.id && actionLoadingState?.type === 'reject';
     const showActions = activeTab === 'New';
 
     return (
@@ -518,16 +521,17 @@ const TasksScreen: React.FC = () => {
         hasResponded={!!hasResponded}
         showActions={showActions}
         handleAcceptTask={handleAcceptTaskTEST}
-        isActionLoading={isActionLoading}
+        handleRejectTask={handleRejectTaskTEST}
+        isActionLoading={isAcceptLoading}
+        isRejecting={isRejectLoading}
       />
     );
-  }, [userUid, activeTab, actionLoadingTaskId, handleRejectTaskTEST, handleAcceptTaskTEST, users]);
+  }, [userUid, activeTab, actionLoadingState, handleRejectTaskTEST, handleAcceptTaskTEST, users]);
 
   const keyExtractor = useCallback((item: ServiceRequest) => item.id, []);
   const toggleFilterPopup = useCallback(() => setIsFilterVisible(prev => !prev), []);
   const toggleSortOrder = useCallback(() => setSortOrder(prev => (prev === 'desc' ? 'asc' : 'desc')), []);
 
-  // MODIFICATION: clearFilters now resets all filter states
   const clearFilters = useCallback(() => {
     setSelectedPriority(null);
     setSelectedType(null);
@@ -537,7 +541,6 @@ const TasksScreen: React.FC = () => {
     setDateRange({ start: null, end: null });
   }, []);
 
-  // MODIFICATION: handleClearFilter now handles all filter keys
   const handleClearFilter = useCallback((filterKey: 'priority' | 'type' | 'status' | 'creator' | 'assignedUsers' | 'dateRange') => {
     if (filterKey === 'priority') setSelectedPriority(null);
     if (filterKey === 'type') setSelectedType(null);
@@ -578,7 +581,6 @@ const TasksScreen: React.FC = () => {
             tintColor={theme.tabActive}
           />
         }
-        // MODIFICATION: Disabled fetching on scroll to prevent loading more data automatically.
         onEndReached={handleLoadMore}
         onEndReachedThreshold={1}
         onScroll={(e) => handleScroll(e.nativeEvent)}
@@ -633,7 +635,6 @@ const TasksScreen: React.FC = () => {
         </TouchableOpacity>
       )}
 
-      {/* MODIFICATION: The FilterDialog is now passed a context to change its appearance */}
       <FilterDialog
         isVisible={isFilterVisible}
         onClose={toggleFilterPopup}
@@ -667,7 +668,6 @@ const TasksScreen: React.FC = () => {
   );
 };
 
-// --- Styles (no changes) ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -775,7 +775,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     minHeight: 36,
   },
-  // MODIFICATION: Changed from a Pressable to a ScrollView, styles adjusted
   pillsScrollView: {
     flexGrow: 1,
     flexDirection: 'row-reverse',

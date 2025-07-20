@@ -17,10 +17,12 @@ interface InfoCardProps {
   showActions?: boolean;
   handleAcceptTask?: (ticketId: string) => void;
   handleRejectTask?: (ticketId: string) => void;
+  // MODIFICATION: Changed name for clarity (Accept loading)
   isActionLoading?: boolean;
+  // MODIFICATION: Added a new prop for the reject button's loading state
+  isRejecting?: boolean;
 }
 
-// ADDED: Array of ticket types for which client info should be hidden.
 const typesToHideClientInfo = ['اقتراح', 'استفسار', 'طلب', 'مشكلة'];
 
 const InfoCard: React.FC<InfoCardProps> = React.memo(({
@@ -30,13 +32,17 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
   handleAcceptTask,
   handleRejectTask,
   showActions = true,
-  isActionLoading = false
+  // MODIFICATION: Destructure both loading props with default values
+  isActionLoading = false,
+  isRejecting = false
 }) => {
   const router = useRouter();
   const { theme } = useTheme();
 
-  // ADDED: Check if the current ticket type requires hiding client info.
   const shouldHideClientInfo = typesToHideClientInfo.includes(item.type);
+
+  // MODIFICATION: Create a combined flag to disable both buttons if any action is running.
+  const isAnyActionLoading = isActionLoading || isRejecting;
 
   const handleNavigate = () => {
     console.log('Navigating to task details:', item.id);
@@ -130,7 +136,7 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
       rStyle
     ]}>
 
-      <Pressable onPress={handleNavigate} disabled={isActionLoading}>
+      <Pressable onPress={handleNavigate} disabled={isAnyActionLoading}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: theme.text }]} numberOfLines={2}>
             {item.title}
@@ -148,7 +154,6 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
         </View>
 
         <View style={styles.detailsContainer}>
-          {/* MODIFIED: Conditionally render client info based on the flag */}
           {!shouldHideClientInfo && (
             <>
               <DetailRow label="العميل:" value={item.customerName || ''} theme={theme} />
@@ -172,8 +177,9 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
           <Pressable
             style={[styles.actionButton, acceptButtonStyle]}
             onPress={() => handleAcceptTask?.(item.id)}
-            disabled={isActionLoading}
+            disabled={isAnyActionLoading}
           >
+            {/* MODIFICATION: Use the specific loading state for accepting */}
             {isActionLoading ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
@@ -184,9 +190,10 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
           <Pressable
             style={[styles.actionButton, rejectButtonStyle]}
             onPress={() => handleRejectTask?.(item.id)}
-            disabled={isActionLoading}
+            disabled={isAnyActionLoading}
           >
-            {isActionLoading ? (
+            {/* MODIFICATION: Use the specific loading state for rejecting */}
+            {isRejecting ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <Ionicons name="close-circle" size={20} color="#fff" />

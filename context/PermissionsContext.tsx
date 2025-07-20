@@ -1,14 +1,16 @@
 "use client"
 
 import { User } from "@/lib/types";
-import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
-import { collection, doc, getDoc, getDocs, limit, query, updateDoc, where } from "firebase/firestore"; // Added doc and getDoc
+import { collection, doc, getDoc, getDocs, limit, query, where } from "firebase/firestore";
 import {
-  createContext, ReactNode, useContext, useEffect, useRef, useState,
+  createContext,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
 } from "react";
 import useFirebaseAuth from "../hooks/use-firebase-auth";
-import { auth, db } from "../lib/firebase";
+import { db } from "../lib/firebase";
 
 // Define all possible permissions as constants
 export const PERMISSIONS = {
@@ -54,7 +56,7 @@ export const PERMISSIONS = {
   VIEW_TECHNICIAN_STATS: "view_technician_stats",
   IS_ADMIN: "is_admin",
   VIEW_USER_INVENTORY: "view_user_inventory",
-  ASSIGN_TICKETS : "ticket_assigner",
+  ASSIGN_TICKETS: "ticket_assigner",
   MANAGE_TEAMS: "manage_teams", // New permission for managing teams
 }
 
@@ -130,27 +132,12 @@ const PERMISSION_MAP: Record<string, string> = {
   "manageInvoices": PERMISSIONS.MANAGE_INVOICES,
   "manageInvoiceSettings": PERMISSIONS.MANAGE_INVOICE_SETTINGS,
   "manageSettings": PERMISSIONS.MANAGE_SETTINGS,
-  
+
   // Special permissions
   "createServiceRequest": PERMISSIONS.CREATE_SERVICE_REQUEST,
   "isAdmin": PERMISSIONS.IS_ADMIN,
   "manageTeams": PERMISSIONS.MANAGE_TEAMS, // Mapping for Firestore
 };
-
-// --- Push Notifications Setup ---
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
-
-
-// --------------------------------
 
 interface PermissionsContextType {
   userPermissions: string[];
@@ -161,15 +148,14 @@ interface PermissionsContextType {
   canAccessRoute: (route: string) => boolean;
   loading: boolean;
   customPermissions: Record<string, boolean>;
-  userName: string | null; // New field for user's name
-  userUid: string | null;  // New field for user's UID
-  currentUserTeamId: string | null; // New field for current user's team ID
+  userName: string | null;
+  userUid: string | null;
+  currentUserTeamId: string | null;
   isCurrentUserTeamLeader: boolean;
   userdoc: User | null;
   refreshUser: () => Promise<void>;
   setUserdoc: (user: User | null) => void;
-  realuserUid: string | null; // New field for real user UID
-  notificationPermissionStatus: string | null;
+  realuserUid: string | null;
 }
 
 const PermissionsContext = createContext<PermissionsContextType>({
@@ -181,15 +167,14 @@ const PermissionsContext = createContext<PermissionsContextType>({
   canAccessRoute: () => false,
   loading: true,
   customPermissions: {},
-  userName: null, // Default value for userName
-  userUid: null,  // Default value for userUid
-  currentUserTeamId: null, // Default value for currentUserTeamId
-  isCurrentUserTeamLeader: false, // Default value for isCurrentUserTeamLeader
-  userdoc: null, // Default value for userdoc
-  refreshUser: async () => {},
-  setUserdoc: () => {},
-  realuserUid: null, // Default value for real user UID
-  notificationPermissionStatus: null,
+  userName: null,
+  userUid: null,
+  currentUserTeamId: null,
+  isCurrentUserTeamLeader: false,
+  userdoc: null,
+  refreshUser: async () => { },
+  setUserdoc: () => { },
+  realuserUid: null,
 });
 
 export const usePermissions = () => useContext(PermissionsContext);
@@ -200,87 +185,15 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [customPermissions, setCustomPermissions] = useState<Record<string, boolean>>({});
   const [isAdmin, setIsAdmin] = useState(false);
-  const [userName, setUserName] = useState<string | null>(null); // State for user's name
-  const [userUid, setUserUid] = useState<string | null>(null);   // State for user's UID
-  const [currentUserTeamId, setCurrentUserTeamId] = useState<string | null>(null); // State for current user's team ID
-  const [isCurrentUserTeamLeader, setIsCurrentUserTeamLeader] = useState<boolean>(false); // State for team leader status
-  const [userdoc, setUserDoc] = useState<User | null>(null); // State for user document
-  const [realuserUid, setrealuserUid] = useState<string | null>(null); // State for real user UID
-  const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [userUid, setUserUid] = useState<string | null>(null);
+  const [currentUserTeamId, setCurrentUserTeamId] = useState<string | null>(null);
+  const [isCurrentUserTeamLeader, setIsCurrentUserTeamLeader] = useState<boolean>(false);
+  const [userdoc, setUserDoc] = useState<User | null>(null);
+  const [realuserUid, setrealuserUid] = useState<string | null>(null);
 
-  const notificationListener = useRef<Notifications.Subscription | null>(null);
-  const responseListener = useRef<Notifications.Subscription | null>(null);
-
-  useEffect(() => {
-    // Set up notification listeners
-    notificationListener.current =
-      Notifications.addNotificationReceivedListener((notification) => {
-        console.log("Notification received: ", notification);
-      });
-
-    responseListener.current =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        console.log("Notification response received: ", response);
-      });
-
-    return () => {
-      if (notificationListener.current) {
-        notificationListener.current.remove()
-        
-      }
-      if (responseListener.current) {
-        responseListener.current.remove()
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    const registerForPushNotificationsAsync = async () => {
-      if (!Device.isDevice) {
-        setNotificationPermissionStatus("simulator");
-        console.log("Must use physical device for Push Notifications");
-        return;
-      }
-      try {
-        const { status } = await Notifications.requestPermissionsAsync();
-        setNotificationPermissionStatus(status);
-        if (status !== "granted") {
-          console.error("Permission to receive notifications was denied.");
-          return;
-        }
-        const token = (await Notifications.getExpoPushTokenAsync()).data;
-        console.log("Expo Push Token:", token);
-        const uid = auth.currentUser?.uid;
-        if (uid && token) {
-          const usersRef = collection(db, "users");
-          const q = query(usersRef, where("uid", "==", uid), limit(1));
-          const querySnapshot = await getDocs(q);
-          if (!querySnapshot.empty) {
-            const userDocId = querySnapshot.docs[0].id;
-            const userDocRef = doc(db, "users", userDocId);
-            await updateDoc(userDocRef, {
-              expoPushToken: token,
-            });
-            console.log("Successfully updated push token for user:", uid);
-          } else {
-            console.warn(
-              `Could not find user document for uid: ${uid} to save push token.`
-            );
-          }
-        }
-      } catch (error) {
-        setNotificationPermissionStatus("error");
-        console.error("Error registering for push notifications:", error);
-      }
-    };
-
-    if (user) {
-      registerForPushNotificationsAsync();
-    }
-  }, [user]);
 
   const fetchUserPermissionsAndInfo = async () => {
-    // If auth is done loading and there's no user (logged out)
     if (!user) {
       setLoading(false);
       setUserPermissions([]);
@@ -290,16 +203,12 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
       setUserUid(null);
       setCurrentUserTeamId(null);
       setIsCurrentUserTeamLeader(false);
-      return; // Exit if no user
+      return;
     }
 
-    // User is authenticated, start fetching their data
     setLoading(true);
 
     try {
-      // Query user document by email (as per original logic)
-      // Consider querying by UID if your Firestore 'users' collection uses UIDs as document IDs
-      // or if 'uid' is a reliably indexed field: e.g., where("uid", "==", user.uid)
       const q = query(
         collection(db, "users"),
         where("email", "==", user.email),
@@ -311,13 +220,11 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
         const userDocSnapshot = querySnapshot.docs[0];
         const userDocData = userDocSnapshot.data();
         const docId = userDocSnapshot.id;
-        // Set user name: from 'name' field in Firestore, fallback to Firebase Auth display name
         setUserName((userDocData.name as string) || user.displayName || null);
-        setUserDoc({ ...userDocData, id: docId } as User); // Set user document with ID
+        setUserDoc({ ...userDocData, id: docId } as User);
         setUserUid(docId || user.uid);
-        setrealuserUid(user.uid); // Use Firestore document ID or Firebase Auth UID
+        setrealuserUid(user.uid);
 
-        // Fetch and set team information
         const teamId = userDocData.teamId as string | null;
         setCurrentUserTeamId(teamId);
 
@@ -351,14 +258,14 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
           Object.keys(PERMISSION_MAP).forEach(key => {
             userCustomPermissions[key] = true;
           });
-          userCustomPermissions.isAdmin = true; // Assuming 'isAdmin' might be a permission key
+          userCustomPermissions.isAdmin = true;
         } else if (userDocData.permissions) {
           for (const [key, value] of Object.entries(userDocData.permissions)) {
             if (value === true) {
               const permissionValue = PERMISSION_MAP[key];
               if (permissionValue) {
                 permissions.push(permissionValue);
-                userCustomPermissions[key] = true; // Store Firestore key (camelCase)
+                userCustomPermissions[key] = true;
               } else {
                 console.warn(`Unknown permission key from Firestore: ${key}`);
               }
@@ -369,16 +276,14 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
         setUserPermissions(permissions);
         setCustomPermissions(userCustomPermissions);
       } else {
-        // No user document found in Firestore
         console.warn(`No user document found in Firestore for email: ${user.email}`);
         setUserPermissions([]);
         setCustomPermissions({});
         setIsAdmin(false);
         setCurrentUserTeamId(null);
         setIsCurrentUserTeamLeader(false);
-        // Fallback to Firebase Auth info if Firestore document is missing
         setUserName(user.displayName || null);
-        setUserUid(user.uid); // Use canonical UID from Firebase Auth
+        setUserUid(user.uid);
       }
     } catch (error) {
       console.error("Error fetching user permissions and info:", error);
@@ -387,7 +292,6 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
       setIsAdmin(false);
       setCurrentUserTeamId(null);
       setIsCurrentUserTeamLeader(false);
-      // Attempt to set name/UID from auth user even on error, if user object is available
       setUserName(user?.displayName || null);
       setUserUid(user?.uid || null);
     } finally {
@@ -408,14 +312,14 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
       return;
     }
     fetchUserPermissionsAndInfo();
-  }, [user, authLoading]); // Dependencies: re-run if user object or authLoading state changes
+  }, [user, authLoading]);
 
   const refreshUser = async () => {
     await fetchUserPermissionsAndInfo();
   };
 
   const hasPermission = (permission: string) => {
-    if (loading || authLoading) return false; // Wait for loading to complete
+    if (loading || authLoading) return false;
     if (isAdmin) return true;
     return userPermissions.includes(permission);
   };
@@ -434,18 +338,17 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
 
   const canAccessRoute = (route: string) => {
     if (route === "/dashboard/profile") {
-      return true; // Always allow profile access
+      return true;
     }
-    if (loading || authLoading) return false; // Deny access while loading permissions
-    if (isAdmin) return true; // Admin can access all routes
-    
+    if (loading || authLoading) return false;
+    if (isAdmin) return true;
+
     const requiredPermissions = ROUTE_PERMISSIONS[route as keyof typeof ROUTE_PERMISSIONS];
-    if (!requiredPermissions) { // Route not in defined list, default to accessible
-        // console.warn(`Route ${route} not found in ROUTE_PERMISSIONS. Allowing access by default.`);
-        return true; 
+    if (!requiredPermissions) {
+      return true;
     }
-    if (requiredPermissions.length === 0) { // Explicitly no permissions required
-        return true;
+    if (requiredPermissions.length === 0) {
+      return true;
     }
     return hasAnyPermission(requiredPermissions);
   };
@@ -461,15 +364,14 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
         canAccessRoute,
         loading,
         customPermissions,
-        userName, 
+        userName,
         userUid,
-        currentUserTeamId, 
+        currentUserTeamId,
         isCurrentUserTeamLeader,
         userdoc,
         refreshUser,
         setUserdoc: setUserDoc,
-        realuserUid, // Expose real user UID
-        notificationPermissionStatus,
+        realuserUid,
       }}
     >
       {children}

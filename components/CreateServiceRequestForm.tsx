@@ -26,7 +26,6 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { useTheme } from "../context/ThemeContext";
 import { db } from "../lib/firebase"; // Make sure your firebase config path is correct
-import { User } from "../lib/types"; // Make sure your types path is correct
 
 // --- INTERFACES (As per your request) ---
 export interface Comment {
@@ -117,9 +116,6 @@ const TICKET_TYPES = [
 
 interface CreateServiceRequestFormProps {
   onSuccess: () => void;
-  users: User[];
-  selectedUserIds: string[];
-  setSelectedUserIds: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
 const FONT_FAMILY = 'Cairo';
@@ -298,9 +294,6 @@ SubscriberItem.displayName = 'SubscriberItem';
 // --- MAIN FORM COMPONENT ---
 export default function CreateServiceRequestForm({
   onSuccess,
-  users,
-  selectedUserIds,
-  setSelectedUserIds
 }: CreateServiceRequestFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -316,12 +309,11 @@ export default function CreateServiceRequestForm({
   const [isLoadingPackageTypes, setIsLoadingPackageTypes] = useState(true);
   const [attachments, setAttachments] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
 
-  const [isAssignModalVisible, setIsAssignModalVisible] = useState(false);
-  const [tempSelectedUsers, setTempSelectedUsers] = useState<string[]>([]);
-  const [assignSearchQuery, setAssignSearchQuery] = useState('');
-
-  // MODIFIED: State for the new ticket type modal
   const [isTypeModalVisible, setIsTypeModalVisible] = useState(false);
+
+  // --- NEW: State for assignment option ---
+  type AssignmentOption = 'admin' | 'noc';
+  const [assignmentOption, setAssignmentOption] = useState<AssignmentOption>('noc');
 
 
   useEffect(() => {
@@ -372,28 +364,9 @@ export default function CreateServiceRequestForm({
 
   const showCustomerInfo = ticketType !== "جباية" && !TICKET_TYPES_NO_CUSTOMER_INFO.includes(ticketType);
 
-  const handleOpenAssignModal = () => {
-    setTempSelectedUsers(selectedUserIds);
-    setAssignSearchQuery('');
-    setIsAssignModalVisible(true);
+  const handleAssignmentOptionChange = (option: AssignmentOption) => {
+    setAssignmentOption(option);
   };
-
-  const handleConfirmAssignment = () => {
-    setSelectedUserIds(tempSelectedUsers);
-    setIsAssignModalVisible(false);
-  };
-
-  const handleToggleUserSelection = (userId: string) => {
-    setTempSelectedUsers(prev =>
-      prev.includes(userId)
-        ? prev.filter(id => id !== userId)
-        : [...prev, userId]
-    );
-  };
-
-  const filteredUsersForModal = users.filter(user =>
-    (user.name || user.email || '').toLowerCase().includes(assignSearchQuery.toLowerCase())
-  );
 
 
   const handleSelectFiles = async () => {
@@ -468,6 +441,18 @@ export default function CreateServiceRequestForm({
         attachments: uploadedAttachments,
       };
 
+      // --- NEW: Assignment Logic ---
+      let department: string | null = null;
+      let targetTeamId: string | undefined = currentUserTeamId;
+
+      if (assignmentOption === 'admin') {
+        targetTeamId = 'rksVERdOIwdF4cDaioLb';
+        department = 'Administration';
+      } else if (assignmentOption === 'noc') {
+        targetTeamId = currentUserTeamId;
+        department = 'Operation Management Center';
+      }
+
       const ticketData: any = {
         ...(showCustomerInfo && {
           customerName: values.customerName,
@@ -482,14 +467,18 @@ export default function CreateServiceRequestForm({
         date: serverTimestamp(),
         createdAt: serverTimestamp(),
         lastUpdated: timestamp,
-        assignedUsers: selectedUserIds,
+        assignedUsers: [],
         creatorId: realuserUid,
         creatorName: userName,
         senttouser: false,
         deleted: false,
         comments: [initialComment],
-        teamId: currentUserTeamId
+        teamId: targetTeamId // Use the determined teamId
       };
+
+      if (department) {
+        ticketData.department = department; // Conditionally add department
+      }
 
       if (values.type === "جباية") {
         ticketData.subscribers = subscribers.map(sub => ({
@@ -502,7 +491,7 @@ export default function CreateServiceRequestForm({
       await setDoc(doc(db, "serviceRequests", ticketId), ticketData);
 
       reset();
-      setSelectedUserIds([]);
+      setAssignmentOption('noc'); // Reset to default
       setSubscribers([{ id: uuidv4(), name: "", phone: "", zoneNumber: "", packageType: "", price: "", serviceType: "" }]);
       setAttachments([]);
       router.push('/(tabs)/my-requests');
@@ -535,7 +524,6 @@ export default function CreateServiceRequestForm({
       contentContainerStyle={styles.contentContainer}
       keyboardShouldPersistTaps="handled"
     >
-      {/* MODIFIED: Replaced generic Select with custom modal trigger */}
       <Controller
         control={control}
         name="type"
@@ -554,8 +542,6 @@ export default function CreateServiceRequestForm({
               </TouchableOpacity>
               <FormMessage message={errors.type?.message} />
             </FormItem>
-
-            {/* MODIFIED: New bottom sheet modal for Ticket Type selection */}
             <Modal
               animationType="slide"
               transparent={true}
@@ -606,7 +592,6 @@ export default function CreateServiceRequestForm({
         )}
       />
 
-
       {showCustomerInfo && (
         <View style={styles.card}>
           <Controller control={control} name="customerName" render={({ field }) => (
@@ -648,28 +633,27 @@ export default function CreateServiceRequestForm({
         </View>
       </View>
 
+      {/* --- MODIFIED: New Assignment Section --- */}
       <View style={styles.card}>
-        <FormItem style={{ marginBottom: 0 }}>
-          <FormLabel>تعيين إلى</FormLabel>
-          <View style={styles.badgeContainer}>
-            {selectedUserIds.length > 0 ? selectedUserIds.map(userId => {
-              const user = users.find(u => u.id === userId);
-              return user ? (
-                <View key={userId} style={styles.badge}>
-                  <Text style={styles.badgeText}>{user.name}</Text>
-                  <TouchableOpacity onPressIn={() => setSelectedUserIds(prev => prev.filter(id => id !== userId))}>
-                    <X color={styles.badgeIcon.color} size={14} />
-                  </TouchableOpacity>
-                </View>
-              ) : null;
-            }) : (
-              <Text style={styles.placeholderText}>لم يتم تعيين أي مستخدم</Text>
-            )}
-          </View>
-          <TouchableOpacity style={[styles.addButton, { marginTop: 8 }]} onPress={handleOpenAssignModal}>
-            <Text style={styles.addButtonText}>أضف أو أزل مستخدمين</Text>
+        <FormLabel>إرسال المهمة إلى</FormLabel>
+        <View style={styles.assignmentOptionsContainer}>
+          <TouchableOpacity
+            style={[styles.assignmentButton, assignmentOption === 'admin' && styles.assignmentButtonActive]}
+            onPress={() => handleAssignmentOptionChange('admin')}
+          >
+            <Text style={[styles.assignmentButtonText, assignmentOption === 'admin' && styles.assignmentButtonTextActive]}>
+              Administration
+            </Text>
           </TouchableOpacity>
-        </FormItem>
+          <TouchableOpacity
+            style={[styles.assignmentButton, assignmentOption === 'noc' && styles.assignmentButtonActive]}
+            onPress={() => handleAssignmentOptionChange('noc')}
+          >
+            <Text style={[styles.assignmentButtonText, assignmentOption === 'noc' && styles.assignmentButtonTextActive]}>
+              Operation Management Center
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
 
@@ -686,59 +670,6 @@ export default function CreateServiceRequestForm({
         </View>
       )}
 
-      {/* --- Assign Users Modal --- */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={isAssignModalVisible}
-        onRequestClose={() => setIsAssignModalVisible(false)}
-        statusBarTranslucent={true}
-      >
-        <View style={styles.modalContainer}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setIsAssignModalVisible(false)} />
-          <View style={[styles.modalContent, { height: '85%' }]}>
-            <View style={styles.modalHeader}>
-              <View style={styles.modalGrabber} />
-              <Text style={styles.modalTitle}>تعيين المهمة</Text>
-              <Pressable style={styles.modalCloseButton} onPress={() => setIsAssignModalVisible(false)}>
-                <XCircle size={30} color={colors.subtleText} />
-              </Pressable>
-            </View>
-
-            <View style={styles.searchBarContainer}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="ابحث عن مستخدم..."
-                placeholderTextColor={colors.placeholder}
-                value={assignSearchQuery}
-                onChangeText={setAssignSearchQuery}
-              />
-            </View>
-
-            <FlatList
-              data={filteredUsersForModal}
-              keyExtractor={item => item.id}
-              style={styles.modalBody}
-              contentContainerStyle={{ paddingBottom: 100 }}
-              renderItem={({ item }) => {
-                const isSelected = tempSelectedUsers.includes(item.id);
-                return (
-                  <Pressable style={styles.userSelectItem} onPress={() => handleToggleUserSelection(item.id)}>
-                    {isSelected ? <CheckSquare size={24} color={colors.primary} /> : <Square size={24} color={colors.primary} />}
-                    <Text style={styles.userSelectName}>{item.name || item.email}</Text>
-                  </Pressable>
-                )
-              }}
-            />
-            <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.modalSaveButton} onPress={handleConfirmAssignment}>
-                <Text style={styles.modalButtonText}>حفظ التغييرات</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       <View style={styles.buttonContainer}>
         <TouchableOpacity style={styles.secondaryButton} onPressIn={() => router.back()} disabled={isSubmitting}>
           <Text style={styles.secondaryButtonText}>إلغاء</Text>
@@ -751,10 +682,9 @@ export default function CreateServiceRequestForm({
   );
 }
 
-// --- Styles (Unchanged) ---
+// --- Styles (with new styles added) ---
 const getStyles = (colors: any) => {
   const isLikelyDarkMode = (() => {
-    // ... (unchanged)
     return false;
   })();
 
@@ -774,117 +704,25 @@ const getStyles = (colors: any) => {
     selectValueText: { fontSize: 16, fontFamily: FONT_FAMILY, color: colors.text },
     icon: { color: colors.subtleText },
     placeholderText: { color: colors.placeholder, fontSize: 14, fontFamily: FONT_FAMILY, textAlign: 'right', paddingVertical: 4 },
-
-    // --- Select Dropdown Modal ---
     selectModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
     selectModalContent: { backgroundColor: colors.card, borderRadius: 14, width: '95%', maxHeight: '70%', padding: 10, elevation: 10, shadowColor: colors.text, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12 },
     selectItem: { paddingVertical: 16, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: colors.background },
     selectItemText: { fontSize: 17, fontFamily: FONT_FAMILY, textAlign: 'right', color: colors.text },
-
-    // --- Assign User Modal (Bottom Sheet) Styles ---
-    modalContainer: {
-      flex: 1,
-      justifyContent: 'flex-end',
-      backgroundColor: 'rgba(0,0,0,0.5)',
-    },
-    modalBackdrop: {
-      ...StyleSheet.absoluteFillObject,
-    },
-    modalContent: {
-      backgroundColor: colors.card,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      paddingTop: 8,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: -3 },
-      shadowOpacity: 0.1,
-      shadowRadius: 5,
-      elevation: 20,
-    },
-    modalHeader: {
-      alignItems: 'center',
-      paddingBottom: 16,
-      paddingHorizontal: 20,
-      position: 'relative',
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    modalGrabber: {
-      width: 40,
-      height: 5,
-      backgroundColor: colors.border,
-      borderRadius: 2.5,
-      marginBottom: 10,
-    },
-    modalTitle: {
-      fontSize: 20,
-      fontFamily: FONT_FAMILY,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    modalCloseButton: {
-      position: 'absolute',
-      right: 15,
-      top: 0,
-      padding: 5,
-    },
-    searchBarContainer: {
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-    },
-    searchInput: {
-      backgroundColor: colors.inputBackground,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      fontSize: 16,
-      fontFamily: FONT_FAMILY,
-      color: colors.text,
-      textAlign: 'right',
-    },
+    modalContainer: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    modalBackdrop: { ...StyleSheet.absoluteFillObject },
+    modalContent: { backgroundColor: colors.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 8, shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.1, shadowRadius: 5, elevation: 20 },
+    modalHeader: { alignItems: 'center', paddingBottom: 16, paddingHorizontal: 20, position: 'relative', borderBottomWidth: 1, borderBottomColor: colors.border },
+    modalGrabber: { width: 40, height: 5, backgroundColor: colors.border, borderRadius: 2.5, marginBottom: 10 },
+    modalTitle: { fontSize: 20, fontFamily: FONT_FAMILY, fontWeight: '700', color: colors.text },
+    modalCloseButton: { position: 'absolute', right: 15, top: 0, padding: 5 },
+    searchBarContainer: { paddingHorizontal: 16, paddingVertical: 10 },
+    searchInput: { backgroundColor: colors.inputBackground, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, fontFamily: FONT_FAMILY, color: colors.text, textAlign: 'right' },
     modalBody: {},
-    userSelectItem: {
-      flexDirection: 'row-reverse',
-      alignItems: 'center',
-      paddingVertical: 15,
-      paddingHorizontal: 20,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    userSelectName: {
-      fontSize: 17,
-      fontFamily: FONT_FAMILY,
-      color: colors.text,
-      marginRight: 15,
-    },
-    modalFooter: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      padding: 16,
-      paddingBottom: Platform.OS === 'ios' ? 34 : 16, // Safe area for iOS
-      backgroundColor: colors.card,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-    },
-    modalSaveButton: {
-      backgroundColor: colors.primary,
-      paddingVertical: 16,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    modalButtonText: {
-      color: '#FFFFFF',
-      fontSize: 16,
-      fontFamily: FONT_FAMILY,
-      fontWeight: '700',
-    },
-    // --- End New Modal Styles ---
-
+    userSelectItem: { flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: colors.border },
+    userSelectName: { fontSize: 17, fontFamily: FONT_FAMILY, color: colors.text, marginRight: 15 },
+    modalFooter: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: Platform.OS === 'ios' ? 34 : 16, backgroundColor: colors.card, borderTopWidth: 1, borderTopColor: colors.border },
+    modalSaveButton: { backgroundColor: colors.primary, paddingVertical: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    modalButtonText: { color: '#FFFFFF', fontSize: 16, fontFamily: FONT_FAMILY, fontWeight: '700' },
     sectionTitle: { fontSize: 20, fontFamily: FONT_FAMILY, fontWeight: '700', color: colors.text, marginBottom: 12, textAlign: 'right' },
     subscriberCard: { borderColor: colors.primary, borderWidth: 1, padding: 16, marginBottom: 16, backgroundColor: colors.blueTint },
     subscriberHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
@@ -898,16 +736,45 @@ const getStyles = (colors: any) => {
     primaryButtonText: { color: '#FFFFFF', fontSize: 16, fontFamily: FONT_FAMILY, fontWeight: '700' },
     secondaryButton: { flex: 1, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, paddingVertical: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
     secondaryButtonText: { color: colors.text, fontSize: 16, fontFamily: FONT_FAMILY, fontWeight: '700' },
-
     attachmentSection: { marginTop: 0, marginBottom: 0, },
     attachmentList: { marginTop: 8, marginBottom: 12, flexDirection: 'column', gap: 8, },
     attachmentItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.background, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: colors.border, },
     attachmentName: { flex: 1, fontSize: 14, fontFamily: FONT_FAMILY, color: colors.text, textAlign: 'left', marginRight: 10, },
 
+    // --- NEW: Assignment Button Styles ---
+    assignmentOptionsContainer: {
+      flexDirection: 'column',
+      gap: 10,
+      marginTop: 12,
+    },
+    assignmentButton: {
+      backgroundColor: colors.inputBackground,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      paddingVertical: 14,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    assignmentButtonActive: {
+      backgroundColor: colors.primaryTint, // A lighter shade of primary
+      borderColor: colors.primary,
+    },
+    assignmentButtonText: {
+      color: colors.text,
+      fontSize: 16,
+      fontFamily: FONT_FAMILY,
+      fontWeight: '600',
+    },
+    assignmentButtonTextActive: {
+      color: colors.primary,
+    },
+    // --- End New Styles ---
+
     badgeContainer: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      marginBottom: 8,
+      marginTop: 8,
       justifyContent: 'flex-end'
     },
     badge: {

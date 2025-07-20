@@ -165,12 +165,21 @@ const MyRequestsScreen: React.FC = () => {
     fetchUsers();
   }, []); // Run only once
 
-  // --- Data Fetching Logic (Unchanged) ---
   const loadMoreRequests = useCallback(async () => {
     if (isPaginating || allDataLoaded || !user?.uid || !lastDoc) return;
     setIsPaginating(true);
     try {
-      const q = query(collection(db, 'serviceRequests'), where('creatorId', '==', user.uid), orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(PAGE_SIZE));
+      // MODIFIED: Added where('deleted', '==', false) to the query
+      // NOTE: This complex query might require a composite index in Firestore.
+      // The Firestore error message will provide a link to create it automatically.
+      const q = query(
+        collection(db, 'serviceRequests'),
+        where('deleted', '==', false),
+        where('creatorId', '==', user.uid),
+        orderBy('createdAt', 'desc'),
+        startAfter(lastDoc),
+        limit(PAGE_SIZE)
+      );
       const querySnapshot = await getDocs(q);
       const newRequests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
       if (newRequests.length > 0) {
@@ -194,7 +203,16 @@ const MyRequestsScreen: React.FC = () => {
     setAllDataLoaded(false);
     setLastDoc(null);
     try {
-      const q = query(collection(db, 'serviceRequests'), where('creatorId', '==', user.uid), orderBy('createdAt', 'desc'), limit(PAGE_SIZE));
+      // MODIFIED: Added where('deleted', '==', false) to the query
+      // NOTE: This complex query might require a composite index in Firestore.
+      // The Firestore error message will provide a link to create it automatically.
+      const q = query(
+        collection(db, 'serviceRequests'),
+        where('deleted', '==', false),
+        where('creatorId', '==', user.uid),
+        orderBy('createdAt', 'desc'),
+        limit(PAGE_SIZE)
+      );
       const querySnapshot = await getDocs(q);
       const initialRequests = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
       setRequests(initialRequests);

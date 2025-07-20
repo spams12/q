@@ -160,8 +160,8 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                             connectorType: checked
                               ? [...(prev.connectorType || []), ct.name]
                               : (prev.connectorType || []).filter(
-                                  (t: string) => t !== ct.name
-                                ),
+                                (t: string) => t !== ct.name
+                              ),
                           }));
                         }}
                         color={theme.primary}
@@ -232,9 +232,8 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                       ...invoiceSettings.cableLengths
                         .filter((cl: CableLength) => cl.isActive && !cl.isCustom)
                         .map((cl: CableLength) => ({
-                          label: `${
-                            cl.length
-                          } متر (${cl.price.toLocaleString()} د.ع)`,
+                          label: `${cl.length
+                            } متر (${cl.price.toLocaleString()} د.ع)`,
                           value: cl.length.toString(),
                         })),
                       ...(invoiceSettings.cableLengths.some(
@@ -276,16 +275,15 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                                 connectorType: checked
                                   ? [...(prev.connectorType || []), ct.name]
                                   : (prev.connectorType || []).filter(
-                                      (t: string) => t !== ct.name
-                                    ),
+                                    (t: string) => t !== ct.name
+                                  ),
                               }));
                             }}
                             color={theme.primary}
                             style={styles.checkboxBase}
                           />
-                          <Text style={styles.checkboxLabel}>{`${
-                            ct.name
-                          } (${ct.price.toLocaleString()} د.ع)`}</Text>
+                          <Text style={styles.checkboxLabel}>{`${ct.name
+                            } (${ct.price.toLocaleString()} د.ع)`}</Text>
                         </View>
                       ))}
                   </View>
@@ -302,9 +300,8 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                     items={invoiceSettings.deviceModels
                       .filter((dm: DeviceModel) => dm.isActive)
                       .map((dm: DeviceModel) => ({
-                        label: `${
-                          dm.name
-                        } (${dm.price.toLocaleString()} د.ع)`,
+                        label: `${dm.name
+                          } (${dm.price.toLocaleString()} د.ع)`,
                         value: dm.name,
                       }))}
                   />
@@ -1366,9 +1363,8 @@ function InvoiceForm({
             sourceId: invoice.id,
             sourceName: `فاتورة #${invoice.id.substring(0, 8)}`,
             timestamp,
-            notes: `تم استخدام في فاتورة للعميل ${
-              invoice.customerName || "غير معروف"
-            } (تذكرة #${invoice.linkedServiceRequestId.substring(0, 6)})`,
+            notes: `تم استخدام في فاتورة للعميل ${invoice.customerName || "غير معروف"
+              } (تذكرة #${invoice.linkedServiceRequestId.substring(0, 6)})`,
           });
         }
       }
@@ -1556,7 +1552,7 @@ function InvoiceForm({
         userName: currentUserDisplayName || user?.displayName || "",
         content: `تم إنشاء فاتورة جديدة بقيمة ${calculateTotal().toLocaleString()} دينار عراقي.`,
         timestamp: new Date().toISOString(),
-        isStatusChange:true
+        isStatusChange: true
       };
       await updateDoc(ticketRef, { comments: arrayUnion(comment) });
 
@@ -1638,24 +1634,24 @@ function InvoiceForm({
   return (
     <>
       <KeyboardAvoidingView
-      style={{flex:1}}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
 
       >
         <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
+          style={styles.container}
+          contentContainerStyle={styles.contentContainer}
 
-        keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="handled"
 
         >
-       
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>إنشاء فاتورة</Text>
-          <Text style={styles.headerSubtitle}>
-            للتذكرة #{ticketId.substring(0, 6)}
-          </Text>
+
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>إنشاء فاتورة</Text>
+            <Text style={styles.headerSubtitle}>
+              للتذكرة #{ticketId.substring(0, 6)}
+            </Text>
             {!showItemForm && (
               <Pressable
                 onPress={() => setShowItemForm(true)}
@@ -1669,155 +1665,154 @@ function InvoiceForm({
                 <Text style={styles.buttonText}>إضافة عنصر</Text>
               </Pressable>
             )}
-        </View>
-             <View style={styles.footer}>
-        <Pressable
-          onPress={onCancel}
-          style={({ pressed }) => [
-            styles.button,
-            styles.buttonSecondary,
-            pressed && styles.buttonSecondaryPressed,
-          ]}
-        >
-          <Text style={styles.buttonText}>إلغاء</Text>
-        </Pressable>
-        <Pressable
-          onPress={handleSaveInvoice}
-          disabled={items.length === 0 || submitting}
-          style={({ pressed }) => [
-            styles.button,
-            styles.buttonLarge,
-            (items.length === 0 || submitting) && styles.buttonDisabled,
-            pressed &&
-              !(items.length === 0 || submitting) &&
-              styles.buttonPrimaryPressed,
-          ]}
-        >
-          {submitting ? (
-            <ActivityIndicator color={theme.white} />
-          ) : (
-            <>
-              <Feather name="save" size={20} color={theme.white} />
-              <Text style={styles.buttonText}>حفظ الفاتورة</Text>
-            </>
-          )}
-        </Pressable>
-      </View>
-
-      {items.length > 0 && (
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>عناصر الفاتورة</Text>
           </View>
-
-          <View style={styles.itemListContainer}>
-            {items.map((item, index) => (
-              <View
-                key={item.id}
-                style={[
-                  styles.itemRow,
-                  index === items.length - 1 && styles.itemRowLast,
-                ]}
-              >
-                <View style={styles.itemRowDetails}>
-                  <Text style={styles.itemDescription}>{item.description}</Text>
-                  <Text style={styles.itemMeta}>
-                    {`الكمية: ${
-                      item.quantity
-                    }  ·  السعر: ${item.unitPrice.toLocaleString()} د.ع`}
-                  </Text>
-                </View>
-                <Text style={styles.itemTotal}>
-                  {item.totalPrice.toLocaleString()} د.ع
-                </Text>
-                <Pressable
-                  onPress={() => removeItem(item.id)}
-                  style={styles.deleteButton}
-                >
-                  <Feather name="x" size={20} color={theme.placeholder} />
-                </Pressable>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.totalContainer}>
-            <Text style={styles.totalLabel}>المجموع الكلي</Text>
-            <Text style={styles.totalValue}>
-              {calculateTotal().toLocaleString()} د.ع
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {showItemForm && (
-        <View style={[styles.card, styles.itemFormCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>إضافة عنصر جديد</Text>
-            <Pressable onPress={cancelItemForm} style={styles.cancelButton}>
-              <Feather name="x" size={22} color={theme.placeholder} />
-            </Pressable>
-          </View>
-          <Text style={styles.label}>نوع العنصر</Text>
-          <CustomDropdown
-            selectedValue={currentItem.type}
-            onValueChange={(itemValue) => handleItemTypeChange(itemValue)}
-            placeholder="اختر نوع العنصر..."
-            items={[
-              { label: "تنصيب مشترك جديد", value: "newCustomerInstallation" },
-              { label: "صيانة مشترك", value: "maintenance" },
-              { label: "نقليات", value: "transportationFee" },
-              { label: "صرفيات", value: "expenseReimbursement" },
-              { label: "تجديد اشتراك", value: "subscriptionRenewal" },
-              { label: "عنصر مخصص", value: "customItem" },
-            ]}
-          />
-
-          <RenderItemSpecificFields
-            currentItem={currentItem}
-            setCurrentItem={setCurrentItem}
-            invoiceSettings={invoiceSettings!}
-            customCableLength={customCableLength}
-            handleCustomCableLengthInputChange={
-              handleCustomCableLengthInputChange
-            }
-            handlePackageTypeChange={handlePackageTypeChange}
-            handleCableLengthChange={handleCableLengthChange}
-            handleDeviceModelChange={handleDeviceModelChange}
-            handleMaintenanceTypeChange={handleMaintenanceTypeChange}
-            styles={styles}
-            theme={theme}
-          />
-
-          <View style={styles.formActions}>
+          <View style={styles.footer}>
             <Pressable
-              onPress={addItem}
-              disabled={isAddItemDisabled}
+              onPress={onCancel}
               style={({ pressed }) => [
                 styles.button,
-                styles.buttonPrimary,
-                styles.buttonFullWidth,
-                isAddItemDisabled && styles.buttonDisabled,
-                pressed &&
-                  !isAddItemDisabled &&
-                  styles.buttonPrimaryPressed,
+                styles.buttonSecondary,
+                pressed && styles.buttonSecondaryPressed,
               ]}
             >
-              <Feather
-                name="plus-circle"
-                size={20}
-                color={theme.white}
-              />
-              <Text style={styles.buttonText}>إضافة العنصر للفاتورة</Text>
+              <Text style={styles.buttonText}>إلغاء</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleSaveInvoice}
+              disabled={items.length === 0 || submitting}
+              style={({ pressed }) => [
+                styles.button,
+                styles.buttonLarge,
+                (items.length === 0 || submitting) && styles.buttonDisabled,
+                pressed &&
+                !(items.length === 0 || submitting) &&
+                styles.buttonPrimaryPressed,
+              ]}
+            >
+              {submitting ? (
+                <ActivityIndicator color={theme.white} />
+              ) : (
+                <>
+                  <Feather name="save" size={20} color={theme.white} />
+                  <Text style={styles.buttonText}>حفظ الفاتورة</Text>
+                </>
+              )}
             </Pressable>
           </View>
-        </View>
-      )}
-     </ScrollView>
+
+          {items.length > 0 && (
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>عناصر الفاتورة</Text>
+              </View>
+
+              <View style={styles.itemListContainer}>
+                {items.map((item, index) => (
+                  <View
+                    key={item.id}
+                    style={[
+                      styles.itemRow,
+                      index === items.length - 1 && styles.itemRowLast,
+                    ]}
+                  >
+                    <View style={styles.itemRowDetails}>
+                      <Text style={styles.itemDescription}>{item.description}</Text>
+                      <Text style={styles.itemMeta}>
+                        {`الكمية: ${item.quantity
+                          }  ·  السعر: ${item.unitPrice.toLocaleString()} د.ع`}
+                      </Text>
+                    </View>
+                    <Text style={styles.itemTotal}>
+                      {item.totalPrice.toLocaleString()} د.ع
+                    </Text>
+                    <Pressable
+                      onPress={() => removeItem(item.id)}
+                      style={styles.deleteButton}
+                    >
+                      <Feather name="x" size={20} color={theme.placeholder} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.totalContainer}>
+                <Text style={styles.totalLabel}>المجموع الكلي</Text>
+                <Text style={styles.totalValue}>
+                  {calculateTotal().toLocaleString()} د.ع
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {showItemForm && (
+            <View style={[styles.card, styles.itemFormCard]}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>إضافة عنصر جديد</Text>
+                <Pressable onPress={cancelItemForm} style={styles.cancelButton}>
+                  <Feather name="x" size={22} color={theme.placeholder} />
+                </Pressable>
+              </View>
+              <Text style={styles.label}>نوع العنصر</Text>
+              <CustomDropdown
+                selectedValue={currentItem.type}
+                onValueChange={(itemValue) => handleItemTypeChange(itemValue)}
+                placeholder="اختر نوع العنصر..."
+                items={[
+                  { label: "تنصيب مشترك جديد", value: "newCustomerInstallation" },
+                  { label: "صيانة مشترك", value: "maintenance" },
+                  { label: "نقليات", value: "transportationFee" },
+                  { label: "صرفيات", value: "expenseReimbursement" },
+                  { label: "تجديد اشتراك", value: "subscriptionRenewal" },
+                  { label: "عنصر مخصص", value: "customItem" },
+                ]}
+              />
+
+              <RenderItemSpecificFields
+                currentItem={currentItem}
+                setCurrentItem={setCurrentItem}
+                invoiceSettings={invoiceSettings!}
+                customCableLength={customCableLength}
+                handleCustomCableLengthInputChange={
+                  handleCustomCableLengthInputChange
+                }
+                handlePackageTypeChange={handlePackageTypeChange}
+                handleCableLengthChange={handleCableLengthChange}
+                handleDeviceModelChange={handleDeviceModelChange}
+                handleMaintenanceTypeChange={handleMaintenanceTypeChange}
+                styles={styles}
+                theme={theme}
+              />
+
+              <View style={styles.formActions}>
+                <Pressable
+                  onPress={addItem}
+                  disabled={isAddItemDisabled}
+                  style={({ pressed }) => [
+                    styles.button,
+                    styles.buttonPrimary,
+                    styles.buttonFullWidth,
+                    isAddItemDisabled && styles.buttonDisabled,
+                    pressed &&
+                    !isAddItemDisabled &&
+                    styles.buttonPrimaryPressed,
+                  ]}
+                >
+                  <Feather
+                    name="plus-circle"
+                    size={20}
+                    color={theme.white}
+                  />
+                  <Text style={styles.buttonText}>إضافة العنصر للفاتورة</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+        </ScrollView>
 
 
       </KeyboardAvoidingView>
 
-     
+
 
       {/* --- Stock Check Modal --- */}
       <Modal
@@ -1841,27 +1836,27 @@ function InvoiceForm({
             </Text>
             {missingItems.filter((item) => item.type !== "general").length >
               0 && (
-              <ScrollView
-                style={styles.missingItemsScroll}
-                nestedScrollEnabled={true}
-              >
-                {missingItems
-                  .filter((item) => item.type !== "general")
-                  .map((item, index) => (
-                    <View key={index} style={styles.missingItemCard}>
-                      <Text style={styles.missingItemName}>{item.name}</Text>
-                      <View style={styles.missingItemDetails}>
-                        <Text style={styles.missingItemDetail}>
-                          المطلوب: {item.required}
-                        </Text>
-                        <Text style={styles.missingItemDetail}>
-                          المتوفر: {item.available}
-                        </Text>
+                <ScrollView
+                  style={styles.missingItemsScroll}
+                  nestedScrollEnabled={true}
+                >
+                  {missingItems
+                    .filter((item) => item.type !== "general")
+                    .map((item, index) => (
+                      <View key={index} style={styles.missingItemCard}>
+                        <Text style={styles.missingItemName}>{item.name}</Text>
+                        <View style={styles.missingItemDetails}>
+                          <Text style={styles.missingItemDetail}>
+                            المطلوب: {item.required}
+                          </Text>
+                          <Text style={styles.missingItemDetail}>
+                            المتوفر: {item.available}
+                          </Text>
+                        </View>
                       </View>
-                    </View>
-                  ))}
-              </ScrollView>
-            )}
+                    ))}
+                </ScrollView>
+              )}
             <Pressable
               style={({ pressed }) => [
                 styles.button,
@@ -1869,7 +1864,7 @@ function InvoiceForm({
                 styles.buttonFullWidth,
                 pressed && styles.buttonPrimaryPressed,
                 missingItems.some((item) => item.type === "general") &&
-                  styles.buttonDisabled,
+                styles.buttonDisabled,
               ]}
               onPress={closeMissingItemsDialog}
               disabled={missingItems.some((item) => item.type === "general")}
@@ -1907,8 +1902,8 @@ const getStyles = (theme: Theme, themeName: "light" | "dark") =>
       justifyContent: "space-between",
       alignItems: "center",
       borderTopColor: theme.border,
-      gap:5,
-      marginBottom:15
+      gap: 5,
+      marginBottom: 15
     },
 
     // --- Header ---
@@ -1936,16 +1931,16 @@ const getStyles = (theme: Theme, themeName: "light" | "dark") =>
       marginBottom: 20,
       ...(themeName === "dark"
         ? {
-            borderWidth: 1,
-            borderColor: theme.border,
-          }
+          borderWidth: 1,
+          borderColor: theme.border,
+        }
         : {
-            shadowColor: theme.black,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.05,
-            shadowRadius: 12,
-            elevation: 3,
-          }),
+          shadowColor: theme.black,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.05,
+          shadowRadius: 12,
+          elevation: 3,
+        }),
     },
     itemFormCard: {
       borderColor: theme.primary,
@@ -1977,7 +1972,7 @@ const getStyles = (theme: Theme, themeName: "light" | "dark") =>
     buttonLarge: {
       flex: 1,
       paddingVertical: 14,
-      backgroundColor:"green"
+      backgroundColor: "green"
     },
     buttonFullWidth: {
       width: "100%",
@@ -2340,7 +2335,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
         visible={!!selectedInvoice}
         animationType="slide"
         onRequestClose={() => setSelectedInvoice(null)}
-       statusBarTranslucent={Platform.OS === 'android'}
+        statusBarTranslucent={Platform.OS === 'android'}
 
       >
         <InvoiceDetails

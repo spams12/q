@@ -190,7 +190,7 @@ async function registerPushToken(userDocId: string) {
     if (token) {
       const userDocRef = doc(db, 'users', userDocId);
       await updateDoc(userDocRef, {
-        expoPushTokens: arrayUnion(token),
+        "expoPushTokens.QTM": arrayUnion(token),
       });
       console.log(`Token successfully added for user with doc ID ${userDocId}`);
     }
@@ -232,7 +232,7 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseUser | nul
         <Stack.Screen name="family" options={{ headerBackTitle: "رجوع", title: "العائلة" }} />
         <Stack.Screen name="about" options={{ headerBackTitle: "رجوع", }} />
         <Stack.Screen name="invoices" options={{
-          title: "الفواتير", headerBackTitle: "رجوع", headerTitleAlign: 'center',
+          headerShown: false
         }} />
         <Stack.Screen name="complete-profile" options={{ headerShown: false }} />
       </Stack>
