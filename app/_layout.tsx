@@ -234,7 +234,8 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseUser | nul
         <Stack.Screen name="family" options={{ headerBackTitle: "رجوع", title: "العائلة" }} />
         <Stack.Screen name="about" options={{ headerBackTitle: "رجوع", }} />
         <Stack.Screen name="invoices" options={{
-          headerShown: false
+          headerBackTitle: "رجوع",
+          headerTitle: "الفواتير"
         }} />
         <Stack.Screen name="complete-profile" options={{ headerBackTitle: "رجوع", headerTitle: "الملف الشخصي" }} />
       </Stack>
