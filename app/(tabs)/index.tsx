@@ -232,14 +232,14 @@ const SearchHeader = ({ requestView, setRequestView, sortOrder, setSortOrder, on
     <View style={styles.headerContainer}>
       <View style={styles.titleSection}>
         <View style={styles.headerRow}>
-          <Text adjustsFontSizeToFit numberOfLines={1} style={styles.headerTitle}>الطلبات</Text>
+          <Text adjustsFontSizeToFit numberOfLines={1} style={styles.headerTitle}>المهام</Text>
           <View style={[styles.dataSourceIndicator, isRealtime ? styles.realtimeIndicator : styles.searchIndicator]}>
             <Text style={styles.dataSourceIndicatorText}>
               {isRealtime ? 'مباشر' : 'نتائج البحث'}
             </Text>
           </View>
         </View>
-        <Text adjustsFontSizeToFit numberOfLines={1} style={styles.headerSubtitle}>عرض وتصفية الطلبات المرسلة اليك.</Text>
+        <Text adjustsFontSizeToFit numberOfLines={1} style={styles.headerSubtitle}>عرض وتصفية المهام المرسلة اليك.</Text>
       </View>
       <View style={styles.controlsSection}>
         <View style={styles.controlsContainer}>
@@ -269,9 +269,9 @@ const SearchHeader = ({ requestView, setRequestView, sortOrder, setSortOrder, on
         <ActiveFilters />
       </View>
       <View style={styles.switchContainer}>
-        <TouchableOpacity style={[styles.switchTab, requestView === 'open' && styles.switchTabActive]} onPress={() => setRequestView('open')} activeOpacity={0.8}><Text style={[styles.switchText, requestView === 'open' && styles.switchTextActive]}>مفتوح ({statusCounts.open})</Text></TouchableOpacity>
-        <TouchableOpacity style={[styles.switchTab, requestView === 'pending' && styles.switchTabActive]} onPress={() => setRequestView('pending')} activeOpacity={0.8}><Text style={[styles.switchText, requestView === 'pending' && styles.switchTextActive]}>قيد المعالجة ({statusCounts.pending})</Text></TouchableOpacity>
-        <TouchableOpacity style={[styles.switchTab, requestView === 'closed' && styles.switchTabActive]} onPress={() => setRequestView('closed')} activeOpacity={0.8}><Text style={[styles.switchText, requestView === 'closed' && styles.switchTextActive]}>مكتمل ({statusCounts.closed})</Text></TouchableOpacity>
+        <TouchableOpacity style={[styles.switchTab, requestView === 'open' && styles.switchTabActive]} onPress={() => setRequestView('open')} activeOpacity={0.8}><Text adjustsFontSizeToFit style={[styles.switchText, requestView === 'open' && styles.switchTextActive]}>مفتوح ({statusCounts.open})</Text></TouchableOpacity>
+        <TouchableOpacity style={[styles.switchTab, requestView === 'pending' && styles.switchTabActive]} onPress={() => setRequestView('pending')} activeOpacity={0.8}><Text adjustsFontSizeToFit style={[styles.switchText, requestView === 'pending' && styles.switchTextActive]}>قيد المعالجة ({statusCounts.pending})</Text></TouchableOpacity>
+        <TouchableOpacity style={[styles.switchTab, requestView === 'closed' && styles.switchTabActive]} onPress={() => setRequestView('closed')} activeOpacity={0.8}><Text adjustsFontSizeToFit style={[styles.switchText, requestView === 'closed' && styles.switchTextActive]}>مكتمل ({statusCounts.closed})</Text></TouchableOpacity>
       </View>
     </View>
   );

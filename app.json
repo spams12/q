@@ -13,7 +13,9 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location in the background to track your progress on assigned tasks.",
         "NSLocationAlwaysUsageDescription": "This app uses your location in the background to track your progress on assigned tasks.",
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["location"]
+        "UIBackgroundModes": [
+          "location"
+        ]
       },
       "runtimeVersion": {
         "policy": "appVersion"
@@ -41,7 +43,7 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "versionCode": 15
+      "versionCode": 16
     },
     "web": {
       "bundler": "metro",
