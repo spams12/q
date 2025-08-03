@@ -2,15 +2,11 @@ import CustomHeader from '@/components/CustomHeader';
 import { FontAwesome, FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { LayoutAnimation, Platform, UIManager } from 'react-native';
+import { LayoutAnimation } from 'react-native';
 
 import { HapticTab } from '@/components/HapticTab';
 import { useTheme } from '@/context/ThemeContext';
-if (Platform.OS === 'android') {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-}
+
 
 export default function TabLayout() {
   const { theme } = useTheme();
@@ -21,8 +17,6 @@ export default function TabLayout() {
       initialRouteName="index"
 
       screenOptions={{
-
-        freezeOnBlur: true,
         tabBarButton: (props) => {
           return (
             <HapticTab
