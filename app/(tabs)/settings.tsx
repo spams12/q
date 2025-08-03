@@ -1,13 +1,13 @@
+// src/app/(tabs)/settings.tsx (or your path to the settings page)
+
 import { UseDialog } from '@/context/DialogContext';
 import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-// MODIFICATION: Import expo-notifications to get the push token for removal on logout
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
-// MODIFICATION: Imports are consolidated, including getDoc and setDoc
 import { Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import React, { Children, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -66,7 +66,6 @@ interface SettingRowProps {
   rightComponent?: React.ReactNode;
 }
 
-// MODIFICATION: Updated props interface for the custom dialog to support loading state
 interface CustomDialogProps {
   visible: boolean;
   title: string;
@@ -129,7 +128,6 @@ const SettingRow = React.memo<SettingRowProps & { styles: any }>(({ icon, iconCo
 ));
 SettingRow.displayName = 'SettingRow';
 
-// MODIFICATION: Replaced with the more advanced CustomDialog component that handles a loading state
 const CustomDialog = ({ visible, title, message, buttons, onClose, styles }: CustomDialogProps) => {
   if (!visible) return null;
 
@@ -183,7 +181,6 @@ const SettingsPage = () => {
   const styles = useMemo(() => getStyles(theme), [theme]);
   const [invoiceData, setInvoiceData] = useState({ total: 0, count: 0 });
   const { userdoc, setUserdoc, realuserUid } = usePermissions();
-  // MODIFICATION: Using specific loading states for different actions
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [isImageUploading, setIsImageUploading] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -205,8 +202,11 @@ const SettingsPage = () => {
     return { latestClearTimeString: timeString, formattedDate: dateString };
   }, [userdoc]);
 
+  // FIX: Depend on the stable user ID, not the entire userdoc object.
+  // This prevents the onSnapshot listener from being re-created on every data change.
   useEffect(() => {
-    if (!userdoc) return;
+    if (!userdoc?.id) return;
+
     const userDocRef = doc(db, 'users', userdoc.id);
     const unsubscribe = onSnapshot(userDocRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -217,8 +217,9 @@ const SettingsPage = () => {
     }, (error) => {
       console.error("Error fetching user document:", error);
     });
+
     return () => unsubscribe();
-  }, [userdoc, setUserdoc]);
+  }, [userdoc?.id, setUserdoc]);
 
   useEffect(() => {
     if (!realuserUid) return;
@@ -571,7 +572,6 @@ const SettingsPage = () => {
         />
       </ScrollView>
 
-      {/* MODIFICATION: Render the custom dialog, passing the new loading state for the logout button */}
       <CustomDialog
         visible={isLogoutDialogVisible}
         title="تسجيل الخروج"
@@ -587,6 +587,7 @@ const SettingsPage = () => {
   );
 };
 
+// Styles remain unchanged, so they are omitted here for brevity
 const getStyles = (theme: Theme) => StyleSheet.create({
   timeTrackingContainer: {
     flexDirection: 'row',
@@ -884,7 +885,6 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    // MODIFICATION: Add minimum height to prevent layout shift when loading indicator appears
     minHeight: 48,
   },
   defaultButton: {

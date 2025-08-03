@@ -1,3 +1,5 @@
+// src/app/_layout.tsx
+
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
@@ -44,19 +46,18 @@ SplashScreen.preventAutoHideAsync();
 
 // --- NEW & IMPROVED: Notification Permission Modal Component ---
 
-// A factory function to create theme-aware styles
 const getStyles = (theme: Themes['light']) =>
   StyleSheet.create({
     centeredView: {
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.55)', // A slightly darker backdrop for better focus
+      backgroundColor: 'rgba(0, 0, 0, 0.55)',
     },
     modalView: {
       margin: 20,
-      backgroundColor: theme.card, // Use theme color for the background
-      borderRadius: 14, // Softer, more modern corners
+      backgroundColor: theme.card,
+      borderRadius: 14,
       alignItems: 'center',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 4 },
@@ -64,8 +65,8 @@ const getStyles = (theme: Themes['light']) =>
       shadowRadius: 12,
       elevation: 10,
       width: '85%',
-      maxWidth: 320, // Set a max width for consistency on larger screens
-      overflow: 'hidden', // Ensures child elements adhere to borderRadius
+      maxWidth: 320,
+      overflow: 'hidden',
     },
     textContainer: {
       padding: 20,
@@ -76,7 +77,7 @@ const getStyles = (theme: Themes['light']) =>
       fontSize: 18,
       fontFamily: 'Cairo',
       fontWeight: 'bold',
-      color: theme.text, // Use theme color for text
+      color: theme.text,
       marginBottom: 8,
       textAlign: 'center',
     },
@@ -84,14 +85,14 @@ const getStyles = (theme: Themes['light']) =>
       fontSize: 14,
       fontFamily: 'Cairo',
       lineHeight: 22,
-      color: theme.textSecondary, // Use secondary text color for the body
+      color: theme.textSecondary,
       textAlign: 'center',
     },
     buttonContainer: {
       flexDirection: 'column',
       width: '100%',
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.separator, // Use theme color for separators
+      borderTopColor: theme.separator,
     },
     button: {
       width: '100%',
@@ -107,11 +108,11 @@ const getStyles = (theme: Themes['light']) =>
     buttonText: {
       fontSize: 17,
       fontFamily: 'Cairo',
-      color: theme.primary, // Use theme primary color for button text
+      color: theme.primary,
       textAlign: 'center',
     },
     primaryButtonText: {
-      fontWeight: 'bold', // Emphasize the primary action
+      fontWeight: 'bold',
     },
   });
 
@@ -164,7 +165,6 @@ const NotificationPermissionModal = ({
   );
 };
 
-// --- REFACTORED: This function now only handles token registration, assuming permission is granted. ---
 async function registerPushToken(userDocId: string) {
   if (!userDocId) return;
 
@@ -193,7 +193,6 @@ async function registerPushToken(userDocId: string) {
   }
 }
 
-// Pass userdoc from the context to the 'profile' prop
 function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseUser | null; profile: AppUser | null; authLoaded: boolean }) {
   useProtectedRoute(user, profile, authLoaded)
   const { theme } = useTheme();
@@ -243,9 +242,6 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseUser | nul
   );
 }
 
-// FIX 1: The main logic is moved into this new component.
-// This allows it to correctly consume the `userdoc` from the context
-// provided by the parent `RootLayout` component.
 function RootLayoutContent() {
   const [loaded, error] = useFonts({
     Cairo: require('../assets/fonts/Cairo.ttf'),
@@ -254,10 +250,9 @@ function RootLayoutContent() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
   const [isPermissionModalVisible, setIsPermissionModalVisible] = useState(false);
-  const { userdoc } = usePermissions(); // Now this hook works correctly!
+  const { userdoc } = usePermissions();
   const router = useRouter();
 
-  // --- NEW: Permission handling logic ---
   const handleNotificationPermissions = async (userDocId: string) => {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
@@ -286,11 +281,14 @@ function RootLayoutContent() {
     return () => unsubscribe();
   }, [error]);
 
+  // FIX: This hook now depends on the stable `userdoc?.id` string.
+  // This prevents it from re-running every time the userdoc object reference changes,
+  // which was the cause of the infinite loop.
   useEffect(() => {
     if (user && userdoc?.id) {
       handleNotificationPermissions(userdoc.id);
     }
-  }, [user, userdoc]);
+  }, [user, userdoc?.id]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
@@ -306,7 +304,7 @@ function RootLayoutContent() {
     return () => {
       subscription.remove();
     };
-  }, [userdoc]);
+  }, [userdoc?.id]); // Also updated here for consistency
 
   useEffect(() => {
     if (loaded && authLoaded) {
@@ -314,28 +312,23 @@ function RootLayoutContent() {
     }
   }, [loaded, authLoaded]);
 
-  // --- MODIFIED: Notification listener now uses `userdoc`.
   useEffect(() => {
     const notificationListener = Notifications.addNotificationReceivedListener(notification => {
       console.log('Notification received while app is foregrounded:', notification);
     });
 
     const responseListener = Notifications.addNotificationResponseReceivedListener(async (response) => {
-      // FIX 2: Added `notificationId` to the type to match the data from your logs.
       const data = response.notification.request.content.data as {
         type?: 'serviceRequest' | 'announcement' | 'info';
         id?: string;
-        docId?: string; // Kept for future compatibility
-        notificationId?: string; // The actual key from your logs
+        docId?: string;
+        notificationId?: string;
       };
 
       console.log('User tapped notification. Data:', data);
 
-      // FIX 2: Use the `notificationId` from the payload as a fallback for `docId`.
       const notificationDocId = data?.docId || data?.notificationId;
 
-      // --- 1. Mark notification as read ---
-      // This check will now work correctly with a valid `userdoc` and `notificationDocId`.
       if (userdoc?.id && notificationDocId) {
         const notificationRef = doc(db, "users", userdoc.id, "notifications", notificationDocId);
         try {
@@ -348,11 +341,9 @@ function RootLayoutContent() {
           console.error("Error marking notification as read:", error);
         }
       } else {
-        // Updated warning message for better debugging.
         console.warn(`Could not mark as read. Missing userdoc.id (${!!userdoc?.id}) or notificationDocId (${!!notificationDocId}).`);
       }
 
-      // --- 2. Navigate to the appropriate screen ---
       if ((data?.type === 'serviceRequest' || data?.type === 'info') && data?.id) {
         const id = data.id;
         router.push({
@@ -374,7 +365,7 @@ function RootLayoutContent() {
       notificationListener.remove();
       responseListener.remove();
     };
-  }, [router, userdoc]); // Depend on userdoc from the context
+  }, [router, userdoc]); // userdoc is okay here as it contains the id needed for marking notifications as read
 
   if (!loaded || !authLoaded) {
     return null;
@@ -385,7 +376,6 @@ function RootLayoutContent() {
       <KeyboardProvider>
         <ThemeProvider>
           <DialogProvider>
-            {/* Pass userdoc to the profile prop */}
             <RootLayoutNav user={user} profile={userdoc} authLoaded={authLoaded} />
             <GlobalStatusDialog />
             <NotificationPermissionModal

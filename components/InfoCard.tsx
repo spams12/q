@@ -223,9 +223,7 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
             value={<Text style={[styles.detailValue, { color: theme.text }]} numberOfLines={1}>{item.id}</Text>}
             theme={theme}
           />
-          <DetailRow label="المنشئ:" value={<Text style={[styles.detailValue, { color: theme.text }]}>{creatorName}</Text>} theme={theme} />
           <DetailRow label="الجهة المسؤولة:" value={<Text style={[styles.detailValue, { color: theme.text }]}>{item.department || 'غير محددة'}</Text>} theme={theme} />
-          <DetailRow label="مسند إلى:" value={<Text style={[styles.detailValue, { color: theme.text }]}>{assignedUsersNames}</Text>} theme={theme} />
           <DetailRow label="تاريخ الإنشاء:" value={<Text style={[styles.detailValue, { color: theme.text }]}>{formatTimestamp(item.createdAt)}</Text>} theme={theme} />
         </View>
       </Pressable>

@@ -86,7 +86,7 @@ interface AttachmentAsset {
 
 const TicketDetailPage = () => {
     const { showDialog } = UseDialog()
-    
+
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
     const id = params.id as string;
@@ -288,7 +288,7 @@ const TicketDetailPage = () => {
             });
         } catch (e) {
             console.error("Failed to add comment: ", e);
-            showDialog({status:"error" , message:"فشل في إرسال التعليق."})
+            showDialog({ status: "error", message: "فشل في إرسال التعليق." })
         }
     };
 
@@ -296,7 +296,7 @@ const TicketDetailPage = () => {
     const handlePickImage = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-            showDialog({status:"error" , message:"يرجى السماح بالوصول إلى الصور."})
+            showDialog({ status: "error", message: "يرجى السماح بالوصول إلى الصور." })
             return;
         }
 
