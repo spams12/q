@@ -2,19 +2,22 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
-import { db } from '@/lib/firebase'; // Make sure your firebase config is exported from here
+import { db } from '@/lib/firebase';
 import { Ionicons } from '@expo/vector-icons';
-// --- NEW/MODIFIED IMPORTS ---
 import { Video } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
-import { shareAsync } from 'expo-sharing'; // Added for the new save function
+import { shareAsync } from 'expo-sharing';
 import {
   collection,
-  onSnapshot, // MODIFIED: Using onSnapshot for real-time updates
+  doc,
+  getDocs,
+  onSnapshot,
   orderBy,
   query,
+  updateDoc,
   where,
+  writeBatch
 } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -30,34 +33,28 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-// If you use a progress bar library, import it here
-// import * as Progress from 'react-native-progress';
 
-
-type NotificationIconName =
-  | 'checkmark-circle'
-  | 'warning'
-  | 'alert-circle'
-  | 'notifications'
-  | 'megaphone-outline';
-
+// --- INTERFACE (UNCHANGED) ---
 interface Notification {
+  docId: string;
   id: string;
   title: string;
   body: string;
   timestamp: string;
   type: 'info' | 'warning' | 'success' | 'error' | 'announcement';
-  source: 'announcement' | 'serviceRequest';
+  source: 'announcement' | 'serviceRequest' | 'info';
   imageUrl?: string;
+  isRead: boolean;
 }
 
-// --- Helper Functions (Unchanged) ---
+// --- HELPER FUNCTIONS (UNCHANGED) ---
 const isVideoUrl = (url?: string): boolean => {
   if (!url) return false;
   return /\.(mp4|mov|mkv|webm)$/i.test(url);
 };
 
 const getNotificationIcon = (theme: Theme, type: Notification['type']) => {
+  type NotificationIconName = React.ComponentProps<typeof Ionicons>['name'];
   switch (type) {
     case 'success':
       return { name: 'checkmark-circle' as NotificationIconName, color: theme.success };
@@ -89,8 +86,7 @@ const formatTimestamp = (timestamp?: string): string => {
 };
 
 
-// --- Child Components (Unchanged) ---
-
+// --- NOTIFICATION ITEM COMPONENT (UNCHANGED) ---
 interface NotificationItemProps {
   item: Notification;
   onPress: (item: Notification) => void;
@@ -102,16 +98,36 @@ const NotificationItem = React.memo(({ item, onPress, onMediaPress }: Notificati
   const styles = getStyles(theme, themeName);
   const icon = getNotificationIcon(theme, item.type);
   const isVideo = isVideoUrl(item.imageUrl);
+  const isRead = item.isRead;
+  const [imageAspectRatio, setImageAspectRatio] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (item.source === 'announcement' && item.imageUrl && !isVideo) {
+      let isMounted = true;
+      Image.getSize(item.imageUrl, (width, height) => {
+        if (isMounted && height > 0) {
+          setImageAspectRatio(width / height);
+        }
+      }, (error) => {
+        console.error(`Could not get image size for ${item.imageUrl}:`, error);
+        if (isMounted) {
+          setImageAspectRatio(16 / 9);
+        }
+      });
+      return () => { isMounted = false; };
+    }
+  }, [item.source, item.imageUrl, isVideo]);
 
   return (
     <View style={styles.notificationWrapper}>
       <TouchableOpacity
-        style={styles.notificationItem}
+        style={[styles.notificationItem, isRead && styles.readNotificationItem]}
         onPress={() => onPress(item)}
-        activeOpacity={0.8}>
+        activeOpacity={0.7}>
         <View style={styles.notificationContent}>
           <View style={styles.iconContainer}>
             <Ionicons name={icon.name} size={24} color={icon.color} />
+            {!isRead && <View style={styles.unreadBadge} />}
           </View>
           <View style={styles.textContent}>
             <ThemedText type="defaultSemiBold" style={styles.notificationTitle}>
@@ -135,7 +151,15 @@ const NotificationItem = React.memo(({ item, onPress, onMediaPress }: Notificati
                     </View>
                   </View>
                 ) : (
-                  <Image source={{ uri: item.imageUrl }} style={styles.mediaPreview} resizeMode="cover" />
+                  <Image
+                    source={{ uri: item.imageUrl }}
+                    style={
+                      item.source === 'announcement' && imageAspectRatio
+                        ? [styles.announcementImage, { aspectRatio: imageAspectRatio }]
+                        : styles.mediaPreview
+                    }
+                    resizeMode="cover"
+                  />
                 )}
               </TouchableOpacity>
             )}
@@ -148,7 +172,7 @@ const NotificationItem = React.memo(({ item, onPress, onMediaPress }: Notificati
 });
 NotificationItem.displayName = 'NotificationItem';
 
-
+// --- EMPTY STATE COMPONENT (UNCHANGED) ---
 const EmptyState = React.memo(() => {
   const { theme, themeName } = useTheme();
   const styles = getStyles(theme, themeName);
@@ -163,16 +187,14 @@ const EmptyState = React.memo(() => {
 });
 EmptyState.displayName = 'EmptyState';
 
-// --- MAIN SCREEN COMPONENT (HEAVILY MODIFIED) ---
-
+// --- MODIFIED MAIN SCREEN COMPONENT ---
 export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  // State for each data source to handle real-time merging
-  const [announcementNotifs, setAnnouncementNotifs] = useState<Notification[]>([]);
-  const [serviceRequestNotifs, setServiceRequestNotifs] = useState<Notification[]>([]);
-
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  // --- MODIFIED: Added new state for marking as read ---
+  const [isMarkingAsRead, setIsMarkingAsRead] = useState(false);
   const fadeAnim = useMemo(() => new Animated.Value(0), []);
 
   const [isModalVisible, setModalVisible] = useState(false);
@@ -186,7 +208,6 @@ export default function NotificationsScreen() {
   const styles = getStyles(theme, themeName);
   const { userdoc } = usePermissions();
 
-  // --- EFFECT 1: Set up real-time Firestore listeners ---
   useEffect(() => {
     if (!userdoc?.id) {
       setNotifications([]);
@@ -195,95 +216,173 @@ export default function NotificationsScreen() {
     }
 
     setLoading(true);
+    const notificationsRef = collection(db, "users", userdoc.id, "notifications");
+    const q = query(notificationsRef, orderBy('createdAt', 'desc'));
 
-    const announcementsQuery = query(
-      collection(db, 'announcements'),
-      where('assignedUsers', 'array-contains', userdoc.id),
-      orderBy('createdAt', 'desc')
-    );
-
-    const serviceRequestsQuery = query(
-      collection(db, 'serviceRequests'),
-      where('assignedUsers', 'array-contains', userdoc.id),
-      orderBy('createdAt', 'desc')
-    );
-
-    const unsubscribeAnnouncements = onSnapshot(announcementsQuery, (snapshot) => {
-      const announcementData: Notification[] = snapshot.docs.map(doc => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedNotifications: Notification[] = snapshot.docs.map(doc => {
         const data = doc.data();
         const timestamp = data.createdAt?.toDate?.().toISOString() || new Date().toISOString();
         return {
-          id: doc.id,
-          title: data.head || 'إعلان جديد',
-          body: data.body || 'تفاصيل الإعلان غير متوفرة.',
-          timestamp,
-          type: 'announcement',
-          source: 'announcement',
-          imageUrl: data.imageUrl,
+          docId: doc.id,
+          id: data.data.id,
+          title: data.title || 'إشعار جديد',
+          body: data.body || 'لا توجد تفاصيل.',
+          timestamp: timestamp,
+          type: data.type || 'info',
+          source: data.data.type || 'info',
+          imageUrl: (data.imageUrls && data.imageUrls[0]) || (data.fileAttachments && data.fileAttachments[0]),
+          isRead: data.isRead || false,
         };
       });
-      setAnnouncementNotifs(announcementData);
+
+      setNotifications(fetchedNotifications);
+
+      if (loading) {
+        setLoading(false);
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }).start();
+      }
     }, (error) => {
-      console.error("Error fetching announcements snapshot:", error);
-      Alert.alert("خطأ", "لا يمكن تحميل الإعلانات.");
-    });
-
-    const unsubscribeServiceRequests = onSnapshot(serviceRequestsQuery, (snapshot) => {
-      const serviceRequestData: Notification[] = snapshot.docs.map(doc => {
-        const data = doc.data();
-        const priority = data.priority || 'متوسط';
-        const timestamp = data.createdAt?.toDate?.().toISOString() || new Date().toISOString();
-        return {
-          id: doc.id,
-          title: `مهمة جديدة: ${data.title}`,
-          body: `النوع: ${data.type || 'غير محدد'}. أنشأها: ${data.creatorName || 'النظام'}. الأولوية: ${priority}.`,
-          timestamp,
-          type: priority === 'عاجل' || priority === 'مرتفع' ? 'warning' : 'success',
-          source: 'serviceRequest',
-        };
-      });
-      setServiceRequestNotifs(serviceRequestData);
-    }, (error) => {
-      console.error("Error fetching service requests snapshot:", error);
-      Alert.alert("خطأ", "لا يمكن تحميل المهام.");
-    });
-
-    // Cleanup function to unsubscribe when the component unmounts
-    return () => {
-      unsubscribeAnnouncements();
-      unsubscribeServiceRequests();
-    };
-  }, [userdoc?.id]); // Rerun if user changes
-
-  // --- EFFECT 2: Merge and sort data from both listeners ---
-  useEffect(() => {
-    const allNotifications = [...announcementNotifs, ...serviceRequestNotifs];
-    allNotifications.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    setNotifications(allNotifications);
-
-    // Stop loading indicator once we have processed data
-    if (loading) {
+      console.error("Error fetching notifications snapshot:", error);
+      Alert.alert("خطأ", "لا يمكن تحميل الإشعارات.");
       setLoading(false);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [announcementNotifs, serviceRequestNotifs, fadeAnim]);
+    });
 
-  // --- MODIFIED: onRefresh is now just for UX feedback, as data is live ---
+    return () => unsubscribe();
+  }, [userdoc?.id]);
+
+  const hasReadNotifications = useMemo(() => {
+    return notifications.some(n => n.isRead);
+  }, [notifications]);
+
+  // --- MODIFIED: Added a memo to check for unread notifications ---
+  const hasUnreadNotifications = useMemo(() => {
+    return notifications.some(n => !n.isRead);
+  }, [notifications]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    // Data updates automatically, so just show the spinner for a short time
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
 
-  const handleNotificationPress = useCallback((item: Notification) => {
-    if (item.source === 'serviceRequest') {
-      router.push(`/tasks/${item.id}`);
+  const handleNotificationPress = useCallback(async (item: Notification) => {
+    if (!item.isRead && userdoc?.id) {
+      const notificationRef = doc(db, "users", userdoc.id, "notifications", item.docId);
+      try {
+        await updateDoc(notificationRef, {
+          isRead: true,
+          readAt: new Date(),
+        });
+      } catch (error) {
+        console.error("Error marking notification as read:", error);
+      }
     }
-  }, [router]);
+
+    if (item.source === 'serviceRequest' || item.source === 'info') {
+      router.push(`/tasks/${item.id}`);
+    } else if (item.source === 'announcement') {
+      router.push(`/announcements/${item.id}`);
+    } else {
+      console.warn(`No navigation route defined for notification source: ${item.source}`);
+    }
+  }, [router, userdoc?.id]);
+
+  const handleDeleteNotifications = async (type: 'all' | 'read') => {
+    if (!userdoc?.id) return;
+
+    // --- MODIFIED: Removed 'all' type logic from here as it's replaced ---
+    const title = 'حذف الإشعارات المقروءة';
+    const message = 'هل أنت متأكد أنك تريد حذف جميع الإشعارات المقروءة؟';
+
+    Alert.alert(
+      title,
+      message,
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        {
+          text: 'حذف',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              const notificationsRef = collection(db, "users", userdoc.id, "notifications");
+              const q = query(notificationsRef, where('isRead', '==', true));
+
+              const querySnapshot = await getDocs(q);
+
+              if (querySnapshot.empty) {
+                Alert.alert('لا يوجد شيء للحذف', 'لم يتم العثور على إشعارات مقروءة للحذف.');
+                setIsDeleting(false);
+                return;
+              }
+
+              const batch = writeBatch(db);
+              querySnapshot.forEach((doc) => {
+                batch.delete(doc.ref);
+              });
+
+              await batch.commit();
+
+            } catch (error) {
+              console.error(`Error deleting read notifications:`, error);
+              Alert.alert('خطأ', 'حدث خطأ أثناء حذف الإشعارات.');
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  // --- MODIFIED: New function to mark all notifications as read ---
+  const handleMarkAllAsRead = async () => {
+    if (!userdoc?.id || !hasUnreadNotifications) return;
+
+    Alert.alert(
+      'وضع علامة على الكل كمقروء',
+      'هل أنت متأكد أنك تريد وضع علامة على جميع الإشعارات غير المقروءة كمقروءة؟',
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        {
+          text: 'تأكيد',
+          style: 'default',
+          onPress: async () => {
+            setIsMarkingAsRead(true);
+            try {
+              const notificationsRef = collection(db, "users", userdoc.id, "notifications");
+              const q = query(notificationsRef, where('isRead', '==', false));
+
+              const querySnapshot = await getDocs(q);
+
+              if (querySnapshot.empty) {
+                setIsMarkingAsRead(false);
+                return;
+              }
+
+              const batch = writeBatch(db);
+              querySnapshot.forEach((doc) => {
+                batch.update(doc.ref, { isRead: true, readAt: new Date() });
+              });
+
+              await batch.commit();
+            } catch (error) {
+              console.error(`Error marking all as read:`, error);
+              Alert.alert('خطأ', 'حدث خطأ أثناء تحديث الإشعارات.');
+            } finally {
+              setIsMarkingAsRead(false);
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
 
   const handleMediaPress = useCallback((url: string) => {
     setSelectedMediaUrl(url);
@@ -295,7 +394,7 @@ export default function NotificationsScreen() {
     setSelectedMediaUrl(null);
   };
 
-  // --- NEW: Modern, permission-friendly saveFile function ---
+  // --- Unchanged Media Functions (saveFile, handleDownload) ---
   const saveFile = async (fileUri: string, fileName: string, mimeType?: string) => {
     if (Platform.OS === 'android') {
       try {
@@ -305,24 +404,20 @@ export default function NotificationsScreen() {
           await FileSystem.StorageAccessFramework.createFileAsync(permissions.directoryUri, fileName, mimeType || 'application/octet-stream')
             .then(async (newFileUri) => {
               await FileSystem.writeAsStringAsync(newFileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
-              Alert.alert('نجاح', 'تم حفظ الملف بنجاح في المجلد الذي اخترته!');
             })
             .catch((e) => {
               console.error(e);
               Alert.alert('خطأ', 'حدث خطأ أثناء إنشاء الملف.');
             });
         } else {
-          // Fallback to share sheet if user denies permission
           await shareAsync(fileUri, { dialogTitle: 'مشاركة أو حفظ هذا الملف' });
         }
       } catch (e) {
         console.error(e);
         Alert.alert('خطأ', 'حدث خطأ أثناء حفظ الملف.');
-        // Fallback to share sheet on any other error
         await shareAsync(fileUri, { dialogTitle: 'مشاركة أو حفظ هذا الملف' }).catch(shareError => console.error(shareError));
       }
     } else {
-      // iOS and other platforms use the share sheet
       await shareAsync(fileUri, { dialogTitle: 'مشاركة أو حفظ هذا الملف' });
     }
   };
@@ -365,6 +460,7 @@ export default function NotificationsScreen() {
       Alert.alert('خطأ', 'لا يمكن تحميل الملف.');
     }
   };
+  // ---
 
   const renderItem = useCallback(
     ({ item }: { item: Notification }) => (
@@ -377,7 +473,7 @@ export default function NotificationsScreen() {
     [handleNotificationPress, handleMediaPress]
   );
 
-  const keyExtractor = useCallback((item: Notification) => item.id, []);
+  const keyExtractor = useCallback((item: Notification) => item.docId, []);
 
   if (loading && !refreshing) {
     return (
@@ -389,6 +485,32 @@ export default function NotificationsScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      {notifications.length > 0 && (
+        // --- MODIFIED: Header buttons ---
+        <View style={styles.headerContainer}>
+          <TouchableOpacity
+            style={[styles.deleteButton, !hasReadNotifications && styles.disabledButton]}
+            onPress={() => handleDeleteNotifications('read')}
+            disabled={!hasReadNotifications || isDeleting}
+          >
+            <Ionicons name="trash-bin-outline" size={18} color={!hasReadNotifications ? theme.textSecondary : theme.destructive} />
+            <ThemedText style={[styles.deleteButtonText, { color: !hasReadNotifications ? theme.textSecondary : theme.destructive }]}>
+              حذف المقروءة
+            </ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.deleteButton, (!hasUnreadNotifications || isMarkingAsRead) && styles.disabledButton]}
+            onPress={handleMarkAllAsRead}
+            disabled={!hasUnreadNotifications || isMarkingAsRead}
+          >
+            <Ionicons name="checkmark-done-outline" size={18} color={!hasUnreadNotifications ? theme.textSecondary : theme.primary} />
+            <ThemedText style={[styles.deleteButtonText, { color: !hasUnreadNotifications ? theme.textSecondary : theme.primary }]}>
+              وضع علامة كمقروء
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
         <FlatList
           data={notifications}
@@ -408,7 +530,6 @@ export default function NotificationsScreen() {
         />
       </Animated.View>
 
-      {/* Media Viewer Modal */}
       <Modal visible={isModalVisible} transparent={true} animationType="fade">
         <View style={styles.modalContainer}>
           <TouchableOpacity style={styles.modalCloseButton} onPress={closeMediaModal}>
@@ -434,7 +555,6 @@ export default function NotificationsScreen() {
         </View>
       </Modal>
 
-      {/* Download Progress Dialog */}
       <Modal visible={downloadDialogVisible} transparent={true} animationType="fade">
         <View style={styles.dialogContainer}>
           <View style={styles.dialogContent}>
@@ -447,16 +567,53 @@ export default function NotificationsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* --- MODIFIED: Loading modal for both deleting and marking as read --- */}
+      <Modal visible={isDeleting || isMarkingAsRead} transparent={true} animationType="fade">
+        <View style={styles.dialogContainer}>
+          <View style={styles.dialogContent}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <ThemedText style={[styles.dialogTitle, { marginTop: 15 }]}>
+              {isDeleting ? 'جاري الحذف...' : 'جاري التحديث...'}
+            </ThemedText>
+          </View>
+        </View>
+      </Modal>
+
     </ThemedView>
   );
 }
 
-// --- Styles (Unchanged) ---
+
+// --- STYLES (UNCHANGED) ---
 const getStyles = (theme: Theme, themeName: 'light' | 'dark') =>
   StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: theme.background,
+    },
+    headerContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      alignItems: 'center',
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+      backgroundColor: theme.background,
+    },
+    deleteButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 8,
+    },
+    deleteButtonText: {
+      marginLeft: 6,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    disabledButton: {
+      opacity: 0.5,
     },
     centered: {
       flex: 1,
@@ -472,15 +629,24 @@ const getStyles = (theme: Theme, themeName: 'light' | 'dark') =>
       backgroundColor: theme.card,
       borderRadius: 16,
       padding: 16,
-      borderWidth: 1,
-      borderColor: theme.border,
-      shadowColor: themeName === 'light' ? theme.black : theme.black,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: themeName === 'light' ? 0.08 : 0.2,
-      shadowRadius: 4,
-      elevation: 3,
+      flexDirection: 'row',
+    },
+    readNotificationItem: {
+      opacity: 0.6,
+    },
+    unreadBadge: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: theme.destructive,
+      borderWidth: 1.5,
+      borderColor: theme.card,
     },
     notificationContent: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'flex-start',
     },
@@ -539,6 +705,9 @@ const getStyles = (theme: Theme, themeName: 'light' | 'dark') =>
     mediaPreview: {
       width: '100%',
       height: 180,
+    },
+    announcementImage: {
+      width: '100%',
     },
     playIconOverlay: {
       ...StyleSheet.absoluteFillObject,

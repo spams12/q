@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'; // --- ADDED ---
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
@@ -6,13 +5,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { User as FirebaseUser, onAuthStateChanged } from 'firebase/auth';
 import {
   arrayUnion,
-  collection,
   doc,
-  getDocs,
-  onSnapshot,
-  query,
   updateDoc,
-  where,
 } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
@@ -31,7 +25,7 @@ import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GlobalStatusDialog } from '../components/global/StatusDialog';
 import { DialogProvider } from '../context/DialogContext';
-import { PermissionsProvider } from '../context/PermissionsContext';
+import { PermissionsProvider, usePermissions } from '../context/PermissionsContext';
 import { ThemeProvider, Themes, useTheme } from '../context/ThemeContext';
 import { useProtectedRoute } from '../hooks/useProtectedRoute';
 import { auth, db } from '../lib/firebase';
@@ -199,12 +193,14 @@ async function registerPushToken(userDocId: string) {
   }
 }
 
+// Pass userdoc from the context to the 'profile' prop
 function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseUser | null; profile: AppUser | null; authLoaded: boolean }) {
   useProtectedRoute(user, profile, authLoaded)
   const { theme } = useTheme();
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <Stack
+        initialRouteName='(tabs)'
         screenOptions={{
           headerStyle: {
             backgroundColor: theme.background,
@@ -215,6 +211,13 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseUser | nul
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="tasks/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="announcements/[id]" options={{
+          title: 'الاعلانات',
+          headerTitleAlign: 'center',
+          headerBackTitle: "رجوع",
+
+        }} />
+
         <Stack.Screen
           name="create-request"
           options={{
@@ -234,44 +237,24 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseUser | nul
         <Stack.Screen name="invoices" options={{
           headerShown: false
         }} />
-        <Stack.Screen name="complete-profile" options={{ headerShown: false }} />
+        <Stack.Screen name="complete-profile" options={{ headerBackTitle: "رجوع", headerTitle: "الملف الشخصي" }} />
       </Stack>
     </View>
   );
 }
 
-// --- MAIN ROOT LAYOUT COMPONENT ---
-
-// --- ADDED: Constants and Type Definitions for Notification Handling ---
-const ASYNC_STORAGE_KEY = 'notifications';
-
-interface StoredNotification {
-  id?: string;
-  title: string;
-  body: string;
-  timestamp?: string;
-  read?: boolean;
-  type?: 'info' | 'warning' | 'success' | 'error';
-  request?: {
-    identifier: string; // The unique ID from the push notification system
-    content: {
-      data?: { id?: string; type?: string;[key: string]: any };
-      dataString?: string; // Fallback: payload as a stringified JSON
-      title?: string;
-      body?: string;
-    };
-  };
-}
-
-export default function RootLayout() {
+// FIX 1: The main logic is moved into this new component.
+// This allows it to correctly consume the `userdoc` from the context
+// provided by the parent `RootLayout` component.
+function RootLayoutContent() {
   const [loaded, error] = useFonts({
     Cairo: require('../assets/fonts/Cairo.ttf'),
   });
 
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [profile, setProfile] = useState<AppUser | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
   const [isPermissionModalVisible, setIsPermissionModalVisible] = useState(false);
+  const { userdoc } = usePermissions(); // Now this hook works correctly!
   const router = useRouter();
 
   // --- NEW: Permission handling logic ---
@@ -298,60 +281,24 @@ export default function RootLayout() {
     if (error) throw error;
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (!currentUser) {
-        setProfile(null);
-      }
       setAuthLoaded(true);
     });
     return () => unsubscribe();
   }, [error]);
 
   useEffect(() => {
-    if (!user) return;
-
-    const findUserAndSetup = async () => {
-      try {
-        const usersCollectionRef = collection(db, 'users');
-        const q = query(usersCollectionRef, where("uid", "==", user.uid));
-        const querySnapshot = await getDocs(q);
-
-        if (!querySnapshot.empty) {
-          const userDoc = querySnapshot.docs[0];
-          const userDocId = userDoc.id;
-
-          await handleNotificationPermissions(userDocId);
-
-          const userDocRef = doc(db, 'users', userDocId);
-          const unsubscribeSnapshot = onSnapshot(userDocRef, (doc) => {
-            setProfile({ id: doc.id, ...doc.data() } as AppUser);
-          });
-          return unsubscribeSnapshot;
-        } else {
-          console.warn("Firestore document not found for user UID:", user.uid);
-          setProfile(null);
-        }
-      } catch (e) {
-        console.error("Error finding user document or setting up listeners:", e);
-      }
-    };
-
-    let unsubscribe: (() => void) | undefined;
-    findUserAndSetup().then(unsub => {
-      unsubscribe = unsub;
-    });
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [user]);
+    if (user && userdoc?.id) {
+      handleNotificationPermissions(userdoc.id);
+    }
+  }, [user, userdoc]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
-      if (nextAppState === 'active' && profile) {
+      if (nextAppState === 'active' && userdoc?.id) {
         const { status } = await Notifications.getPermissionsAsync();
         if (status === 'granted') {
           setIsPermissionModalVisible(false);
-          await registerPushToken(profile.id);
+          await registerPushToken(userdoc.id);
         }
       }
     });
@@ -359,7 +306,7 @@ export default function RootLayout() {
     return () => {
       subscription.remove();
     };
-  }, [profile]);
+  }, [userdoc]);
 
   useEffect(() => {
     if (loaded && authLoaded) {
@@ -367,93 +314,102 @@ export default function RootLayout() {
     }
   }, [loaded, authLoaded]);
 
-  // --- MODIFIED: This useEffect now handles storing notifications locally ---
+  // --- MODIFIED: Notification listener now uses `userdoc`.
   useEffect(() => {
-    const notificationListener = Notifications.addNotificationReceivedListener(async (notification) => {
-      console.log('Notification received, saving to local storage:', notification);
-
-      // Create a notification object matching the format used by NotificationsScreen
-      const newNotification: StoredNotification = {
-        title: notification.request.content.title || 'إشعار جديد',
-        body: notification.request.content.body || 'لا يوجد محتوى',
-        timestamp: new Date(notification.date).toISOString(),
-        read: false,
-        type: (notification.request.content.data?.type as any) || 'info',
-        request: {
-          identifier: notification.request.identifier,
-          content: {
-            title: notification.request.content.title || undefined,
-            body: notification.request.content.body || undefined,
-            data: notification.request.content.data || undefined,
-            dataString: notification.request.content.data
-              ? JSON.stringify(notification.request.content.data)
-              : undefined,
-          },
-        },
-      };
-
-      try {
-        // 1. Get current notifications from storage
-        const storedNotificationsJSON = await AsyncStorage.getItem(ASYNC_STORAGE_KEY);
-        const currentNotifications: StoredNotification[] = storedNotificationsJSON ? JSON.parse(storedNotificationsJSON) : [];
-
-        // 2. Add the new notification to the top of the list
-        const updatedNotifications = [newNotification, ...currentNotifications];
-
-        // 3. Save the updated list back to storage
-        await AsyncStorage.setItem(ASYNC_STORAGE_KEY, JSON.stringify(updatedNotifications));
-        console.log('Successfully saved new notification to AsyncStorage.');
-
-      } catch (e) {
-        console.error('Failed to save notification to AsyncStorage:', e);
-      }
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      console.log('Notification received while app is foregrounded:', notification);
     });
 
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('Notification response received:', response);
-      const data = response.notification.request.content.data;
+    const responseListener = Notifications.addNotificationResponseReceivedListener(async (response) => {
+      // FIX 2: Added `notificationId` to the type to match the data from your logs.
+      const data = response.notification.request.content.data as {
+        type?: 'serviceRequest' | 'announcement' | 'info';
+        id?: string;
+        docId?: string; // Kept for future compatibility
+        notificationId?: string; // The actual key from your logs
+      };
 
-      // Handle navigation when user taps on the notification
-      if (data && data.type === 'serviceRequest' && data.id) {
-        router.push(`/tasks/${data.id}`);
+      console.log('User tapped notification. Data:', data);
+
+      // FIX 2: Use the `notificationId` from the payload as a fallback for `docId`.
+      const notificationDocId = data?.docId || data?.notificationId;
+
+      // --- 1. Mark notification as read ---
+      // This check will now work correctly with a valid `userdoc` and `notificationDocId`.
+      if (userdoc?.id && notificationDocId) {
+        const notificationRef = doc(db, "users", userdoc.id, "notifications", notificationDocId);
+        try {
+          await updateDoc(notificationRef, {
+            isRead: true,
+            readAt: new Date(),
+          });
+          console.log(`Notification ${notificationDocId} marked as read.`);
+        } catch (error) {
+          console.error("Error marking notification as read:", error);
+        }
       } else {
-        router.push('/notifications'); // Fallback to notifications screen
+        // Updated warning message for better debugging.
+        console.warn(`Could not mark as read. Missing userdoc.id (${!!userdoc?.id}) or notificationDocId (${!!notificationDocId}).`);
+      }
+
+      // --- 2. Navigate to the appropriate screen ---
+      if ((data?.type === 'serviceRequest' || data?.type === 'info') && data?.id) {
+        const id = data.id;
+        router.push({
+          pathname: "/tasks/[id]",
+          params: {
+            id: id,
+            showActions: 'true'
+          }
+        });
+      } else if (data?.type === 'announcement' && data?.id) {
+        router.push(`/announcements/${data.id}`);
+      } else {
+        console.warn(`No navigation route defined for notification type: ${data?.type}`);
+        router.push('/notifications');
       }
     });
 
     return () => {
       notificationListener.remove();
-      responseListener.remove()
+      responseListener.remove();
     };
-  }, [router]);
-
+  }, [router, userdoc]); // Depend on userdoc from the context
 
   if (!loaded || !authLoaded) {
     return null;
   }
 
   return (
+    <SafeAreaProvider>
+      <KeyboardProvider>
+        <ThemeProvider>
+          <DialogProvider>
+            {/* Pass userdoc to the profile prop */}
+            <RootLayoutNav user={user} profile={userdoc} authLoaded={authLoaded} />
+            <GlobalStatusDialog />
+            <NotificationPermissionModal
+              visible={isPermissionModalVisible}
+              onGoToSettings={() => {
+                setIsPermissionModalVisible(false);
+                Linking.openSettings();
+              }}
+              onMaybeLater={() => {
+                setIsPermissionModalVisible(false);
+              }}
+            />
+          </DialogProvider>
+        </ThemeProvider>
+      </KeyboardProvider>
+    </SafeAreaProvider>
+  );
+}
+
+
+export default function RootLayout() {
+  return (
     <PermissionsProvider>
-      <SafeAreaProvider>
-        <KeyboardProvider>
-          <ThemeProvider>
-            <DialogProvider>
-              <RootLayoutNav user={user} profile={profile} authLoaded={authLoaded} />
-              <GlobalStatusDialog />
-              <NotificationPermissionModal
-                visible={isPermissionModalVisible}
-                onGoToSettings={() => {
-                  setIsPermissionModalVisible(false);
-                  Linking.openSettings();
-                }}
-                onMaybeLater={() => {
-                  setIsPermissionModalVisible(false);
-                }}
-              />
-            </DialogProvider>
-          </ThemeProvider>
-        </KeyboardProvider>
-      </SafeAreaProvider>
+      <RootLayoutContent />
     </PermissionsProvider>
   );
 }

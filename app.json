@@ -7,18 +7,19 @@
     "orientation": "portrait",
     "icon": "./assets/images/splashs.png",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app uses your location to track your progress on assigned tasks.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location in the background to track your progress on assigned tasks.",
         "NSLocationAlwaysUsageDescription": "This app uses your location in the background to track your progress on assigned tasks.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["location"]
       },
       "runtimeVersion": {
         "policy": "appVersion"
       },
       "bundleIdentifier": "com.tmody.QTM",
-      "buildNumber": "10",
+      "buildNumber": "12",
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "splash": {
@@ -40,7 +41,7 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "versionCode": 10
+      "versionCode": 15
     },
     "web": {
       "bundler": "metro",

@@ -85,7 +85,7 @@ export default function TabLayout() {
         options={{
           title: 'المزيد',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
+            <Ionicons name="list-outline" size={size} color={color} />
           ),
         }}
       />

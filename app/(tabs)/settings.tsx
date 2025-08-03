@@ -3,9 +3,11 @@ import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+// MODIFICATION: Import expo-notifications to get the push token for removal on logout
+import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
-// MODIFICATION: Added 'setDoc' for creating new time tracking documents
+// MODIFICATION: Imports are consolidated, including getDoc and setDoc
 import { Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import React, { Children, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -64,11 +66,12 @@ interface SettingRowProps {
   rightComponent?: React.ReactNode;
 }
 
+// MODIFICATION: Updated props interface for the custom dialog to support loading state
 interface CustomDialogProps {
   visible: boolean;
   title: string;
   message: string;
-  buttons: { text: string; onPress: () => void; style?: 'default' | 'destructive' }[];
+  buttons: { text: string; onPress: () => void; style?: 'default' | 'destructive', isLoading?: boolean }[];
   onClose: () => void;
   styles: any;
 }
@@ -126,6 +129,7 @@ const SettingRow = React.memo<SettingRowProps & { styles: any }>(({ icon, iconCo
 ));
 SettingRow.displayName = 'SettingRow';
 
+// MODIFICATION: Replaced with the more advanced CustomDialog component that handles a loading state
 const CustomDialog = ({ visible, title, message, buttons, onClose, styles }: CustomDialogProps) => {
   if (!visible) return null;
 
@@ -151,13 +155,18 @@ const CustomDialog = ({ visible, title, message, buttons, onClose, styles }: Cus
                   index > 0 && { marginRight: SPACING.m }
                 ]}
                 onPress={button.onPress}
+                disabled={button.isLoading}
               >
-                <Text style={[
-                  styles.dialogButtonText,
-                  button.style === 'destructive' ? styles.destructiveButtonText : styles.defaultButtonText
-                ]}>
-                  {button.text}
-                </Text>
+                {button.isLoading ? (
+                  <ActivityIndicator size="small" color={button.style === 'destructive' ? styles.destructiveButtonText.color : styles.defaultButtonText.color} />
+                ) : (
+                  <Text style={[
+                    styles.dialogButtonText,
+                    button.style === 'destructive' ? styles.destructiveButtonText : styles.defaultButtonText
+                  ]}>
+                    {button.text}
+                  </Text>
+                )}
               </TouchableOpacity>
             ))}
           </View>
@@ -174,15 +183,15 @@ const SettingsPage = () => {
   const styles = useMemo(() => getStyles(theme), [theme]);
   const [invoiceData, setInvoiceData] = useState({ total: 0, count: 0 });
   const { userdoc, setUserdoc, realuserUid } = usePermissions();
-  // MODIFICATION: Replaced single loading state with two specific states
+  // MODIFICATION: Using specific loading states for different actions
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [isImageUploading, setIsImageUploading] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPhoneModalVisible, setPhoneModalVisible] = useState(false);
   const [isLogoutDialogVisible, setLogoutDialogVisible] = useState(false);
   const router = useRouter();
 
-  // MODIFICATION: State for the new time tracking collection
   const [timeTrackingData, setTimeTrackingData] = useState<{ sessions: any[], totalDurationSeconds: number }>({ sessions: [], totalDurationSeconds: 0 });
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -197,8 +206,8 @@ const SettingsPage = () => {
   }, [userdoc]);
 
   useEffect(() => {
-    if (!realuserUid) return;
-    const userDocRef = doc(db, 'users', realuserUid);
+    if (!userdoc) return;
+    const userDocRef = doc(db, 'users', userdoc.id);
     const unsubscribe = onSnapshot(userDocRef, (snapshot) => {
       if (snapshot.exists()) {
         setUserdoc({ id: snapshot.id, ...snapshot.data() } as User);
@@ -209,9 +218,8 @@ const SettingsPage = () => {
       console.error("Error fetching user document:", error);
     });
     return () => unsubscribe();
-  }, [realuserUid, setUserdoc]);
+  }, [userdoc, setUserdoc]);
 
-  // MODIFICATION: New effect to fetch data from 'userTimeTracking' collection
   useEffect(() => {
     if (!realuserUid) return;
 
@@ -220,7 +228,6 @@ const SettingsPage = () => {
       if (snapshot.exists()) {
         setTimeTrackingData(snapshot.data() as { sessions: any[], totalDurationSeconds: number });
       } else {
-        // If the document doesn't exist, use the default initial state
         setTimeTrackingData({ sessions: [], totalDurationSeconds: 0 });
         console.log("Time tracking document doesn't exist for this user yet.");
       }
@@ -252,12 +259,10 @@ const SettingsPage = () => {
     return () => unsubscribe();
   }, [realuserUid, latestClearTimeString, showDialog]);
 
-  // MODIFICATION: Derive clock-in status from timeTrackingData
   const isClockedIn = useMemo(() => {
     return timeTrackingData.sessions.some(session => session.logInTime && !session.logOutTime);
   }, [timeTrackingData]);
 
-  // MODIFICATION: Updated effect to use 'timeTrackingData' from the new collection
   useEffect(() => {
     const cleanupTimer = () => {
       if (timerIntervalRef.current) {
@@ -269,7 +274,7 @@ const SettingsPage = () => {
     const activeSession = timeTrackingData.sessions.find(session => session.logInTime && !session.logOutTime);
 
     if (activeSession) {
-      cleanupTimer(); // Clear any existing timer before starting a new one
+      cleanupTimer();
       timerIntervalRef.current = setInterval(() => {
         const now = new Date();
         const start = (activeSession.logInTime as Timestamp).toDate();
@@ -320,7 +325,6 @@ const SettingsPage = () => {
   }, [realuserUid, latestClearTimeString, setUserdoc, showDialog]);
 
   const handleImagePick = useCallback(async () => {
-    // MODIFICATION: Use image-specific loading state
     setIsImageUploading(true);
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -351,24 +355,53 @@ const SettingsPage = () => {
       console.error('Error uploading image: ', error);
       showDialog({ status: 'error', message: 'فشل تحميل الصورة.' });
     } finally {
-      // MODIFICATION: Use image-specific loading state
       setIsImageUploading(false);
     }
   }, [userdoc?.id, showDialog]);
 
   const showLogoutDialog = useCallback(() => setLogoutDialogVisible(true), []);
-  const cancelLogout = useCallback(() => setLogoutDialogVisible(false), []);
-  const confirmLogout = useCallback(() => {
+
+  const cancelLogout = useCallback(() => {
+    if (isLoggingOut) return;
     setLogoutDialogVisible(false);
-    signOut(auth);
-  }, []);
+  }, [isLoggingOut]);
+
+  const confirmLogout = useCallback(async () => {
+    setIsLoggingOut(true);
+    try {
+      if (userdoc) {
+        const userDocRef = doc(db, 'users', userdoc.id);
+        const { data: currentToken } = await Notifications.getExpoPushTokenAsync();
+
+        if (currentToken) {
+          const userDocSnap = await getDoc(userDocRef);
+          if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
+            const existingTokens = userData.expoPushTokens?.QTM || [];
+            const newTokens = existingTokens.filter((t: string) => t !== currentToken);
+            if (newTokens.length < existingTokens.length) {
+              await updateDoc(userDocRef, {
+                'expoPushTokens.QTM': newTokens,
+              });
+            }
+          }
+        }
+      }
+      await signOut(auth);
+    } catch (error) {
+      console.error("Failed to log out:", error);
+      showDialog({ status: 'error', message: 'فشل تسجيل الخروج. يرجى المحاولة مرة أخرى.' });
+      setIsLoggingOut(false); // Only reset on error
+      setLogoutDialogVisible(false);
+    }
+  }, [userdoc, showDialog]);
+
 
   const handlePhoneUpdate = useCallback(async (newPhone: string) => {
     if (!userdoc?.id || !newPhone) {
       setPhoneModalVisible(false);
       return;
     }
-    // MODIFICATION: Use action-specific loading state
     setIsActionLoading(true);
     try {
       const userDocRef = doc(db, 'users', userdoc.id);
@@ -378,14 +411,12 @@ const SettingsPage = () => {
       console.error('Error updating phone number: ', error);
       showDialog({ status: "error", message: 'فشل تحديث رقم الهاتف.' });
     } finally {
-      // MODIFICATION: Use action-specific loading state
       setIsActionLoading(false);
       setPhoneModalVisible(false);
     }
   }, [userdoc?.id, showDialog]);
 
 
-  // MODIFICATION: Rewritten handler to use 'userTimeTracking' and removed dialogs
   const handleToggleClock = useCallback(async () => {
     if (!realuserUid) return;
     setIsActionLoading(true);
@@ -411,23 +442,19 @@ const SettingsPage = () => {
           sessions: currentSessions,
           totalDurationSeconds: totalSeconds,
         });
-        // MODIFICATION: Removed success dialog
       } else {
         // CLOCKING IN
         const newSession = { logInTime: Timestamp.now(), logOutTime: null };
         const updatedSessions = [...currentSessions, newSession];
 
-        // Use setDoc with merge:true to create the doc if it doesn't exist
         await setDoc(timeTrackingDocRef, {
           userId: realuserUid,
           sessions: updatedSessions,
           totalDurationSeconds: timeTrackingData.totalDurationSeconds || 0,
         }, { merge: true });
-        // MODIFICATION: Removed success dialog
       }
     } catch (error) {
       console.error("Error updating time log:", error);
-      // MODIFICATION: Removed error dialog
     } finally {
       setIsActionLoading(false);
     }
@@ -464,15 +491,13 @@ const SettingsPage = () => {
           />
         }
       >
-        {/* MODIFICATION: Pass image-specific loading state */}
         <ProfileHeader user={userdoc} onImagePick={handleImagePick} loading={isImageUploading} styles={styles} />
-        {/* MODIFICATION: Updated time tracking section UI */}
+
         <SettingsGroup title="تسجيل الدوام" styles={styles}>
           <View style={styles.timeTrackingContainer}>
             <TouchableOpacity
               style={[styles.clockButton, isClockedIn ? styles.clockOutButton : styles.clockInButton]}
               onPress={handleToggleClock}
-              // MODIFICATION: Use action-specific loading state
               disabled={isActionLoading}
             >
               {isActionLoading ? (
@@ -542,11 +567,11 @@ const SettingsPage = () => {
           onClose={closePhoneModal}
           onUpdate={handlePhoneUpdate}
           currentPhone={userdoc.phone || ''}
-          // MODIFICATION: Pass action-specific loading state
           loading={isActionLoading}
         />
       </ScrollView>
 
+      {/* MODIFICATION: Render the custom dialog, passing the new loading state for the logout button */}
       <CustomDialog
         visible={isLogoutDialogVisible}
         title="تسجيل الخروج"
@@ -554,7 +579,7 @@ const SettingsPage = () => {
         onClose={cancelLogout}
         styles={styles}
         buttons={[
-          { text: 'تسجيل الخروج', onPress: confirmLogout, style: 'destructive' },
+          { text: 'تسجيل الخروج', onPress: confirmLogout, style: 'destructive', isLoading: isLoggingOut },
           { text: 'إلغاء', onPress: cancelLogout, style: 'default' },
         ]}
       />
@@ -563,7 +588,6 @@ const SettingsPage = () => {
 };
 
 const getStyles = (theme: Theme) => StyleSheet.create({
-  // MODIFICATION: New and updated styles for the time tracking section
   timeTrackingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -598,7 +622,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   clockButton: {
     width: 140,
     height: 140,
-    borderRadius: 70, // Half of width/height to make it a circle
+    borderRadius: 70,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -619,8 +643,6 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center'
   },
-  // --- End of new styles ---
-
   container: {
     flex: 1,
     backgroundColor: theme.background,
@@ -862,6 +884,8 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    // MODIFICATION: Add minimum height to prevent layout shift when loading indicator appears
+    minHeight: 48,
   },
   defaultButton: {
     backgroundColor: theme.iconBackground,
