@@ -310,13 +310,7 @@ export function Filters({ isModalOpen, onToggleModal, users = [], teams = [] }: 
 
                 <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
                     {renderCollapsibleSection("الحالة", "status", <RefinementChipSection items={statusItems} refine={refineStatus} renderAs="status" title="Status" />, "checkmark-circle-outline")}
-                    {renderCollapsibleSection("المستخدمون", "users",
-                        <View style={styles.userNavigationContainer}>
-                            {renderUserNavigationItem("المنشئ", "creatorId", "person-outline")}
-                            {renderUserNavigationItem("المستخدمون المعينون", "assignedUsers", "people-outline")}
-                        </View>,
-                        "people-circle-outline")}
-                    {renderCollapsibleSection("الفريق", "teamId", <RefinementChipSection items={transformedTeamItems} refine={refineTeam} title="Team" />, "people-outline")}
+
                     {renderCollapsibleSection("النوع", "type", <RefinementChipSection items={typeItems} refine={refineType} title="Type" />, "list-outline")}
                     {renderCollapsibleSection("الأهمية", "priority", <RefinementChipSection items={priorityItems} refine={refinePriority} renderAs="priority" title="Priority" />, "flag-outline")}
                 </ScrollView>

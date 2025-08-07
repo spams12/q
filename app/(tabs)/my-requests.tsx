@@ -40,6 +40,7 @@ import { Filters } from '../fliters';
 interface User { id: string; uid: string; name: string; }
 interface Team { id: string; name: string; }
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+const SCREEN_WIDTH = Dimensions.get('window').width;
 const searchClient = algoliasearch('NRMR6IJLJK', '36b7095707242f6be237f5e4e491d0a2');
 
 // --- (FilterPill and ActiveFilters components remain the same) ---
@@ -195,13 +196,12 @@ const SearchHeader = ({
               placeholder="ابحث (بالاسم، هاتف، ايميل، ID...)"
               placeholderTextColor={theme.placeholder}
               value={inputValue}
-              // UPDATE: Only update the local state on change. The useEffect handles the search.
               onChangeText={setInputValue}
               returnKeyType="search"
-              autoCapitalize="none"
-              autoCorrect={false}
-              clearButtonMode="while-editing"
+              multiline={false}
+              allowFontScaling={false}
             />
+
           </View>
           <TouchableOpacity
             style={styles.iconButton}
@@ -477,162 +477,144 @@ export default function App() {
 }
 
 // Styles are largely the same, but the 'switch' styles are no longer used
-const getStyles = (theme: Theme) => StyleSheet.create({
-  // Main Layout
-  safeArea: { flex: 1, backgroundColor: theme.background },
-  container: { flex: 1, backgroundColor: theme.background },
-  listContentContainer: { paddingHorizontal: 16, paddingBottom: 24 },
-  item: { paddingVertical: 0 },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginTop: 16,
-    fontFamily: 'Cairo',
-    color: theme.textSecondary,
-  },
+const getStyles = (theme: Theme) => {
+  const placeholderFontSize = Math.max(12, Math.min(16, SCREEN_WIDTH * 0.035));
+  return StyleSheet.create({
+    // Main Layout
+    safeArea: { flex: 1, backgroundColor: theme.background },
+    container: { flex: 1, backgroundColor: theme.background },
+    listContentContainer: { paddingHorizontal: 16, paddingBottom: 24 },
+    item: { paddingVertical: 0 },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingVertical: 60,
+    },
+    emptyText: {
+      fontSize: 16,
+      textAlign: 'center',
+      marginTop: 16,
+      fontFamily: 'Cairo',
+      color: theme.textSecondary,
+    },
 
-  // Header Styles
-  headerContainer: { paddingBottom: 8, paddingTop: 16 },
-  titleSection: { paddingVertical: 16, paddingBottom: 24, }, // Added more bottom padding
-  headerRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    width: '100%',
-    gap: 12, // Gap between title and badge
-  },
-  headerTitle: { fontSize: 28, textAlign: 'right', fontFamily: 'Cairo', fontWeight: 'bold', color: theme.text },
-  headerSubtitle: {
-    fontSize: 16,
-    textAlign: 'right',
-    marginTop: 4,
-    fontFamily: 'Cairo',
-    color: theme.textSecondary,
-  },
-  addButton: {
-    backgroundColor: theme.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8
-  },
-  addButtonText: { color: theme.contrastText, fontFamily: 'Cairo', fontWeight: '600' },
-  // Data source indicator styles
-  dataSourceIndicator: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dataSourceIndicatorText: {
-    color: theme.contrastText,
-    fontFamily: 'Cairo',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  realtimeIndicator: {
-    backgroundColor: '#34C759', // Green for "Live"
-  },
-  searchIndicator: {
-    backgroundColor: theme.primary,
-  },
+    // Header Styles
+    headerContainer: { paddingBottom: 8, paddingTop: 16 },
+    titleSection: { paddingVertical: 16, paddingBottom: 24, }, // Added more bottom padding
+    headerRow: {
+      flexDirection: 'row-reverse',
+      alignItems: 'center',
+      width: '100%',
+      gap: 12, // Gap between title and badge
+    },
+    headerTitle: { fontSize: 28, textAlign: 'right', fontFamily: 'Cairo', fontWeight: 'bold', color: theme.text },
+    headerSubtitle: {
+      fontSize: 16,
+      textAlign: 'right',
+      marginTop: 4,
+      fontFamily: 'Cairo',
+      color: theme.textSecondary,
+    },
+    addButton: {
+      backgroundColor: theme.primary,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8
+    },
+    addButtonText: { color: theme.contrastText, fontFamily: 'Cairo', fontWeight: '600' },
+    // Data source indicator styles
+    dataSourceIndicator: {
+      paddingVertical: 4,
+      paddingHorizontal: 10,
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    dataSourceIndicatorText: {
+      color: theme.contrastText,
+      fontFamily: 'Cairo',
+      fontWeight: 'bold',
+      fontSize: 12,
+    },
+    realtimeIndicator: {
+      backgroundColor: '#34C759', // Green for "Live"
+    },
+    searchIndicator: {
+      backgroundColor: theme.primary,
+    },
 
-  // --- Styles for the removed switcher are no longer needed ---
+    // --- Styles for the removed switcher are no longer needed ---
 
-  // Controls Section (Search, Filter, Sort)
-  controlsSection: {},
-  controlsContainer: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 8,
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 48,
-    borderWidth: 1,
-    backgroundColor: theme.inputBackground,
-    borderColor: theme.border,
-  },
-  searchIcon: { marginLeft: 8 },
-  searchInput: {
-    flex: 1,
-    height: '100%',
-    textAlign: 'right',
-    fontSize: 16,
-    fontFamily: 'Cairo',
-    color: theme.text,
-  },
-  iconButton: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    backgroundColor: theme.inputBackground,
-    borderColor: theme.border,
-  },
-  filterDot: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: theme.card,
-    backgroundColor: theme.primary,
-  },
+    // Controls Section (Search, Filter, Sort)
+    controlsSection: {},
+    controlsContainer: { flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 8, gap: 8 },
 
-  // Active Filter Pills
-  activeFiltersWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-    minHeight: 36,
-  },
-  pillsScrollView: {
-    flexGrow: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 4,
-  },
-  filterPill: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: theme.primaryTransparent,
-    borderWidth: 1,
-    borderColor: theme.primaryBorder,
-    gap: 8,
-  },
-  filterPillText: { fontSize: 13, fontFamily: 'Cairo', fontWeight: '600', color: theme.primary },
-  filterPillRemove: { marginLeft: -4, padding: 2 },
-  clearAllText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    fontFamily: 'Cairo',
-    marginRight: 12,
-    padding: 8,
-    color: theme.primary,
-  },
-  scrollToTopButton: {
-    position: 'absolute',
-    bottom: 0,
-    alignSelf: 'center',
-    padding: 8,
-  },
-});
+    searchContainer: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', borderRadius: 12, paddingHorizontal: 12, height: 48, borderWidth: 1, backgroundColor: theme.inputBackground, borderColor: theme.border, justifyContent: "center" },
+    searchIcon: { marginLeft: 8 },
+    searchInput: { flex: 1, height: '100%', textAlign: 'right', fontSize: placeholderFontSize, fontFamily: 'Cairo', color: theme.text, letterSpacing: 0.2 },
+    iconButton: {
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: 48,
+      height: 48,
+      borderRadius: 12,
+      borderWidth: 1,
+      backgroundColor: theme.inputBackground,
+      borderColor: theme.border,
+    },
+    filterDot: {
+      position: 'absolute',
+      top: 10,
+      right: 10,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      borderWidth: 1.5,
+      borderColor: theme.card,
+      backgroundColor: theme.primary,
+    },
+
+    // Active Filter Pills
+    activeFiltersWrapper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 4,
+      minHeight: 36,
+    },
+    pillsScrollView: {
+      flexGrow: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 4,
+    },
+    filterPill: {
+      flexDirection: 'row-reverse',
+      alignItems: 'center',
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 20,
+      backgroundColor: theme.primaryTransparent,
+      borderWidth: 1,
+      borderColor: theme.primaryBorder,
+      gap: 8,
+    },
+    filterPillText: { fontSize: 13, fontFamily: 'Cairo', fontWeight: '600', color: theme.primary },
+    filterPillRemove: { marginLeft: -4, padding: 2 },
+    clearAllText: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      fontFamily: 'Cairo',
+      marginRight: 12,
+      padding: 8,
+      color: theme.primary,
+    },
+    scrollToTopButton: {
+      position: 'absolute',
+      bottom: 15,
+      alignSelf: 'center',
+      padding: 8,
+    },
+  });
+};

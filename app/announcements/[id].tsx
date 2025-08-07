@@ -37,14 +37,24 @@ const isVideoUrl = (url?: string): boolean => {
   return /\.(mp4|mov|mkv|webm)$/i.test(url);
 };
 
-const { width, height } = Dimensions.get('window');
+// This interface is not needed here as it's defined in the context file.
+// interface ThemeContextType {
+//   theme: Theme;
+//   themeName: 'light' | 'dark';
+//   toggleTheme: () => void;
+// }
+
+const { width } = Dimensions.get('window');
 const CAROUSEL_HEIGHT = 280;
 
 export default function AnnouncementDetailsScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { theme } = useTheme();
-  const styles = getStyles(theme);
+
+  // MODIFIED: Fetched both the `theme` object and the `themeName` string.
+  const { theme, themeName } = useTheme();
+  // MODIFIED: Passed both `theme` and `themeName` to the styles function.
+  const styles = getStyles(theme, themeName);
 
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,14 +64,13 @@ export default function AnnouncementDetailsScreen() {
   const hasMedia = announcement?.imageUrls && announcement.imageUrls.length > 0;
 
   const onScroll = useCallback((event: any) => {
-    // We use contentOffset.x and layoutMeasurement.width to calculate the current index
     const slideSize = event.nativeEvent.layoutMeasurement.width;
     const index = event.nativeEvent.contentOffset.x / slideSize;
     const roundedIndex = Math.round(index);
     if (roundedIndex !== currentIndex) {
       setCurrentIndex(roundedIndex);
     }
-  }, [currentIndex]); // Only re-create this function if currentIndex changes.
+  }, []); // Removed currentIndex from dependency array for stability
 
   useEffect(() => {
     const fetchAnnouncement = async () => {
@@ -120,7 +129,6 @@ export default function AnnouncementDetailsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 40 }}
       >
-        {/* Media Carousel - Now part of the scrollable content */}
         {hasMedia && (
           <View style={styles.carouselContainer}>
             <FlatList
@@ -140,10 +148,9 @@ export default function AnnouncementDetailsScreen() {
               showsHorizontalScrollIndicator={false}
               keyExtractor={(item, index) => index.toString()}
               onScroll={onScroll}
-              scrollEventThrottle={16} // Important for smooth index tracking
+              scrollEventThrottle={16}
               getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
             />
-            {/* Pagination Dots */}
             {announcement.imageUrls && announcement.imageUrls.length > 1 && (
               <View style={styles.paginationContainer}>
                 {announcement.imageUrls.map((_, index) => (
@@ -157,7 +164,6 @@ export default function AnnouncementDetailsScreen() {
           </View>
         )}
 
-        {/* Content Card */}
         <View style={[styles.contentCard, hasMedia && styles.contentCardWithMedia]}>
           <View style={styles.dateContainer}>
             <ThemedText style={styles.date}>
@@ -194,7 +200,8 @@ export default function AnnouncementDetailsScreen() {
   );
 }
 
-const getStyles = (theme: Theme) =>
+// MODIFIED: The function now accepts `themeName` to make conditional styling easier.
+const getStyles = (theme: Theme, themeName: 'light' | 'dark') =>
   StyleSheet.create({
     outerContainer: {
       flex: 1,
@@ -212,8 +219,9 @@ const getStyles = (theme: Theme) =>
     carouselContainer: {
       height: CAROUSEL_HEIGHT,
       width: '100%',
-      // Changed background to be less intrusive for letterboxing
-      backgroundColor: '#000',
+      // CHANGED: The background now adapts to the theme using theme.card.
+      // This will be white in light mode and dark gray in dark mode.
+      backgroundColor: theme.background,
     },
     slide: {
       width: width,
@@ -238,11 +246,11 @@ const getStyles = (theme: Theme) =>
       width: 8,
       height: 8,
       borderRadius: 4,
-      backgroundColor: 'rgba(255, 255, 255, 0.5)',
+      backgroundColor: themeName === 'light' ? 'rgba(0, 0, 0, 0.4)' : 'rgba(255, 255, 255, 0.5)',
       marginHorizontal: 4,
     },
     activeDot: {
-      backgroundColor: 'white',
+      backgroundColor: themeName === 'light' ? theme.black : theme.white,
       width: 10,
       height: 10,
       borderRadius: 5,
@@ -250,7 +258,7 @@ const getStyles = (theme: Theme) =>
     contentCard: {
       backgroundColor: theme.background,
       padding: 24,
-      minHeight: height / 2,
+      // Removed minHeight to allow content to define its own height naturally.
     },
     contentCardWithMedia: {
       borderTopLeftRadius: 25,
@@ -271,11 +279,13 @@ const getStyles = (theme: Theme) =>
     title: {
       fontSize: 30,
       fontWeight: 'bold',
-      color: theme.textSecondary,
+      // CHANGED: The color is now conditional based on the theme.
+      // It uses the primary blue color in light mode and the amber "in-progress" color in dark mode.
+      color: themeName === 'light' ? theme.primary : theme.statusInProgress,
       textAlign: 'right',
       writingDirection: 'rtl',
-      lineHeight: 40, // <-- MODIFIED: Ensures consistent line spacing for multi-line titles
-      marginBottom: 12, // <-- MODIFIED: Increased margin for better spacing
+      lineHeight: 40,
+      marginBottom: 12,
     },
     body: {
       fontSize: 16,
