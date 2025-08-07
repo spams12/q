@@ -1,7 +1,8 @@
 import { UseDialog } from '@/context/DialogContext';
 import { Ionicons } from '@expo/vector-icons';
+import { useScrollToTop } from '@react-navigation/native';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -31,11 +32,15 @@ const StockManagementScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('stock');
   const { showDialog } = UseDialog()
-  
+
+  // Attach ref to FlatList to enable scroll-to-top on tab press
+  const listRef = useRef<FlatList<StockManagementListItem> | null>(null);
+  useScrollToTop(listRef);
+
 
   useEffect(() => {
-  
-    
+
+
     if (!userUid) {
       setLoading(false);
       return;
@@ -53,11 +58,11 @@ const StockManagementScreen: React.FC = () => {
         setStockItems(sortedItems);
       } else {
         console.error('User document does not exist');
-        showDialog({status:"error" , message:"لم يتم العثور على بيانات المستخدم"})
+        showDialog({ status: "error", message: "لم يتم العثور على بيانات المستخدم" })
       }
     }, (error) => {
       console.error('Error fetching user:', error);
-      showDialog({status:"error" , message:"فشل في جلب بيانات المستخدم"})
+      showDialog({ status: "error", message: "فشل في جلب بيانات المستخدم" })
     });
 
     const transactionsQuery = query(
@@ -73,7 +78,7 @@ const StockManagementScreen: React.FC = () => {
       setLoading(false);
     }, (error) => {
       console.error('Error fetching transactions:', error);
-      showDialog({status:"error" , message:"فشل في جلب بيانات المعاملات"})
+      showDialog({ status: "error", message: "فشل في جلب بيانات المعاملات" })
       setLoading(false);
     });
 
@@ -81,7 +86,7 @@ const StockManagementScreen: React.FC = () => {
       unsubscribeUser();
       unsubscribeTransactions();
     };
-  }, [ userUid, showDialog]);
+  }, [userUid, showDialog]);
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
@@ -111,7 +116,7 @@ const StockManagementScreen: React.FC = () => {
   };
 
   const getItemTypeColor = (type: string) => {
-    const colors = { packageType: '#2F80ED', cableLength: '#2F80ED', connectorType: '#2F80ED', deviceModel: '#2F80ED', maintenanceType: '#2F80ED' , hook: '#2F80ED', cable: '#2F80ED', bag: '#2F80ED' };
+    const colors = { packageType: '#2F80ED', cableLength: '#2F80ED', connectorType: '#2F80ED', deviceModel: '#2F80ED', maintenanceType: '#2F80ED', hook: '#2F80ED', cable: '#2F80ED', bag: '#2F80ED' };
     return colors[type as keyof typeof colors] || '#DDD';
   };
 
@@ -238,6 +243,7 @@ const StockManagementScreen: React.FC = () => {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <FlatList
+        ref={listRef}
         data={listData}
         renderItem={renderItem}
         keyExtractor={keyExtractor}

@@ -17,7 +17,7 @@ import {
 
 
 // NAVIGATION
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused, useScrollToTop } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 
 // FIREBASE
@@ -41,9 +41,9 @@ import { useTheme } from "../../context/ThemeContext";
 import useAuth from "../../hooks/use-firebase-auth";
 import { ServiceRequest } from "../../lib/types";
 
- 
- 
- // --- HELPER FUNCTIONS ---
+
+
+// --- HELPER FUNCTIONS ---
 
 const formatTimestamp = (date: any): string => {
   if (!date) return "N/A";
@@ -56,34 +56,34 @@ const formatTimestamp = (date: any): string => {
 };
 
 const formatDuration = (ms: number) => {
-    if (!ms || ms < 0) return "0 د";
-    const totalMinutes = Math.floor(ms / (1000 * 60));
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
+  if (!ms || ms < 0) return "0 د";
+  const totalMinutes = Math.floor(ms / (1000 * 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
 
-    if (hours > 0 && minutes > 0) {
-        return `${hours}س ${minutes}د`;
-    }
-    if (hours > 0) {
-        return `${hours}س`;
-    }
-    return `${minutes}د`;
+  if (hours > 0 && minutes > 0) {
+    return `${hours}س ${minutes}د`;
+  }
+  if (hours > 0) {
+    return `${hours}س`;
+  }
+  return `${minutes}د`;
 };
 
 // --- SUB-COMPONENTS ---
 
 const StatInfoCard = ({ title, value, icon, backgroundColor, iconColor, textColor, styles }: { title: string, value: string, icon: React.ReactNode, backgroundColor: string, iconColor: string, textColor?: string, styles: any }) => {
-    return (
-        <View style={[styles.infoCard, { backgroundColor }]}>
-            <View style={[styles.infoCardIconContainer, { backgroundColor: iconColor }]}>
-                {icon}
-            </View>
-            <View>
-                <Text style={[styles.infoCardValue, textColor ? { color: textColor } : {}]}>{value}</Text>
-                <Text style={[styles.infoCardTitle, textColor ? { color: textColor, opacity: 0.8 } : {}]}>{title}</Text>
-            </View>
-        </View>
-    );
+  return (
+    <View style={[styles.infoCard, { backgroundColor }]}>
+      <View style={[styles.infoCardIconContainer, { backgroundColor: iconColor }]}>
+        {icon}
+      </View>
+      <View>
+        <Text style={[styles.infoCardValue, textColor ? { color: textColor } : {}]}>{value}</Text>
+        <Text style={[styles.infoCardTitle, textColor ? { color: textColor, opacity: 0.8 } : {}]}>{title}</Text>
+      </View>
+    </View>
+  );
 };
 
 
@@ -119,8 +119,8 @@ const TechnicianStatCards = React.memo(({ tickets, styles, currentUserDocId }: {
     const pending = tickets.filter(t => ["مفتوح", "قيد المعالجة"].includes(t.status)).length;
     const completed = tickets.filter(t => ["مكتمل", "مغلق"].includes(t.status)).length;
     const rejected = tickets.filter(ticket => {
-        const userResponse = ticket.userResponses?.find(r => r.userId === currentUserDocId);
-        return userResponse?.response === 'rejected';
+      const userResponse = ticket.userResponses?.find(r => r.userId === currentUserDocId);
+      return userResponse?.response === 'rejected';
     }).length;
 
     return { pending, completed, rejected, total: tickets.length };
@@ -179,8 +179,8 @@ interface TicketItemProps {
 }
 
 const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserDocId, router, styles, theme }) => {
-  
-    
+
+
 
   const itemAnim = useRef(new Animated.Value(0)).current;
 
@@ -202,7 +202,7 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
     };
     return [styles.badge, statusStyles[status] || styles.badgeGray];
   };
-    const getStatusBadgeTextStyle = (status: string) => {
+  const getStatusBadgeTextStyle = (status: string) => {
     const statusStyles: { [key: string]: object } = {
       "مفتوح": styles.badgeBlue,
       "قيد المعالجة": styles.textbadgeYellow,
@@ -210,7 +210,7 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
       "مغلق": styles.badgeGray,
       "معلق": styles.badgePurple
     };
-    return [ statusStyles[status]];
+    return [statusStyles[status]];
   };
 
   return (
@@ -237,15 +237,15 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
             <View style={styles.ticketTitleContainer}>
               <Text style={styles.ticketTitle} numberOfLines={1}>{ticket.title}</Text>
               <View style={getStatusBadgeStyle(ticket.status)}>
-                <Text style={[styles.badgeText,getStatusBadgeTextStyle(ticket.status)]}>{ticket.status}</Text>
+                <Text style={[styles.badgeText, getStatusBadgeTextStyle(ticket.status)]}>{ticket.status}</Text>
               </View>
             </View>
-                          <Text style={styles.ticketCustomer}>العميل: {ticket.customerName}</Text>
-                            <Text style={styles.ticketDate}>تاريخ الإنشاء: {formatTimestamp(ticket.date)}</Text>
+            <Text style={styles.ticketCustomer}>العميل: {ticket.customerName}</Text>
+            <Text style={styles.ticketDate}>تاريخ الإنشاء: {formatTimestamp(ticket.date)}</Text>
 
           </View>
 
-         
+
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -256,253 +256,253 @@ TicketItem.displayName = 'TicketItem';
 
 
 const PerformanceSummaryCard = ({ tasks, styles, theme }: { tasks: ServiceRequest[], styles: any, theme: any }) => {
-    const performanceStats = useMemo(() => {
-        const relevantTasks = tasks.filter(
-            (t) =>
-                (t.status === "مكتمل" || t.status === "مغلق") &&
-                t.completionTimestamp &&
-                t.onLocationTimestamp
-        );
-
-        if (relevantTasks.length === 0) {
-            return {
-                onTimePercentage: 100, latePercentage: 0, onTimeCount: 0, lateCount: 0,
-                averageCompletionTime: 0, totalWorkTime: 0, averageDailyWorkTime: 0
-            };
-        }
-
-        let totalCompletionTimeDuration = 0;
-        const workTimeByDay: { [key: string]: number } = {};
-
-        relevantTasks.forEach(task => {
-            const onLocationTime = task.onLocationTimestamp.toDate().getTime();
-            const completionTime = task.completionTimestamp.toDate().getTime();
-            const duration = completionTime - onLocationTime;
-            totalCompletionTimeDuration += duration;
-
-            const dayKey = task.completionTimestamp.toDate().toISOString().split('T')[0];
-            if (workTimeByDay[dayKey]) {
-                workTimeByDay[dayKey] += duration;
-            } else {
-                workTimeByDay[dayKey] = duration;
-            }
-        });
-
-        const averageCompletionTime = (totalCompletionTimeDuration / relevantTasks.length);
-
-        const dailyWorkTimes = Object.values(workTimeByDay);
-        const totalDailyWorkSum = dailyWorkTimes.reduce((sum, time) => sum + time, 0);
-        const averageDailyWorkTime = dailyWorkTimes.length > 0 ? totalDailyWorkSum / dailyWorkTimes.length : 0;
-
-        const tasksWithSla = relevantTasks.filter(t => t.estimatedTime != null);
-        let lateCount = 0;
-        if (tasksWithSla.length > 0) {
-            tasksWithSla.forEach((task) => {
-                if (task.onLocationTimestamp && task.completionTimestamp && task.estimatedTime) {
-                    const onLocationTime = task.onLocationTimestamp.toDate().getTime();
-                    const completionTime = task.completionTimestamp.toDate().getTime();
-                    const estimatedDuration = task.estimatedTime * 60 * 1000;
-                    if (completionTime > onLocationTime + estimatedDuration) {
-                        lateCount++;
-                    }
-                }
-            });
-        }
-        const totalSla = tasksWithSla.length;
-        const onTimeCount = totalSla - lateCount;
-
-        return {
-            onTimePercentage: totalSla > 0 ? Math.round((onTimeCount / totalSla) * 100) : 100,
-            latePercentage: totalSla > 0 ? Math.round((lateCount / totalSla) * 100) : 0,
-            onTimeCount,
-            lateCount,
-            averageCompletionTime,
-            totalWorkTime: totalCompletionTimeDuration,
-            averageDailyWorkTime,
-        };
-    }, [tasks]);
-
-    const { onTimePercentage, latePercentage, onTimeCount, lateCount, averageCompletionTime, totalWorkTime, averageDailyWorkTime } = performanceStats;
-
-    return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <Text  style={styles.headerTitle}>ملخص الأداء</Text>
-            </View>
-
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.cardsScrollView}
-                decelerationRate="fast"
-                snapToInterval={styles.infoCard.width + styles.cardsScrollView.gap}
-                snapToAlignment="start"
-            >
-                <StatInfoCard
-                    title="متوسط وقت الإنجاز"
-                    value={formatDuration(averageCompletionTime)}
-                    icon={<Clock size={20} color="#4A5568" />}
-                    backgroundColor="#F7FAFC"
-                    iconColor="#E2E8F0"
-                    textColor="#2D3748"
-                    styles={styles}
-                />
-                <StatInfoCard
-                    title="متوسط العمل اليومي"
-                    value={formatDuration(averageDailyWorkTime)}
-                    icon={<Clock size={20} color="#2F4D0C" />}
-                    backgroundColor="#C5F87C"
-                    iconColor="#B3E06B"
-                    textColor="#2F4D0C"
-                    styles={styles}
-                />
-                <StatInfoCard
-                    title="إجمالي وقت العمل"
-                    value={formatDuration(totalWorkTime)}
-                    icon={<Clock size={20} color="#E0E7FF" />}
-                    backgroundColor="#4338CA"
-                    iconColor="#5A51D1"
-                    textColor="#FFFFFF"
-                    styles={styles}
-                />
-
-                <View style={[styles.card, styles.onTimeCard]}>
-                    <View style={styles.cardContent}>
-                        <View style={styles.cardIcon}>
-                        <CheckCircle size={24} color="#FFFFFF" />
-                        </View>
-                        <Text style={styles.cardTitle}>في الوقت المحدد (SLA)</Text>
-                        <Text style={styles.projectCount}>{onTimeCount} مهمة</Text>
-                    </View>
-                    <View style={styles.bottomSection}>
-                        <View style={styles.progressSection}>
-                        <Text style={styles.percentage}>{onTimePercentage}%</Text>
-                        <View style={styles.progressBar}>
-                            <View style={[styles.progressFill, { width: `${onTimePercentage}%` }]} />
-                        </View>
-                        </View>
-                        <View style={styles.iconSection}>
-                        <View style={styles.successIcon}>
-                            <TrendingUp size={20} color="#10B981" />
-                        </View>
-                        </View>
-                    </View>
-                </View>
-
-                <View style={[styles.card, styles.lateCard]}>
-                    <View style={styles.cardContent}>
-                        <View style={styles.cardIcon}>
-                        <Clock size={24} color="#FFFFFF" />
-                        </View>
-                        <Text style={styles.cardTitle}>المهام المتأخرة (SLA)</Text>
-                        <Text style={styles.projectCount}>{lateCount} مهمة</Text>
-                    </View>
-                    <View style={styles.bottomSection}>
-                        <View style={styles.progressSection}>
-                        <Text style={styles.percentage}>{latePercentage}%</Text>
-                        <View style={styles.progressBar}>
-                            <View style={[styles.progressFill, { width: `${latePercentage}%` }]} />
-                        </View>
-                        </View>
-                        <View style={styles.iconSection}>
-                        <View style={styles.warningIcon}>
-                            <TrendingDown size={20} color="#EF4444" />
-                        </View>
-                        </View>
-                    </View>
-                </View>
-            </ScrollView>
-        </View>
+  const performanceStats = useMemo(() => {
+    const relevantTasks = tasks.filter(
+      (t) =>
+        (t.status === "مكتمل" || t.status === "مغلق") &&
+        t.completionTimestamp &&
+        t.onLocationTimestamp
     );
+
+    if (relevantTasks.length === 0) {
+      return {
+        onTimePercentage: 100, latePercentage: 0, onTimeCount: 0, lateCount: 0,
+        averageCompletionTime: 0, totalWorkTime: 0, averageDailyWorkTime: 0
+      };
+    }
+
+    let totalCompletionTimeDuration = 0;
+    const workTimeByDay: { [key: string]: number } = {};
+
+    relevantTasks.forEach(task => {
+      const onLocationTime = task.onLocationTimestamp.toDate().getTime();
+      const completionTime = task.completionTimestamp.toDate().getTime();
+      const duration = completionTime - onLocationTime;
+      totalCompletionTimeDuration += duration;
+
+      const dayKey = task.completionTimestamp.toDate().toISOString().split('T')[0];
+      if (workTimeByDay[dayKey]) {
+        workTimeByDay[dayKey] += duration;
+      } else {
+        workTimeByDay[dayKey] = duration;
+      }
+    });
+
+    const averageCompletionTime = (totalCompletionTimeDuration / relevantTasks.length);
+
+    const dailyWorkTimes = Object.values(workTimeByDay);
+    const totalDailyWorkSum = dailyWorkTimes.reduce((sum, time) => sum + time, 0);
+    const averageDailyWorkTime = dailyWorkTimes.length > 0 ? totalDailyWorkSum / dailyWorkTimes.length : 0;
+
+    const tasksWithSla = relevantTasks.filter(t => t.estimatedTime != null);
+    let lateCount = 0;
+    if (tasksWithSla.length > 0) {
+      tasksWithSla.forEach((task) => {
+        if (task.onLocationTimestamp && task.completionTimestamp && task.estimatedTime) {
+          const onLocationTime = task.onLocationTimestamp.toDate().getTime();
+          const completionTime = task.completionTimestamp.toDate().getTime();
+          const estimatedDuration = task.estimatedTime * 60 * 1000;
+          if (completionTime > onLocationTime + estimatedDuration) {
+            lateCount++;
+          }
+        }
+      });
+    }
+    const totalSla = tasksWithSla.length;
+    const onTimeCount = totalSla - lateCount;
+
+    return {
+      onTimePercentage: totalSla > 0 ? Math.round((onTimeCount / totalSla) * 100) : 100,
+      latePercentage: totalSla > 0 ? Math.round((lateCount / totalSla) * 100) : 0,
+      onTimeCount,
+      lateCount,
+      averageCompletionTime,
+      totalWorkTime: totalCompletionTimeDuration,
+      averageDailyWorkTime,
+    };
+  }, [tasks]);
+
+  const { onTimePercentage, latePercentage, onTimeCount, lateCount, averageCompletionTime, totalWorkTime, averageDailyWorkTime } = performanceStats;
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>ملخص الأداء</Text>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.cardsScrollView}
+        decelerationRate="fast"
+        snapToInterval={styles.infoCard.width + styles.cardsScrollView.gap}
+        snapToAlignment="start"
+      >
+        <StatInfoCard
+          title="متوسط وقت الإنجاز"
+          value={formatDuration(averageCompletionTime)}
+          icon={<Clock size={20} color="#4A5568" />}
+          backgroundColor="#F7FAFC"
+          iconColor="#E2E8F0"
+          textColor="#2D3748"
+          styles={styles}
+        />
+        <StatInfoCard
+          title="متوسط العمل اليومي"
+          value={formatDuration(averageDailyWorkTime)}
+          icon={<Clock size={20} color="#2F4D0C" />}
+          backgroundColor="#C5F87C"
+          iconColor="#B3E06B"
+          textColor="#2F4D0C"
+          styles={styles}
+        />
+        <StatInfoCard
+          title="إجمالي وقت العمل"
+          value={formatDuration(totalWorkTime)}
+          icon={<Clock size={20} color="#E0E7FF" />}
+          backgroundColor="#4338CA"
+          iconColor="#5A51D1"
+          textColor="#FFFFFF"
+          styles={styles}
+        />
+
+        <View style={[styles.card, styles.onTimeCard]}>
+          <View style={styles.cardContent}>
+            <View style={styles.cardIcon}>
+              <CheckCircle size={24} color="#FFFFFF" />
+            </View>
+            <Text style={styles.cardTitle}>في الوقت المحدد (SLA)</Text>
+            <Text style={styles.projectCount}>{onTimeCount} مهمة</Text>
+          </View>
+          <View style={styles.bottomSection}>
+            <View style={styles.progressSection}>
+              <Text style={styles.percentage}>{onTimePercentage}%</Text>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${onTimePercentage}%` }]} />
+              </View>
+            </View>
+            <View style={styles.iconSection}>
+              <View style={styles.successIcon}>
+                <TrendingUp size={20} color="#10B981" />
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={[styles.card, styles.lateCard]}>
+          <View style={styles.cardContent}>
+            <View style={styles.cardIcon}>
+              <Clock size={24} color="#FFFFFF" />
+            </View>
+            <Text style={styles.cardTitle}>المهام المتأخرة (SLA)</Text>
+            <Text style={styles.projectCount}>{lateCount} مهمة</Text>
+          </View>
+          <View style={styles.bottomSection}>
+            <View style={styles.progressSection}>
+              <Text style={styles.percentage}>{latePercentage}%</Text>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${latePercentage}%` }]} />
+              </View>
+            </View>
+            <View style={styles.iconSection}>
+              <View style={styles.warningIcon}>
+                <TrendingDown size={20} color="#EF4444" />
+              </View>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
 };
 
 
 // --- MAIN PAGE COMPONENT ---
 
 const TabButton = ({ title, isActive, onPress, styles }: { title: string, isActive: boolean, onPress: () => void, styles: any }) => (
-    <TouchableOpacity onPress={onPress} style={styles.tabButton} activeOpacity={0.7}>
-        <View style={[styles.tab, isActive && styles.activeTab]}>
-            <Text style={[styles.tabText, isActive && styles.activeTabText]}>{title}</Text>
-        </View>
-    </TouchableOpacity>
+  <TouchableOpacity onPress={onPress} style={styles.tabButton} activeOpacity={0.7}>
+    <View style={[styles.tab, isActive && styles.activeTab]}>
+      <Text style={[styles.tabText, isActive && styles.activeTabText]}>{title}</Text>
+    </View>
+  </TouchableOpacity>
 );
 
 interface ListHeaderProps {
-    tasks: ServiceRequest[];
-    searchTerm: string;
-    setSearchTerm: (term: string) => void;
-    selectedTab: "all" | "pending" | "completed" | "rejected";
-    handleTabChange: (tab: "all" | "pending" | "completed" | "rejected") => void;
-    styles: any;
-    currentUserDocId: string | null;
-    theme: any;
+  tasks: ServiceRequest[];
+  searchTerm: string;
+  setSearchTerm: (term: string) => void;
+  selectedTab: "all" | "pending" | "completed" | "rejected";
+  handleTabChange: (tab: "all" | "pending" | "completed" | "rejected") => void;
+  styles: any;
+  currentUserDocId: string | null;
+  theme: any;
 }
 
 const ListHeader = React.memo(({
-    tasks,
-    searchTerm,
-    setSearchTerm,
-    selectedTab,
-    handleTabChange,
-    styles,
-    currentUserDocId,
-    theme
+  tasks,
+  searchTerm,
+  setSearchTerm,
+  selectedTab,
+  handleTabChange,
+  styles,
+  currentUserDocId,
+  theme
 }: ListHeaderProps) => (
-    <View style={styles.dashboardContainer}>
-        <View style={styles.welcomeHeader}>
-            <Text adjustsFontSizeToFit numberOfLines={1} style={styles.dashboardTitle}>الاحصائيات</Text>
-            <Text adjustsFontSizeToFit numberOfLines={1} style={styles.dashboardSubtitle}>مرحباً بك، تتبع مهامك وأدائك</Text>
-        </View>
-        <TechnicianStatCards tickets={tasks} styles={styles} currentUserDocId={currentUserDocId}/>
-        <PerformanceSummaryCard tasks={tasks} styles={styles} theme={theme} />
-        
-        <View style={styles.taskListContainer}>
-            <View style={styles.taskListHeader}>
-                <View style={styles.headerTop}>
-                    <View>
-                        <Text style={styles.taskListTitle}>قائمة المهام</Text>
-                        <Text style={styles.taskListSubtitle}>جميع المهام المسندة إليك</Text>
-                    </View>
-                </View>
-                
-                <View style={styles.searchContainer}>
-                    <Search size={20} color="#9CA3AF" style={styles.searchIcon} />
-                    <TextInput
-                        placeholder="بحث بالاسم، العنوان، أو رقم الطلب..."
-                        style={styles.searchInput}
-                        value={searchTerm}
-                        onChangeText={setSearchTerm}
-                        placeholderTextColor="#9CA3AF"
-                    />
-                </View>
-                
-                <View style={styles.tabsContainer}>
-                    <TabButton title="الكل" isActive={selectedTab === 'all'} onPress={() => handleTabChange('all')} styles={styles} />
-                    <TabButton title="قيد التنفيذ" isActive={selectedTab === 'pending'} onPress={() => handleTabChange('pending')} styles={styles} />
-                    <TabButton title="مكتملة" isActive={selectedTab === 'completed'} onPress={() => handleTabChange('completed')} styles={styles} />
-                    <TabButton title="فاشلة" isActive={selectedTab === 'rejected'} onPress={() => handleTabChange('rejected')} styles={styles} />
-                </View>
-            </View>
-        </View>
+  <View style={styles.dashboardContainer}>
+    <View style={styles.welcomeHeader}>
+      <Text adjustsFontSizeToFit numberOfLines={1} style={styles.dashboardTitle}>الاحصائيات</Text>
+      <Text adjustsFontSizeToFit numberOfLines={1} style={styles.dashboardSubtitle}>مرحباً بك، تتبع مهامك وأدائك</Text>
     </View>
+    <TechnicianStatCards tickets={tasks} styles={styles} currentUserDocId={currentUserDocId} />
+    <PerformanceSummaryCard tasks={tasks} styles={styles} theme={theme} />
+
+    <View style={styles.taskListContainer}>
+      <View style={styles.taskListHeader}>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.taskListTitle}>قائمة المهام</Text>
+            <Text style={styles.taskListSubtitle}>جميع المهام المسندة إليك</Text>
+          </View>
+        </View>
+
+        <View style={styles.searchContainer}>
+          <Search size={20} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            placeholder="بحث بالاسم، العنوان، أو رقم الطلب..."
+            style={styles.searchInput}
+            value={searchTerm}
+            onChangeText={setSearchTerm}
+            placeholderTextColor="#9CA3AF"
+          />
+        </View>
+
+        <View style={styles.tabsContainer}>
+          <TabButton title="الكل" isActive={selectedTab === 'all'} onPress={() => handleTabChange('all')} styles={styles} />
+          <TabButton title="قيد التنفيذ" isActive={selectedTab === 'pending'} onPress={() => handleTabChange('pending')} styles={styles} />
+          <TabButton title="مكتملة" isActive={selectedTab === 'completed'} onPress={() => handleTabChange('completed')} styles={styles} />
+          <TabButton title="فاشلة" isActive={selectedTab === 'rejected'} onPress={() => handleTabChange('rejected')} styles={styles} />
+        </View>
+      </View>
+    </View>
+  </View>
 ));
 ListHeader.displayName = 'ListHeader';
 
 
 interface EmptyListProps {
-    searchTerm: string;
-    styles: any;
+  searchTerm: string;
+  styles: any;
 }
 
 const EmptyList = ({ searchTerm, styles }: EmptyListProps) => (
-    <View style={styles.centeredMessage}>
-        <View style={styles.emptyStateContainer}>
-            <Inbox size={48} color="#D1D5DB" />
-            <Text style={styles.emptyStateText}>
-                {searchTerm ? "لا توجد مهام تطابق الفلترة الحالية" : "ليس لديك مهام مسندة حالياً"}
-            </Text>
-        </View>
+  <View style={styles.centeredMessage}>
+    <View style={styles.emptyStateContainer}>
+      <Inbox size={48} color="#D1D5DB" />
+      <Text style={styles.emptyStateText}>
+        {searchTerm ? "لا توجد مهام تطابق الفلترة الحالية" : "ليس لديك مهام مسندة حالياً"}
+      </Text>
     </View>
+  </View>
 );
 
 const mapDocToServiceRequest = (docSnap: DocumentSnapshot): ServiceRequest => {
@@ -511,8 +511,8 @@ const mapDocToServiceRequest = (docSnap: DocumentSnapshot): ServiceRequest => {
 };
 
 function TechnicianDashboardScreen() {
-    const { showDialog } = UseDialog()
-  
+  const { showDialog } = UseDialog()
+
   const { theme } = useTheme();
   const { width } = useWindowDimensions();
   const styles = getStyles(theme, width);
@@ -537,23 +537,23 @@ function TechnicianDashboardScreen() {
 
   const fetchTasks = useCallback(async (userDocId: string) => {
     try {
-        const constraints: QueryConstraint[] = [
-            where("assignedUsers", "array-contains", userDocId),
-            orderBy("date", "desc"),
-        ];
-        
-        const q = query(collection(db, "serviceRequests"), ...constraints);
-        const snap = await getDocs(q);
-      
-        if (!snap.empty) {
-            const newTasks = snap.docs.map(mapDocToServiceRequest);
-            setTasks(newTasks);
-        } else {
-            setTasks([]);
-        }
+      const constraints: QueryConstraint[] = [
+        where("assignedUsers", "array-contains", userDocId),
+        orderBy("date", "desc"),
+      ];
+
+      const q = query(collection(db, "serviceRequests"), ...constraints);
+      const snap = await getDocs(q);
+
+      if (!snap.empty) {
+        const newTasks = snap.docs.map(mapDocToServiceRequest);
+        setTasks(newTasks);
+      } else {
+        setTasks([]);
+      }
     } catch (error) {
-        console.error("Error fetching tasks:", error);
-        showDialog({status :"error" ,message:"فشل في جلب البيانات"})
+      console.error("Error fetching tasks:", error);
+      showDialog({ status: "error", message: "فشل في جلب البيانات" })
     }
   }, [showDialog]);
 
@@ -594,7 +594,7 @@ function TechnicianDashboardScreen() {
 
   const filteredTasks = useMemo(() => {
     let baseTickets = tasks;
-    
+
     if (selectedTab === "pending") {
       baseTickets = tasks.filter(ticket => ["مفتوح", "قيد المعالجة"].includes(ticket.status));
     } else if (selectedTab === "completed") {
@@ -605,7 +605,7 @@ function TechnicianDashboardScreen() {
         return userResponse?.response === 'rejected';
       });
     }
-  
+
     if (searchTerm) {
       const lowercasedSearch = searchTerm.toLowerCase();
       return baseTickets.filter(ticket =>
@@ -614,7 +614,7 @@ function TechnicianDashboardScreen() {
         ticket.id.toLowerCase().includes(lowercasedSearch)
       );
     }
-  
+
     return baseTickets;
   }, [tasks, selectedTab, searchTerm, currentUserDocId]);
 
@@ -630,6 +630,10 @@ function TechnicianDashboardScreen() {
 
 
 
+  // Attach ref for scroll-to-top on tab press
+  const listRef = useRef<FlatList<ServiceRequest> | null>(null);
+  useScrollToTop(listRef);
+
   if (loading && tasks.length === 0) {
     return (
       <View style={styles.fullScreenLoader}>
@@ -642,6 +646,7 @@ function TechnicianDashboardScreen() {
   return (
     <View style={styles.screenContainer}>
       <FlatList
+        ref={listRef}
         data={filteredTasks}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
@@ -682,7 +687,7 @@ const getStyles = (theme: any, width: number) => {
   const containerPadding = 16;
   const scrollViewPadding = 20;
   const cardWidth = width - (containerPadding * 2) - (scrollViewPadding) - 24;
-  
+
   const statCardGap = 18;
   const statCardWidth = (width - (containerPadding * 2) - statCardGap) / 2;
 
@@ -700,20 +705,20 @@ const getStyles = (theme: any, width: number) => {
     },
     welcomeHeader: {
       marginBottom: 24,
-      alignItems:  'flex-end',
+      alignItems: 'flex-end',
     },
     dashboardTitle: {
       fontSize: 28,
       fontWeight: 'bold',
       color: theme.text,
       fontFamily: 'Cairo',
-      textAlign:  'right',
+      textAlign: 'right',
     },
     dashboardSubtitle: {
       fontSize: 16,
       color: theme.textSecondary,
       fontFamily: 'Cairo',
-      textAlign:  'right',
+      textAlign: 'right',
       marginTop: 4,
     },
     fullScreenLoader: {
@@ -785,156 +790,156 @@ const getStyles = (theme: any, width: number) => {
       borderRadius: 50,
       opacity: 0.08,
     },
-    
+
     // PerformanceSummaryCard styles
     container: {
-        backgroundColor: theme.card,
-        borderRadius: 16,
-        paddingVertical: 20,
-        marginBottom: 24,
-        shadowColor: theme.shadow,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 12,
-        elevation: 3,
+      backgroundColor: theme.card,
+      borderRadius: 16,
+      paddingVertical: 20,
+      marginBottom: 24,
+      shadowColor: theme.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.05,
+      shadowRadius: 12,
+      elevation: 3,
     },
     header: {
-        flexDirection: 'row-reverse',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
-        paddingHorizontal: 20,
+      flexDirection: 'row-reverse',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 20,
+      paddingHorizontal: 20,
     },
     headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: theme.text,
-        fontFamily: 'Cairo',
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: theme.text,
+      fontFamily: 'Cairo',
     },
     cardsScrollView: {
-        paddingHorizontal: scrollViewPadding,
-        gap: 16,
+      paddingHorizontal: scrollViewPadding,
+      gap: 16,
     },
 
     // New StatInfoCard styles
     infoCard: {
-        width: cardWidth,
-        borderRadius: 24,
-        padding: 20,
-        justifyContent: 'space-between',
-        minHeight: 180,
+      width: cardWidth,
+      borderRadius: 24,
+      padding: 20,
+      justifyContent: 'space-between',
+      minHeight: 180,
     },
     infoCardIconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 12,
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 12,
     },
     infoCardValue: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        fontFamily: 'Cairo',
-        textAlign: 'right',
-        color: theme.text,
+      fontSize: 24,
+      fontWeight: 'bold',
+      fontFamily: 'Cairo',
+      textAlign: 'right',
+      color: theme.text,
     },
     infoCardTitle: {
-        fontSize: 14,
-        color: theme.textSecondary,
-        fontFamily: 'Cairo',
-        textAlign: 'right',
-        marginTop: 4,
+      fontSize: 14,
+      color: theme.textSecondary,
+      fontFamily: 'Cairo',
+      textAlign: 'right',
+      marginTop: 4,
     },
 
     // Modified SLA card style
     card: {
-        width: cardWidth,
-        borderRadius: 24,
-        padding: 20,
-        minHeight: 180,
-        justifyContent: 'space-between',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 3,
+      width: cardWidth,
+      borderRadius: 24,
+      padding: 20,
+      minHeight: 180,
+      justifyContent: 'space-between',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 3,
     },
     onTimeCard: {
-        backgroundColor: '#10B981',
+      backgroundColor: '#10B981',
     },
     lateCard: {
-        backgroundColor: '#EF4444',
+      backgroundColor: '#EF4444',
     },
     cardContent: {
-        marginBottom: 'auto',
+      marginBottom: 'auto',
     },
     cardIcon: {
-        marginBottom: 12,
+      marginBottom: 12,
     },
     cardTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#FFFFFF',
-        marginBottom: 4,
-        fontFamily: 'Cairo',
-        textAlign: 'right',
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: '#FFFFFF',
+      marginBottom: 4,
+      fontFamily: 'Cairo',
+      textAlign: 'right',
     },
     projectCount: {
-        fontSize: 12,
-        color: 'rgba(255, 255, 255, 0.8)',
-        fontFamily: 'Cairo',
-        textAlign: 'right',
+      fontSize: 12,
+      color: 'rgba(255, 255, 255, 0.8)',
+      fontFamily: 'Cairo',
+      textAlign: 'right',
     },
     bottomSection: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-end',
-        marginTop: 16,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-end',
+      marginTop: 16,
     },
     progressSection: {
-        flex: 1,
-        marginRight: 12,
+      flex: 1,
+      marginRight: 12,
     },
     percentage: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#FFFFFF',
-        marginBottom: 6,
-        fontFamily: 'Cairo',
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: '#FFFFFF',
+      marginBottom: 6,
+      fontFamily: 'Cairo',
     },
     progressBar: {
-        height: 4,
-        backgroundColor: 'rgba(255, 255, 255, 0.3)',
-        borderRadius: 2,
-        overflow: 'hidden',
+      height: 4,
+      backgroundColor: 'rgba(255, 255, 255, 0.3)',
+      borderRadius: 2,
+      overflow: 'hidden',
     },
     progressFill: {
-        height: '100%',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 2,
+      height: '100%',
+      backgroundColor: '#FFFFFF',
+      borderRadius: 2,
     },
     iconSection: {
-        justifyContent: 'center',
-        alignItems: 'center',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     successIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: 'rgba(255, 255, 255, 0.2)',
-        justifyContent: 'center',
-        alignItems: 'center',
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     warningIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: 'rgba(255, 255, 255, 0.2)',
-        justifyContent: 'center',
-        alignItems: 'center',
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
-    
+
     // TaskList styles
     taskListContainer: {
       backgroundColor: theme.card,
@@ -1087,7 +1092,7 @@ const getStyles = (theme: any, width: number) => {
       color: theme.textSecondary,
       fontFamily: 'Cairo',
       marginBottom: 4,
-      textAlign:"left"
+      textAlign: "left"
     },
     ticketDate: {
       fontSize: 12,
@@ -1105,7 +1110,7 @@ const getStyles = (theme: any, width: number) => {
       color: '#FFFFFF',
       fontFamily: 'Cairo',
     },
-    textbadgeYellow: {color:"black"},
+    textbadgeYellow: { color: "black" },
     badgeBlue: { backgroundColor: '#3B82F6' },
     badgeYellow: { backgroundColor: '#F59E0B' },
     badgeGreen: { backgroundColor: '#10B981' },
@@ -1132,4 +1137,5 @@ const getStyles = (theme: any, width: number) => {
     actionBadgeTextRed: { color: theme.destructive, fontWeight: '600', fontFamily: 'Cairo' },
     actionBadgeBlue: { backgroundColor: theme.primary + '20' },
     actionBadgeTextBlue: { color: theme.primary, fontWeight: '600', fontFamily: 'Cairo' },
-  });};
+  });
+};

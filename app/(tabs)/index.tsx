@@ -5,6 +5,7 @@ import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
 import { ServiceRequest } from '@/lib/types';
 import { Ionicons } from '@expo/vector-icons';
+import { useScrollToTop } from '@react-navigation/native';
 import { liteClient as algoliasearch } from 'algoliasearch/lite';
 import {
   arrayUnion,
@@ -317,8 +318,7 @@ const AlgoliaHitAdapter = ({ hit, users, userUid, loadingItemId, handleAcceptTas
 };
 
 // --- MODIFIED: HybridList to handle tab switching state ---
-const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader }) => {
-  const listRef = useRef<FlatList>(null);
+const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader, listRef }) => {
   const { theme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
   const [firebaseRequests, setFirebaseRequests] = useState<ServiceRequest[]>([]);
@@ -477,6 +477,10 @@ export default function Taskscreen() {
     setTimeout(() => setIsTabSwitching(false), 400); // Duration for loading state
   }, [requestView, isTabSwitching]);
 
+  // Ref for FlatList to support scroll-to-top on tab press
+  const listRef = useRef<FlatList | null>(null);
+  useScrollToTop(listRef);
+
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'users'), snapshot => {
       setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
@@ -525,6 +529,7 @@ export default function Taskscreen() {
             users={users}
             isTabSwitching={isTabSwitching}
             listHeader={headerComponent}
+            listRef={listRef}
           />
           <ConnectedFilters {...{ isModalOpen: isFilterModalOpen, onToggleModal: () => setFilterModalOpen(false), users, teams }} />
         </InstantSearch>

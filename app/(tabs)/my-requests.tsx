@@ -4,6 +4,7 @@ import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
 import { ServiceRequest } from '@/lib/types';
 import { Ionicons } from '@expo/vector-icons';
+import { useScrollToTop } from '@react-navigation/native';
 import { liteClient as algoliasearch } from 'algoliasearch/lite';
 import { router } from 'expo-router';
 import { collection, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
@@ -261,6 +262,7 @@ type HybridListProps = {
 
 const HybridList = ({ sortOrder, setSortOrder, onOpenFilters, users }: HybridListProps) => {
   const listRef = useRef<FlatList>(null);
+  useScrollToTop(listRef);
   const { theme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
   const { realuserUid } = usePermissions();
@@ -522,7 +524,7 @@ const getStyles = (theme: Theme) => {
       paddingVertical: 8,
       borderRadius: 8
     },
-    addButtonText: { color: theme.contrastText, fontFamily: 'Cairo', fontWeight: '600' },
+    addButtonText: { color: theme.text, fontFamily: 'Cairo', fontWeight: '600' },
     // Data source indicator styles
     dataSourceIndicator: {
       paddingVertical: 4,
@@ -532,7 +534,7 @@ const getStyles = (theme: Theme) => {
       alignItems: 'center',
     },
     dataSourceIndicatorText: {
-      color: theme.contrastText,
+      color: theme.text,
       fontFamily: 'Cairo',
       fontWeight: 'bold',
       fontSize: 12,
@@ -595,9 +597,9 @@ const getStyles = (theme: Theme) => {
       paddingVertical: 6,
       paddingHorizontal: 12,
       borderRadius: 20,
-      backgroundColor: theme.primaryTransparent,
+      backgroundColor: theme.inputBackground,
       borderWidth: 1,
-      borderColor: theme.primaryBorder,
+      borderColor: theme.border,
       gap: 8,
     },
     filterPillText: { fontSize: 13, fontFamily: 'Cairo', fontWeight: '600', color: theme.primary },
