@@ -543,6 +543,9 @@ const TicketDetailPage = () => {
             </ThemedView>
         );
     }
+    const isNotCreator = (userdoc?.uid && serviceRequest?.creatorId)
+        ? userdoc.uid !== serviceRequest.creatorId
+        : true;
 
     const isDisabled =
         serviceRequest.status === 'مكتمل' ||
@@ -550,7 +553,7 @@ const TicketDetailPage = () => {
         (showActions === 'true' && (
             currentUserResponse === 'completed' ||
             currentUserResponse === 'rejected' ||
-            currentUserResponse !== 'accepted'
+            (isNotCreator ? currentUserResponse !== 'accepted' : false)
         ));
 
     const renderTabContent = () => {
