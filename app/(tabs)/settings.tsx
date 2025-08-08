@@ -106,7 +106,7 @@ const SettingsGroup = React.memo<SettingsGroupProps & { styles: any }>(({ title,
       {Children.map(children, (child, index) => (
         <>
           {React.isValidElement(child) ? React.cloneElement(child as React.ReactElement<any>, { styles }) : child}
-          {index < Children.count(children) - 1 && <View style={styles.separator} />}
+          {index < Children.count(children) - 1 && Children.count(children) > 1 && <View style={styles.separator} />}
         </>
       ))}
     </View>
@@ -202,8 +202,6 @@ const SettingsPage = () => {
     return { latestClearTimeString: timeString, formattedDate: dateString };
   }, [userdoc]);
 
-  // FIX: Depend on the stable user ID, not the entire userdoc object.
-  // This prevents the onSnapshot listener from being re-created on every data change.
   useEffect(() => {
     if (!userdoc?.id) return;
 
@@ -494,30 +492,45 @@ const SettingsPage = () => {
       >
         <ProfileHeader user={userdoc} onImagePick={handleImagePick} loading={isImageUploading} styles={styles} />
 
+        {/* --- MODIFIED TIME TRACKING SECTION --- */}
         <SettingsGroup title="تسجيل الدوام" styles={styles}>
-          <View style={styles.timeTrackingContainer}>
+          <View style={styles.attendanceCard}>
+            <View style={styles.statusContainer}>
+              <Text style={styles.statusText}>
+                {isClockedIn ? 'أنت في دوام حالياً' : 'أنت خارج الدوام'}
+              </Text>
+              <View style={[styles.statusDot, { backgroundColor: isClockedIn ? theme.success : theme.textSecondary }]} />
+            </View>
+
+            <View style={styles.timersSection}>
+              <Text style={styles.currentSessionTimerLabel}>الجلسة الحالية</Text>
+              <Text style={styles.currentSessionTimer}>{elapsedTime}</Text>
+
+              <View style={styles.totalDurationContainer}>
+                <Text style={styles.totalDurationLabel}>مجموع الساعات:</Text>
+                <Text style={styles.totalDurationText}>{formatDuration(timeTrackingData.totalDurationSeconds)}</Text>
+              </View>
+            </View>
+
             <TouchableOpacity
-              style={[styles.clockButton, isClockedIn ? styles.clockOutButton : styles.clockInButton]}
+              style={[
+                styles.attendanceButton,
+                isClockedIn ? styles.attendanceButtonClockOut : styles.attendanceButtonClockIn,
+              ]}
               onPress={handleToggleClock}
               disabled={isActionLoading}
             >
               {isActionLoading ? (
                 <ActivityIndicator color="#FFF" />
               ) : (
-                <Text style={styles.clockButtonText}>
+                <Text style={styles.attendanceButtonText}>
                   {isClockedIn ? 'إنهاء الدوام' : 'بدء الدوام'}
                 </Text>
               )}
             </TouchableOpacity>
-            <View style={styles.timersContainer}>
-              <Text style={styles.timerLabel}>الوقت الإجمالي</Text>
-              <Text style={styles.totalTimerText}>{formatDuration(timeTrackingData.totalDurationSeconds)}</Text>
-              <Text style={styles.timerLabel}>الجلسة الحالية</Text>
-              <Text style={styles.timerText}>{elapsedTime}</Text>
-            </View>
           </View>
         </SettingsGroup>
-
+        {/* --- END OF MODIFIED SECTION --- */}
 
         <SettingsGroup title="المحفظة" styles={styles}>
           <TouchableOpacity style={styles.invoiceCard} onPress={goToInvoices}>
@@ -587,63 +600,86 @@ const SettingsPage = () => {
   );
 };
 
-// Styles remain unchanged, so they are omitted here for brevity
+// Styles have been updated for the new Time Tracking UI
 const getStyles = (theme: Theme) => StyleSheet.create({
-  timeTrackingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: SPACING.l,
-    paddingHorizontal: SPACING.m,
+  // --- NEW STYLES for Time Tracking ---
+  attendanceCard: {
+    padding: SPACING.m,
   },
-  timersContainer: {
+  statusContainer: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    flex: 1,
-    paddingRight: SPACING.m,
+    marginBottom: SPACING.l,
+    alignSelf: 'flex-start'
   },
-  timerLabel: {
-    fontSize: 14,
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginLeft: SPACING.s,
+  },
+  statusText: {
+    fontSize: 16,
     fontWeight: '600',
+    color: theme.text,
+  },
+  timersSection: {
+    alignItems: 'center',
+    marginBottom: SPACING.l,
+  },
+  currentSessionTimerLabel: {
+    fontSize: 14,
     color: theme.textSecondary,
     marginBottom: SPACING.s / 2,
   },
-  totalTimerText: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: theme.text,
-    fontVariant: ['tabular-nums'],
-    marginBottom: SPACING.m,
-  },
-  timerText: {
-    fontSize: 32,
+  currentSessionTimer: {
+    fontSize: 42,
     fontWeight: 'bold',
     color: theme.primary,
     fontVariant: ['tabular-nums'],
   },
-  clockButton: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    justifyContent: 'center',
+  totalDurationContainer: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    marginTop: SPACING.m,
+    opacity: 0.8
   },
-  clockInButton: {
+  totalDurationLabel: {
+    fontSize: 14,
+    color: theme.textSecondary,
+    marginLeft: SPACING.s,
+  },
+  totalDurationText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.text,
+    fontVariant: ['tabular-nums'],
+  },
+  attendanceButton: {
+    paddingVertical: SPACING.m - 2,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  attendanceButtonClockIn: {
     backgroundColor: theme.success,
   },
-  clockOutButton: {
+  attendanceButtonClockOut: {
     backgroundColor: theme.destructive,
   },
-  clockButtonText: {
+  attendanceButtonText: {
     color: '#FFF',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
-    textAlign: 'center'
   },
+  // --- END OF NEW STYLES ---
+
   container: {
     flex: 1,
     backgroundColor: theme.background,
@@ -752,7 +788,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   separator: {
     height: 1,
     backgroundColor: theme.separator,
-    marginRight: 56,
+    marginRight: 56, // Adjusted to align with text, not icon
   },
   settingRow: {
     flexDirection: 'row',
