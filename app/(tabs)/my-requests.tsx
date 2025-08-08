@@ -370,11 +370,26 @@ const HybridList = ({ sortOrder, setSortOrder, onOpenFilters, users }: HybridLis
     return isAlgoliaInitialLoading ? loader : renderEmptyAlgolia();
   }, [shouldUseFirebase, isFirebaseLoading, algoliaHits, isAlgoliaLastPage, theme]);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    // For Firebase data, the real-time listener will automatically update
+    // For Algolia, we need to refresh the search
+    if (!shouldUseFirebase) {
+      // Trigger a new search with the same parameters
+      showMoreAlgoliaHits();
+    }
+    setIsRefreshing(false);
+  }, [shouldUseFirebase, showMoreAlgoliaHits]);
+
   return (
     <View style={{ flex: 1 }}>
       <FlatList
         ref={listRef}
         data={shouldUseFirebase ? firebaseRequests : algoliaHits}
+        refreshing={isRefreshing}
+        onRefresh={handleRefresh}
         ListHeaderComponent={
           <SearchHeader
             sortOrder={sortOrder}

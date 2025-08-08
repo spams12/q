@@ -30,6 +30,7 @@ import {
   Animated,
   Dimensions,
   FlatList,
+  RefreshControl,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -333,6 +334,7 @@ const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader,
   const styles = useMemo(() => getStyles(theme), [theme]);
   const [firebaseRequests, setFirebaseRequests] = useState<ServiceRequest[]>([]);
   const [isFirebaseLoading, setIsFirebaseLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
   const { userdoc, userUid } = usePermissions();
   const { query: algoliaQuery } = useSearchBox();
@@ -459,6 +461,21 @@ const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader,
     );
   }, [isTabSwitching, isListLoading, listData.length, shouldUseFirebase, theme]);
 
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      if (!shouldUseFirebase) {
+        // For Algolia search, we can trigger a new search
+        await showMoreAlgoliaHits();
+      }
+      // Firebase will automatically update through the snapshot listener
+    } catch (error) {
+      console.error('Error refreshing:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [shouldUseFirebase, showMoreAlgoliaHits]);
+
   return (
     <View style={{ flex: 1 }}>
       <FlatList
@@ -474,6 +491,14 @@ const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader,
         onScroll={handleScroll}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.listContentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
       />
       {showScrollToTop && <TouchableOpacity style={styles.scrollToTopButton} onPress={scrollToTop} activeOpacity={0.7}><Ionicons name="chevron-up" size={36} color={theme.text} style={{ opacity: 0.7 }} /></TouchableOpacity>}
     </View>
