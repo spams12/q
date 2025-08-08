@@ -4,34 +4,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Timestamp } from 'firebase/firestore';
-import { Hi          <Pressable
-  style={[styles.actionButton, styles.processingButton]}
-  onPress={() => handleAcceptTask?.(item.id)}
-  disabled={isActionLoading}
->
-  {isActionLoading && loadingItemId === item.id ? (
-    <ActivityIndicator color="#fff" />
-  ) : (
-    <>
-      <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-      <Text style={styles.processingButtonText} adjustsFontSizeToFit numberOfLines={1}>قبول</Text>
-    </>
-  )}
-</Pressable>
-  <Pressable
-    style={[styles.actionButton, styles.rejectButton]}
-    onPress={() => handleRejectTask?.(item.id)}
-    disabled={isActionLoading}
-  >
-    {isActionLoading && loadingItemId === item.id ? (
-      <ActivityIndicator color="#fff" />
-    ) : (
-      <>
-        <Ionicons name="close-circle-outline" size={20} color="#fff" />
-        <Text style={styles.rejectButtonText} adjustsFontSizeToFit numberOfLines={1}>رفض</Text>
-      </>
-    )}
-  </Pressable>antsearch.js';
+import { Hit } from 'instantsearch.js';
 import { getHighlightedParts, getPropertyByPath } from 'instantsearch.js/es/lib/utils';
 import React, { Fragment, useCallback } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, ViewToken } from 'react-native';
@@ -294,7 +267,7 @@ const styles = StyleSheet.create({
   detailsContainer: { marginBottom: 12 },
   detailRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   detailLabel: { fontSize: 14, fontFamily: 'Cairo', fontWeight: '600', opacity: 0.7 },
-  detailValueContainer: { flexShrink: 1, alignItems: 'flex-start' }, // Allows text to wrap if needed but shrink
+  detailValueContainer: { flexShrink: 1, alignItems: 'flex-start' },
   detailValue: { fontSize: 14, fontFamily: 'Cairo', textAlign: 'left', paddingLeft: 8 },
   separator: { height: 1, marginVertical: 8 },
   actionButtonsContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)', paddingTop: 16, gap: 8 },

@@ -104,7 +104,7 @@ const DynamicStatusCountsProvider = ({ setStatusCounts, userUid, indexName }) =>
           ]);
           const facets = results[0]?.facets || {};
           const counts = facets.status || {};
-          const closedCount = (counts['مكتمل'] || 0) + (counts['مغلق'] || 0);
+          const closedCount = (counts['مكتمل'] || 0)
           setStatusCounts({
             open: counts['مفتوح'] || 0,
             pending: counts['قيد المعالجة'] || 0,
