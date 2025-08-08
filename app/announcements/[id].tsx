@@ -137,9 +137,9 @@ export default function AnnouncementDetailsScreen() {
               renderItem={({ item }) => (
                 <View style={styles.slide}>
                   {isVideoUrl(item) ? (
-                    <Video source={{ uri: item }} style={styles.media} resizeMode="contain" useNativeControls />
+                    <Video source={{ uri: item }} style={styles.media} resizeMode="cover" useNativeControls />
                   ) : (
-                    <Image source={{ uri: item }} style={styles.media} resizeMode="contain" />
+                    <Image source={{ uri: item }} style={styles.media} resizeMode="cover" />
                   )}
                 </View>
               )}
