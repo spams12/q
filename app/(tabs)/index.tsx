@@ -8,15 +8,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useScrollToTop } from '@react-navigation/native';
 import { liteClient as algoliasearch } from 'algoliasearch/lite';
 import {
-  arrayUnion,
   collection,
-  doc,
   onSnapshot,
   orderBy,
   query,
   Timestamp,
-  updateDoc,
-  where,
+  where
 } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -29,7 +26,7 @@ import {
 } from 'react-instantsearch-core';
 import {
   ActivityIndicator,
-  Animated, // <-- Import Animated
+  Animated,
   Dimensions,
   FlatList,
   SafeAreaView,
@@ -39,6 +36,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
+import { handleAcceptTask as acceptTask, handleRejectTask as rejectTask } from '@/hooks/taskar';
 import { db } from '../../lib/firebase';
 import { Filters } from '../fliters';
 
@@ -287,7 +286,16 @@ const SearchHeader = ({ requestView, setRequestView, sortOrder, setSortOrder, on
 };
 
 // --- AlgoliaHitAdapter (No changes needed) ---
-const AlgoliaHitAdapter = ({ hit, users, userUid, loadingItemId, handleAcceptTask }) => {
+interface AlgoliaHitAdapterProps {
+  hit: any;
+  users: User[];
+  userUid: string;
+  loadingItemId: string | null;
+  handleAcceptTask: (ticketId: string) => Promise<void>;
+  handleRejectTask: (ticketId: string) => Promise<void>;
+}
+
+const AlgoliaHitAdapter: React.FC<AlgoliaHitAdapterProps> = ({ hit, users, userUid, loadingItemId, handleAcceptTask, handleRejectTask }) => {
   const getTimestampFromMilliseconds = (ms) => {
     if (typeof ms !== 'number') return undefined;
     return new Timestamp(Math.floor(ms / 1000), (ms % 1000) * 1000000);
@@ -313,6 +321,7 @@ const AlgoliaHitAdapter = ({ hit, users, userUid, loadingItemId, handleAcceptTas
       hasResponded={hasResponded}
       isActionLoading={loadingItemId === hit.objectID}
       handleAcceptTask={handleAcceptTask}
+      handleRejectTask={handleRejectTask}
     />
   );
 };
@@ -343,18 +352,20 @@ const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader,
 
   const handleAcceptTask = async (ticketId: string) => {
     if (loadingItemId || !userdoc) return;
-    setLoadingItemId(ticketId);
-    try {
-      const taskRef = doc(db, 'serviceRequests', ticketId);
-      await updateDoc(taskRef, {
-        status: 'قيد المعالجة',
-        userResponses: arrayUnion({ userId: userdoc.uid, timestamp: Timestamp.now(), response: 'accepted', userName: userdoc.name })
-      });
-    } catch (error) {
-      console.error("Error accepting task:", error);
-    } finally {
-      setLoadingItemId(null);
-    }
+    await acceptTask(
+      ticketId,
+      userdoc,
+      (action: 'accept' | null) => setLoadingItemId(action === 'accept' ? ticketId : null)
+    );
+  };
+
+  const handleRejectTask = async (ticketId: string) => {
+    if (loadingItemId || !userdoc) return;
+    await rejectTask(
+      ticketId,
+      userdoc,
+      (action: 'reject' | null) => setLoadingItemId(action === 'reject' ? ticketId : null)
+    );
   };
 
   const handleAlgoliaLoadMore = useCallback(() => {
@@ -401,13 +412,13 @@ const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader,
       const hasResponded = item.userResponses?.some(res => res.userId === userUid) || false;
       return (
         <View style={styles.item}>
-          <InfoCard item={item} users={users} showActions={true} hasResponded={hasResponded} isActionLoading={loadingItemId === item.id} handleAcceptTask={handleAcceptTask} />
+          <InfoCard item={item} users={users} showActions={true} hasResponded={hasResponded} isActionLoading={loadingItemId === item.id} handleAcceptTask={handleAcceptTask} handleRejectTask={handleRejectTask} />
         </View>
       );
     }
     return (
       <View style={styles.item}>
-        <AlgoliaHitAdapter hit={item} users={users} userUid={userUid} loadingItemId={loadingItemId} handleAcceptTask={handleAcceptTask} />
+        <AlgoliaHitAdapter hit={item} users={users} userUid={userUid} loadingItemId={loadingItemId} handleAcceptTask={handleAcceptTask} handleRejectTask={handleRejectTask} />
       </View>
     );
   }, [shouldUseFirebase, users, userUid, loadingItemId, handleAcceptTask]);

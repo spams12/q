@@ -1,6 +1,5 @@
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
-import { getAuth } from "firebase/auth";
 import { get, remove, ref as rtdbRef, set } from "firebase/database";
 import {
   arrayUnion,
@@ -11,7 +10,6 @@ import {
 } from "firebase/firestore";
 import { Alert } from "react-native";
 
-import { usePermissions } from "@/context/PermissionsContext";
 import { db, rtdb } from "../lib/firebase";
 import { Comment, ServiceRequest, User } from "../lib/types";
 
@@ -21,18 +19,21 @@ const LOCATION_TASK_NAME = "background-location-task";
  * Background task to update user's location in Firebase Realtime Database.
  * This ensures dispatchers can see the technician's live location.
  */
+// Store the current user document for the background task
+let currentUserDoc: User | null = null;
+
+export const setBackgroundTaskUser = (user: User) => {
+  currentUserDoc = user;
+};
+
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
     console.error("Background location task error:", error);
     return;
   }
-  if (data) {
+  if (data && currentUserDoc) {
     const { locations } = data as { locations: Location.LocationObject[] };
-    const auth = getAuth();
-    const user = auth.currentUser;
-    const { userdoc } = usePermissions();
-
-    if (user && locations.length > 0 && userdoc) {
+    if (locations.length > 0) {
       const location = locations[0];
       const { latitude, longitude, speed, heading, accuracy } = location.coords;
       const locationData = {
@@ -47,10 +48,10 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
         // Update the activeTechnicians branch in RTDB for live tracking
         const technicianRef = rtdbRef(
           rtdb,
-          `activeTechnicians/${userdoc.id}/location`
+          `activeTechnicians/${currentUserDoc.id}/location`
         );
         await set(technicianRef, locationData);
-        console.log(`RTDB Location updated for user: ${userdoc.id}`);
+        console.log(`RTDB Location updated for user: ${currentUserDoc.id}`);
       } catch (e) {
         console.error(
           "Failed to write location to RTDB from background task:",
@@ -153,6 +154,9 @@ export const handleAcceptTask = async (
       LOCATION_TASK_NAME
     );
     if (!isTracking) {
+      // Set the user document for background task
+      setBackgroundTaskUser(userdoc);
+
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
         accuracy: Location.Accuracy.Balanced,
         timeInterval: 500,
@@ -191,7 +195,6 @@ export const handleRejectTask = async (
   if (!userdoc) return;
   setActionLoading("reject");
   try {
-    // First, check if this task was active for the user and clean it up from RTDB
     await cleanupTaskFromRtdb(userdoc.id, id);
 
     // Then, update Firestore to reflect the rejection

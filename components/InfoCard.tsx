@@ -4,7 +4,34 @@ import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Timestamp } from 'firebase/firestore';
-import { Hit } from 'instantsearch.js';
+import { Hi          <Pressable
+  style={[styles.actionButton, styles.processingButton]}
+  onPress={() => handleAcceptTask?.(item.id)}
+  disabled={isActionLoading}
+>
+  {isActionLoading && loadingItemId === item.id ? (
+    <ActivityIndicator color="#fff" />
+  ) : (
+    <>
+      <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+      <Text style={styles.processingButtonText} adjustsFontSizeToFit numberOfLines={1}>قبول</Text>
+    </>
+  )}
+</Pressable>
+  <Pressable
+    style={[styles.actionButton, styles.rejectButton]}
+    onPress={() => handleRejectTask?.(item.id)}
+    disabled={isActionLoading}
+  >
+    {isActionLoading && loadingItemId === item.id ? (
+      <ActivityIndicator color="#fff" />
+    ) : (
+      <>
+        <Ionicons name="close-circle-outline" size={20} color="#fff" />
+        <Text style={styles.rejectButtonText} adjustsFontSizeToFit numberOfLines={1}>رفض</Text>
+      </>
+    )}
+  </Pressable>antsearch.js';
 import { getHighlightedParts, getPropertyByPath } from 'instantsearch.js/es/lib/utils';
 import React, { Fragment, useCallback } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, ViewToken } from 'react-native';
@@ -91,7 +118,9 @@ interface InfoCardProps {
   hasResponded?: boolean;
   showActions?: boolean;
   handleAcceptTask?: (ticketId: string) => void;
+  handleRejectTask?: (ticketId: string) => void;
   isActionLoading?: boolean;
+  loadingItemId?: string | null;
   users?: User[];
 }
 
@@ -101,8 +130,10 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
   viewableItems,
   hasResponded,
   handleAcceptTask,
+  handleRejectTask,
   showActions = true,
   isActionLoading = false,
+  loadingItemId = null,
   users = [],
 }) => {
   const router = useRouter();
@@ -231,11 +262,18 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
       {shouldShowProcessingButton && (
         <View style={styles.actionButtonsContainer}>
           <Pressable
-            style={[styles.actionButton, styles.processingButton, isActionLoading && { opacity: 0.7 }]}
+            style={[styles.actionButton, styles.processingButton, isActionLoading && loadingItemId === item.id && { opacity: 0.7 }]}
             onPress={() => handleAcceptTask?.(item.id)}
             disabled={isActionLoading}
           >
-            {isActionLoading ? <ActivityIndicator color="#000" /> : <><Ionicons name="hourglass-outline" size={20} color="#000" /><Text style={styles.processingButtonText} adjustsFontSizeToFit numberOfLines={1}>جاري المعالجة</Text></>}
+            {isActionLoading && loadingItemId === item.id ? <ActivityIndicator color="#fff" /> : <><Ionicons name="checkmark-circle-outline" size={20} color="#fff" /><Text style={styles.processingButtonText} adjustsFontSizeToFit numberOfLines={1}>قبول</Text></>}
+          </Pressable>
+          <Pressable
+            style={[styles.actionButton, styles.rejectButton, isActionLoading && loadingItemId === item.id && { opacity: 0.7 }]}
+            onPress={() => handleRejectTask?.(item.id)}
+            disabled={isActionLoading}
+          >
+            {isActionLoading && loadingItemId === item.id ? <ActivityIndicator color="#fff" /> : <><Ionicons name="close-circle-outline" size={20} color="#fff" /><Text style={styles.rejectButtonText} adjustsFontSizeToFit numberOfLines={1}>رفض</Text></>}
           </Pressable>
         </View>
       )}
@@ -259,8 +297,10 @@ const styles = StyleSheet.create({
   detailValueContainer: { flexShrink: 1, alignItems: 'flex-start' }, // Allows text to wrap if needed but shrink
   detailValue: { fontSize: 14, fontFamily: 'Cairo', textAlign: 'left', paddingLeft: 8 },
   separator: { height: 1, marginVertical: 8 },
-  actionButtonsContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)', paddingTop: 16 },
-  actionButton: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, marginHorizontal: 6, gap: 8 },
-  processingButton: { backgroundColor: '#ffc107' },
-  processingButtonText: { color: '#000000', fontSize: 16, fontWeight: 'bold', fontFamily: 'Cairo', flexShrink: 1 },
+  actionButtonsContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)', paddingTop: 16, gap: 8 },
+  actionButton: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, gap: 8 },
+  processingButton: { backgroundColor: '#28a745' },
+  processingButtonText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', fontFamily: 'Cairo', flexShrink: 1 },
+  rejectButton: { backgroundColor: '#dc3545' },
+  rejectButtonText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', fontFamily: 'Cairo', flexShrink: 1 },
 });
