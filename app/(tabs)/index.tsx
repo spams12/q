@@ -7,6 +7,7 @@ import { ServiceRequest } from '@/lib/types';
 import { Ionicons } from '@expo/vector-icons';
 import { useScrollToTop } from '@react-navigation/native';
 import { liteClient as algoliasearch } from 'algoliasearch/lite';
+import { useRouter } from 'expo-router';
 import {
   collection,
   onSnapshot,
@@ -285,17 +286,17 @@ const SearchHeader = ({ requestView, setRequestView, sortOrder, setSortOrder, on
   );
 };
 
-// --- AlgoliaHitAdapter (No changes needed) ---
+// --- AlgoliaHitAdapter ---
 interface AlgoliaHitAdapterProps {
   hit: any;
   users: User[];
   userUid: string;
-  loadingItemId: string | null;
+  loadingState: { id: string; action: 'accept' | 'reject' } | null;
   handleAcceptTask: (ticketId: string) => Promise<void>;
   handleRejectTask: (ticketId: string) => Promise<void>;
 }
 
-const AlgoliaHitAdapter: React.FC<AlgoliaHitAdapterProps> = ({ hit, users, userUid, loadingItemId, handleAcceptTask, handleRejectTask }) => {
+const AlgoliaHitAdapter: React.FC<AlgoliaHitAdapterProps> = ({ hit, users, userUid, loadingState, handleAcceptTask, handleRejectTask }) => {
   const getTimestampFromMilliseconds = (ms) => {
     if (typeof ms !== 'number') return undefined;
     return new Timestamp(Math.floor(ms / 1000), (ms % 1000) * 1000000);
@@ -319,7 +320,7 @@ const AlgoliaHitAdapter: React.FC<AlgoliaHitAdapterProps> = ({ hit, users, userU
       showActions={true}
       hit={hit}
       hasResponded={hasResponded}
-      isActionLoading={loadingItemId === hit.objectID}
+      loadingState={loadingState}
       handleAcceptTask={handleAcceptTask}
       handleRejectTask={handleRejectTask}
     />
@@ -338,7 +339,7 @@ const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader,
   const { items: refinements } = useCurrentRefinements();
   const { items: algoliaHits, isLastPage: isAlgoliaLastPage, showMore: showMoreAlgoliaHits } = useInfiniteHits();
   const [isAlgoliaLoadingMore, setIsAlgoliaLoadingMore] = useState(false);
-  const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
+  const [loadingState, setLoadingState] = useState<{ id: string; action: 'accept' | 'reject' } | null>(null);
 
   const shouldUseFirebase = algoliaQuery === '' && refinements.length === 0;
   const currentData = shouldUseFirebase ? firebaseRequests : algoliaHits;
@@ -350,22 +351,42 @@ const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader,
     if (isAlgoliaLoadingMore) { setIsAlgoliaLoadingMore(false); }
   }, [algoliaHits]);
 
+  const router = useRouter();
+
   const handleAcceptTask = async (ticketId: string) => {
-    if (loadingItemId || !userdoc) return;
-    await acceptTask(
-      ticketId,
-      userdoc,
-      (action: 'accept' | null) => setLoadingItemId(action === 'accept' ? ticketId : null)
-    );
+    if (loadingState || !userdoc) return;
+    setLoadingState({ id: ticketId, action: 'accept' });
+    try {
+      await acceptTask(
+        ticketId,
+        userdoc,
+        (action: 'accept' | null) => { },
+        (taskId: string) => router.push({
+          pathname: '/tasks/[id]' as const,
+          params: { id: taskId, showActions: 'true' }
+        })
+      );
+    } catch (error) {
+      console.error('Error accepting task:', error);
+    } finally {
+      setLoadingState(null);
+    }
   };
 
   const handleRejectTask = async (ticketId: string) => {
-    if (loadingItemId || !userdoc) return;
-    await rejectTask(
-      ticketId,
-      userdoc,
-      (action: 'reject' | null) => setLoadingItemId(action === 'reject' ? ticketId : null)
-    );
+    if (loadingState || !userdoc) return;
+    setLoadingState({ id: ticketId, action: 'reject' });
+    try {
+      await rejectTask(
+        ticketId,
+        userdoc,
+        (action: 'reject' | null) => { }
+      );
+    } catch (error) {
+      console.error('Error rejecting task:', error);
+    } finally {
+      setLoadingState(null);
+    }
   };
 
   const handleAlgoliaLoadMore = useCallback(() => {
@@ -412,16 +433,16 @@ const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader,
       const hasResponded = item.userResponses?.some(res => res.userId === userUid) || false;
       return (
         <View style={styles.item}>
-          <InfoCard item={item} users={users} showActions={true} hasResponded={hasResponded} isActionLoading={loadingItemId === item.id} handleAcceptTask={handleAcceptTask} handleRejectTask={handleRejectTask} />
+          <InfoCard item={item} users={users} showActions={true} hasResponded={hasResponded} loadingState={loadingState} handleAcceptTask={handleAcceptTask} handleRejectTask={handleRejectTask} />
         </View>
       );
     }
     return (
       <View style={styles.item}>
-        <AlgoliaHitAdapter hit={item} users={users} userUid={userUid} loadingItemId={loadingItemId} handleAcceptTask={handleAcceptTask} handleRejectTask={handleRejectTask} />
+        <AlgoliaHitAdapter hit={item} users={users} userUid={userUid} loadingState={loadingState} handleAcceptTask={handleAcceptTask} handleRejectTask={handleRejectTask} />
       </View>
     );
-  }, [shouldUseFirebase, users, userUid, loadingItemId, handleAcceptTask]);
+  }, [shouldUseFirebase, users, userUid, loadingState, handleAcceptTask]);
 
   const ListEmptyComponent = useMemo(() => {
     // Show a main loader when switching tabs or on initial load

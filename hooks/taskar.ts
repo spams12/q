@@ -222,6 +222,11 @@ export const handleRejectTask = async (
         });
       }
 
+      // Remove user from assignedUsers array
+      const newAssignedUsers = (data.assignedUsers || []).filter(
+        (userId) => userId !== userdoc.id
+      );
+
       const newComment: Comment = {
         id: `${Date.now()}`,
         content: `رفض المستخدم ${userdoc.name} المهمة.`,
@@ -235,6 +240,7 @@ export const handleRejectTask = async (
         userResponses: newUserResponses,
         comments: arrayUnion(newComment),
         lastUpdated: Timestamp.now(),
+        assignedUsers: newAssignedUsers,
       });
     });
     Alert.alert("تم", "تم تسجيل رفضك للمهمة.");

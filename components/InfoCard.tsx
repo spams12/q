@@ -92,8 +92,7 @@ interface InfoCardProps {
   showActions?: boolean;
   handleAcceptTask?: (ticketId: string) => void;
   handleRejectTask?: (ticketId: string) => void;
-  isActionLoading?: boolean;
-  loadingItemId?: string | null;
+  loadingState?: { id: string; action: 'accept' | 'reject' } | null;
   users?: User[];
 }
 
@@ -105,14 +104,18 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
   handleAcceptTask,
   handleRejectTask,
   showActions = true,
-  isActionLoading = false,
-  loadingItemId = null,
+  loadingState = null,
   users = [],
 }) => {
   const router = useRouter();
   const { theme } = useTheme();
   const typesToHideClientInfo = ['اقتراح', 'استفسار', 'طلب', 'مشكلة'];
   const shouldHideClientInfo = typesToHideClientInfo.includes(item.type);
+
+  const isCurrentCardLoading = loadingState?.id === item.id;
+  const isAccepting = isCurrentCardLoading && loadingState?.action === 'accept';
+  const isRejecting = isCurrentCardLoading && loadingState?.action === 'reject';
+
   const handleNavigate = () => {
     router.push({
       pathname: "/tasks/[id]",
@@ -186,14 +189,12 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
 
   const isTicketClosedOrCompleted = item.status === 'مغلق' || item.status === 'مكتمل';
 
-  // The creator of the ticket should not be able to process their own ticket.
-
   const shouldShowProcessingButton = showActions && !hasResponded && !isTicketClosedOrCompleted
 
 
   return (
     <Animated.View style={[styles.itemContainer, { backgroundColor: theme.header, shadowColor: theme.text }, rStyle]}>
-      <Pressable onPress={handleNavigate} disabled={isActionLoading}>
+      <Pressable onPress={handleNavigate} disabled={isCurrentCardLoading}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: theme.text }]} numberOfLines={2}>
             {hit ? <Highlight hit={hit} attribute="title" /> : item.title}
@@ -235,18 +236,42 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
       {shouldShowProcessingButton && (
         <View style={styles.actionButtonsContainer}>
           <Pressable
-            style={[styles.actionButton, styles.processingButton, isActionLoading && loadingItemId === item.id && { opacity: 0.7 }]}
+            style={[styles.actionButton, styles.processingButton]}
             onPress={() => handleAcceptTask?.(item.id)}
-            disabled={isActionLoading}
+            disabled={isCurrentCardLoading}
           >
-            {isActionLoading && loadingItemId === item.id ? <ActivityIndicator color="#fff" /> : <><Ionicons name="checkmark-circle-outline" size={20} color="#fff" /><Text style={styles.processingButtonText} adjustsFontSizeToFit numberOfLines={1}>قبول</Text></>}
+            <View style={styles.actionButtonContent}>
+              {isAccepting ? (
+                <>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={styles.processingButtonText}>جاري القبول...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                  <Text style={styles.processingButtonText} adjustsFontSizeToFit numberOfLines={1}>قبول</Text>
+                </>
+              )}
+            </View>
           </Pressable>
           <Pressable
-            style={[styles.actionButton, styles.rejectButton, isActionLoading && loadingItemId === item.id && { opacity: 0.7 }]}
+            style={[styles.actionButton, styles.rejectButton]}
             onPress={() => handleRejectTask?.(item.id)}
-            disabled={isActionLoading}
+            disabled={isCurrentCardLoading}
           >
-            {isActionLoading && loadingItemId === item.id ? <ActivityIndicator color="#fff" /> : <><Ionicons name="close-circle-outline" size={20} color="#fff" /><Text style={styles.rejectButtonText} adjustsFontSizeToFit numberOfLines={1}>رفض</Text></>}
+            <View style={styles.actionButtonContent}>
+              {isRejecting ? (
+                <>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={styles.rejectButtonText}>جاري الرفض...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="close-circle-outline" size={20} color="#fff" />
+                  <Text style={styles.rejectButtonText} adjustsFontSizeToFit numberOfLines={1}>رفض</Text>
+                </>
+              )}
+            </View>
           </Pressable>
         </View>
       )}
@@ -271,7 +296,8 @@ const styles = StyleSheet.create({
   detailValue: { fontSize: 14, fontFamily: 'Cairo', textAlign: 'left', paddingLeft: 8 },
   separator: { height: 1, marginVertical: 8 },
   actionButtonsContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)', paddingTop: 16, gap: 8 },
-  actionButton: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, gap: 8 },
+  actionButton: { flex: 1, paddingVertical: 12, borderRadius: 12 },
+  actionButtonContent: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8 },
   processingButton: { backgroundColor: '#28a745' },
   processingButtonText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', fontFamily: 'Cairo', flexShrink: 1 },
   rejectButton: { backgroundColor: '#dc3545' },
