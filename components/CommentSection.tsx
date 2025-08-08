@@ -26,6 +26,7 @@ import {
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
+import { usePermissions } from '@/context/PermissionsContext';
 import { useTheme } from '../context/ThemeContext';
 import { Comment, User } from '../lib/types';
 
@@ -137,7 +138,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const [allImages, setAllImages] = useState<string[]>([]);
   const { theme } = useTheme();
   const styles = getStyles(theme);
-
+  const { currentUserTeamId } = usePermissions()
   const [selectedCommentInfo, setSelectedCommentInfo] = useState<{
     userName: string;
     userPhoto?: string;
@@ -407,9 +408,18 @@ const CommentSection: React.FC<CommentSectionProps> = ({
     const isCurrentUser = comment.userId === currentUserId;
     const commentDate = getCommentDate(comment.timestamp);
 
+    let displayName = user?.name || 'مستخدم غير معروف';
+    let displayPhoto = user?.photoURL;
+
+    if (!isCurrentUser && user && user.teamId !== currentUserTeamId) {
+      // Different team → use role instead of name, no photo
+      displayName = user.role || 'عضو فريق';
+      displayPhoto = undefined;
+    }
+
     setSelectedCommentInfo({
-      userName: isCurrentUser ? 'You' : user?.name || 'مستخدم غير معروف',
-      userPhoto: user?.photoURL,
+      userName: isCurrentUser ? 'You' : displayName,
+      userPhoto: displayPhoto,
       formattedTimestamp: formatDistanceToNowStrict(commentDate, { addSuffix: true, locale: arSA }),
     });
     setModalVisible(true);
@@ -608,8 +618,14 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             if (!user) {
               console.warn(`User data not found for userId: "${comment.userId}". Comment ID: ${comment.id}. Displaying fallback name.`);
             }
-            const userName = user?.name || comment.userName || 'مستخدم غير معروف';
-            const isCurrentUser = comment.userId === currentUserId;
+            let userName = user?.name || comment.userName || 'مستخدم غير معروف';
+            let userPhoto = user?.photoURL;
+
+            if (!isCurrentUser && user && user.teamId !== currentUserTeamId) {
+              // Different team → role instead of name, no photo
+              userName = user.role || 'عضو فريق';
+              userPhoto = undefined;
+            } const isCurrentUser = comment.userId === currentUserId;
             const commentDate = getCommentDate(comment.timestamp);
 
             let dateHeader = null;
@@ -645,8 +661,8 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                   <View style={[styles.messageRow, isCurrentUser ? styles.messageRowRight : styles.messageRowLeft]}>
                     {!isCurrentUser && (
                       <View style={styles.avatarContainer}>
-                        {user?.photoURL ? (
-                          <Image source={{ uri: user.photoURL }} style={styles.avatar} />
+                        {userPhoto ? (
+                          <Image source={{ uri: userPhoto }} style={styles.avatar} />
                         ) : (
                           <View style={[styles.avatar, styles.avatarFallback]}>
                             <Text style={styles.avatarFallbackText}>{getAvatarFallback(userName)}</Text>
