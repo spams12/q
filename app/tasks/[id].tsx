@@ -25,6 +25,7 @@ import { getPriorityBadgeColor, getStatusBadgeColor } from '../../lib/styles';
 import { Comment, Invoice, ServiceRequest, User } from '../../lib/types';
 // --- NEW: Import the action handlers from the service file ---
 import { UseDialog } from '@/context/DialogContext';
+import * as Haptics from 'expo-haptics';
 import { handleAcceptTask, handleLogArrival, handleMarkAsDone, handleRejectTask } from '../../hooks/taskar';
 
 // --- KEYBOARD AVOIDANCE HOOK ---
@@ -146,6 +147,10 @@ const TicketDetailPage = () => {
 
     const copyToClipboard = (text: string) => {
         Clipboard.setStringAsync(text);
+
+        Haptics.notificationAsync(
+            Haptics.NotificationFeedbackType.Success
+        );
     };
 
     const handlePhonePress = (phoneNumber: string) => {

@@ -607,10 +607,10 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     padding: SPACING.m,
   },
   statusContainer: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: SPACING.l,
-    alignSelf: 'flex-start'
+    alignSelf: 'flex-end'
   },
   statusDot: {
     width: 10,

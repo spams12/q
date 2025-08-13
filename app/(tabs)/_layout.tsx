@@ -1,16 +1,51 @@
 import { FontAwesome, FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Tabs, router } from 'expo-router';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, LayoutAnimation, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { HapticTab } from '@/components/HapticTab';
+import { usePermissions } from '@/context/PermissionsContext';
 import { useTheme } from '@/context/ThemeContext';
+import { db } from '@/lib/firebase';
+import { query } from 'firebase/database';
+import { collection, onSnapshot, where } from 'firebase/firestore';
 
 export default function TabLayout() {
   const { theme } = useTheme();
+  const { userdoc } = usePermissions();
 
   // Temporary source of unread notifications; replace with real state/store when available
-  const unreadCount = 0;
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // 4. Use an effect to listen for real-time updates from Firestore
+  useEffect(() => {
+    // Exit early if we don't have a user document or ID
+    if (!userdoc?.id) {
+      setUnreadCount(0); // Reset count if user is not available
+      return;
+    }
+
+    // Define the reference to the user's notifications sub-collection
+    const notificationsRef = collection(db, "users", userdoc.id, "notifications");
+
+    // Create a query to fetch only the notifications where 'isRead' is false
+    const q = query(notificationsRef, where("isRead", "==", false));
+
+    // Set up the real-time listener
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      // The number of documents in the result is our unread count
+      const count = querySnapshot.size;
+      setUnreadCount(count);
+    }, (error) => {
+      console.error("Error fetching unread notifications: ", error);
+      // Handle potential errors, like permission denied
+    });
+
+    // Cleanup function: This will run when the component unmounts or userdoc.id changes,
+    // preventing memory leaks by unsubscribing from the listener.
+    return () => unsubscribe();
+
+  }, [userdoc?.id]); // Dependency array: re-run the effect if the user ID changes
 
   return (
     <Tabs

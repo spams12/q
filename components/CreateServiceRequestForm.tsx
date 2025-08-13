@@ -752,7 +752,6 @@ export default function CreateServiceRequestForm({
       setSubscribers([{ id: uuidv4(), name: "", phone: "", zoneNumber: "", packageType: "", price: "", serviceType: "" }]);
       setAttachments([]);
       onSuccess();
-      router.replace('/(tabs)');
     } catch (error) { console.error("Error adding ticket:", error); }
     finally { setIsSubmitting(false); }
   };
