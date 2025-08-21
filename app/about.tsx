@@ -145,6 +145,7 @@ const AboutPage: React.FC = () => {
       >
         <View style={styles.footerContent}>
           <Text style={styles.footerTitle}>تم التطوير بواسطة فريق القبس</Text>
+          <Text style={styles.footerTitle}>www.alqabastechnology.com</Text>
           <Text style={styles.footerText}>© 2025 جميع الحقوق محفوظة لشركة القبس للتكنولوجيا</Text>
         </View>
       </LinearGradient>

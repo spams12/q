@@ -427,7 +427,7 @@ async function sendNotificationsAndCleanUp(
 // --- FIRESTORE TRIGGERS ---
 
 export const sendNewRequestNotificationOnCreate = onDocumentCreated(
-  { document: "serviceRequests/{requestId}", region: "europe-west1" },
+  { document: "serviceRequests/{requestId}", region: "us-central1" },
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) return;
@@ -446,7 +446,7 @@ export const sendNewRequestNotificationOnCreate = onDocumentCreated(
 );
 
 export const serviceRequestUpdateManager = onDocumentUpdated(
-  { document: "serviceRequests/{requestId}", region: "europe-west1" },
+  { document: "serviceRequests/{requestId}", region: "us-central1" },
   async (event) => {
     if (!event.data) return;
     const beforeData = event.data.before.data() as ServiceRequest;
@@ -577,7 +577,7 @@ export const serviceRequestUpdateManager = onDocumentUpdated(
 );
 
 export const sendAnnouncementNotification = onDocumentCreated(
-  { document: "announcements/{announcementId}", region: "europe-west1" },
+  { document: "announcements/{announcementId}", region: "us-central1" },
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) return;

@@ -1,0 +1,442 @@
+[debug] [2025-08-21T15:16:38.069Z] ----------------------------------------------------------------------
+[debug] [2025-08-21T15:16:38.071Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Tmody\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only functions
+[debug] [2025-08-21T15:16:38.071Z] CLI Version:   14.12.1
+[debug] [2025-08-21T15:16:38.071Z] Platform:      win32
+[debug] [2025-08-21T15:16:38.071Z] Node Version:  v22.17.0
+[debug] [2025-08-21T15:16:38.071Z] Time:          Thu Aug 21 2025 18:16:38 GMT+0300 (Arabian Standard Time)
+[debug] [2025-08-21T15:16:38.071Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-08-21T15:16:38.194Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-08-21T15:16:38.195Z] > authorizing via signed-in user (alqabastechnology@gmail.com)
+[debug] [2025-08-21T15:16:38.195Z] [iam] checking project alqabas-80720 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2025-08-21T15:16:38.195Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:38.195Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:38.196Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720:testIamPermissions [none]
+[debug] [2025-08-21T15:16:38.196Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720:testIamPermissions x-goog-quota-user=projects/alqabas-80720
+[debug] [2025-08-21T15:16:38.196Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2025-08-21T15:16:40.131Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720:testIamPermissions 200
+[debug] [2025-08-21T15:16:40.131Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2025-08-21T15:16:40.131Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:40.131Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:40.131Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/alqabas-80720/serviceAccounts/alqabas-80720@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2025-08-21T15:16:40.131Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/alqabas-80720/serviceAccounts/alqabas-80720@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2025-08-21T15:16:42.038Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/alqabas-80720/serviceAccounts/alqabas-80720@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2025-08-21T15:16:42.038Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/alqabas-80720/serviceAccounts/alqabas-80720@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'alqabas-80720'...
+[info] 
+[info] i  deploying functions 
+[info] Running command: npm --prefix "$RESOURCE_DIR" run build
+[info] +  functions: Finished running predeploy script. 
+[debug] [2025-08-21T15:16:46.290Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:46.290Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:46.290Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720 [none]
+[debug] [2025-08-21T15:16:47.272Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720 200
+[debug] [2025-08-21T15:16:47.272Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720 {"projectNumber":"494111208967","projectId":"alqabas-80720","lifecycleState":"ACTIVE","name":"ALqabas","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-08-15T21:41:34.106095Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2025-08-21T15:16:47.274Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:47.274Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:47.274Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/alqabas-80720/adminSdkConfig [none]
+[debug] [2025-08-21T15:16:48.665Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/alqabas-80720/adminSdkConfig 200
+[debug] [2025-08-21T15:16:48.665Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/alqabas-80720/adminSdkConfig {"projectId":"alqabas-80720","databaseURL":"https://alqabas-80720-default-rtdb.europe-west1.firebasedatabase.app","storageBucket":"alqabas-80720.firebasestorage.app"}
+[debug] [2025-08-21T15:16:48.665Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:48.666Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:48.666Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/alqabas-80720/configs [none]
+[debug] [2025-08-21T15:16:49.680Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/alqabas-80720/configs 200
+[debug] [2025-08-21T15:16:49.680Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/alqabas-80720/configs {}
+[debug] [2025-08-21T15:16:49.682Z] Validating nodejs source
+[debug] [2025-08-21T15:16:50.518Z] > [functions] package.json contents: {
+  "name": "functions",
+  "scripts": {
+    "lint": "eslint .",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "22"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "expo-server-sdk": "^3.15.0",
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.0.1"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^5.12.0",
+    "@typescript-eslint/parser": "^5.12.0",
+    "eslint": "^8.9.0",
+    "eslint-config-google": "^0.14.0",
+    "eslint-plugin-import": "^2.25.4",
+    "firebase-functions-test": "^3.1.0",
+    "typescript": "^5.7.3"
+  },
+  "private": true
+}
+[debug] [2025-08-21T15:16:50.518Z] Building nodejs source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[debug] [2025-08-21T15:16:50.519Z] Could not find functions.yaml. Must use http discovery
+[debug] [2025-08-21T15:16:50.531Z] Found firebase-functions binary at 'D:\q\functions\node_modules\.bin\firebase-functions'
+[info] Serving at port 8426
+
+[debug] [2025-08-21T15:16:50.816Z] Got response from /__/functions.yaml {"endpoints":{"sendNewRequestNotificationOnCreate":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"labels":{},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.created","eventFilters":{"database":"(default)","namespace":"(default)"},"eventFilterPathPatterns":{"document":"serviceRequests/{requestId}"},"retry":false},"entryPoint":"sendNewRequestNotificationOnCreate"},"serviceRequestUpdateManager":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"labels":{},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.updated","eventFilters":{"database":"(default)","namespace":"(default)"},"eventFilterPathPatterns":{"document":"serviceRequests/{requestId}"},"retry":false},"entryPoint":"serviceRequestUpdateManager"},"sendAnnouncementNotification":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"labels":{},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.created","eventFilters":{"database":"(default)","namespace":"(default)"},"eventFilterPathPatterns":{"document":"announcements/{announcementId}"},"retry":false},"entryPoint":"sendAnnouncementNotification"}},"specVersion":"v1alpha1","requiredAPIs":[],"extensions":{}}
+[info] i  extensions: ensuring required API firebaseextensions.googleapis.com is enabled... 
+[debug] [2025-08-21T15:16:54.865Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-08-21T15:16:54.865Z] > authorizing via signed-in user (alqabastechnology@gmail.com)
+[debug] [2025-08-21T15:16:54.865Z] [iam] checking project alqabas-80720 for permissions ["firebase.projects.get","firebaseextensions.instances.list"]
+[debug] [2025-08-21T15:16:54.866Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:54.866Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:54.866Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720:testIamPermissions [none]
+[debug] [2025-08-21T15:16:54.866Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720:testIamPermissions x-goog-quota-user=projects/alqabas-80720
+[debug] [2025-08-21T15:16:54.866Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720:testIamPermissions {"permissions":["firebase.projects.get","firebaseextensions.instances.list"]}
+[debug] [2025-08-21T15:16:56.780Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720:testIamPermissions 200
+[debug] [2025-08-21T15:16:56.780Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720:testIamPermissions {"permissions":["firebase.projects.get","firebaseextensions.instances.list"]}
+[debug] [2025-08-21T15:16:56.780Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:56.780Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:56.781Z] >>> [apiv2][query] GET https://firebaseextensions.googleapis.com/v1beta/projects/alqabas-80720/instances pageSize=100&pageToken=
+[debug] [2025-08-21T15:16:58.894Z] <<< [apiv2][status] GET https://firebaseextensions.googleapis.com/v1beta/projects/alqabas-80720/instances 200
+[debug] [2025-08-21T15:16:58.894Z] <<< [apiv2][body] GET https://firebaseextensions.googleapis.com/v1beta/projects/alqabas-80720/instances {}
+[info] i  functions: preparing functions directory for uploading... 
+[info] i  functions: packaged D:\q\functions (109.6 KB) for uploading 
+[debug] [2025-08-21T15:16:58.938Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:58.938Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:16:58.938Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v1/projects/alqabas-80720/locations/-/functions [none]
+[debug] [2025-08-21T15:17:00.303Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v1/projects/alqabas-80720/locations/-/functions 200
+[debug] [2025-08-21T15:17:00.304Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v1/projects/alqabas-80720/locations/-/functions {}
+[debug] [2025-08-21T15:17:00.304Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:00.304Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:00.304Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/-/functions filter=environment%3D%22GEN_2%22
+[debug] [2025-08-21T15:17:01.612Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/-/functions 200
+[debug] [2025-08-21T15:17:01.612Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/-/functions {}
+[debug] [2025-08-21T15:17:01.615Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:01.615Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:01.616Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/alqabas-80720/databases/(default) [none]
+[debug] [2025-08-21T15:17:02.786Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/alqabas-80720/databases/(default) 200
+[debug] [2025-08-21T15:17:02.787Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/alqabas-80720/databases/(default) {"name":"projects/alqabas-80720/databases/(default)","uid":"2e7af218-df2c-49e6-99b2-ed9765ccf84f","createTime":"2025-08-19T13:02:04.552171Z","updateTime":"2025-08-19T13:02:04.552171Z","locationId":"me-central2","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2025-08-21T14:17:03.388680Z","appEngineIntegrationMode":"DISABLED","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"etag":"IP3JhqeZnI8DMMjF27T7lo8D"}
+[info] i  functions: ensuring required API run.googleapis.com is enabled... 
+[info] i  functions: ensuring required API eventarc.googleapis.com is enabled... 
+[info] i  functions: ensuring required API pubsub.googleapis.com is enabled... 
+[info] i  functions: ensuring required API storage.googleapis.com is enabled... 
+[info] i  functions: generating the service identity for pubsub.googleapis.com... 
+[debug] [2025-08-21T15:17:02.804Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:02.804Z] Checked if tokens are valid: true, expires at: 1755792120160
+[info] i  functions: generating the service identity for eventarc.googleapis.com... 
+[debug] [2025-08-21T15:17:02.807Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:02.807Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:02.809Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1beta1/projects/494111208967/services/pubsub.googleapis.com:generateServiceIdentity [none]
+[debug] [2025-08-21T15:17:02.809Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1beta1/projects/494111208967/services/pubsub.googleapis.com:generateServiceIdentity x-goog-quota-user=projects/494111208967
+[debug] [2025-08-21T15:17:02.809Z] >>> [apiv2][body] POST https://serviceusage.googleapis.com/v1beta1/projects/494111208967/services/pubsub.googleapis.com:generateServiceIdentity {}
+[debug] [2025-08-21T15:17:02.812Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1beta1/projects/494111208967/services/eventarc.googleapis.com:generateServiceIdentity [none]
+[debug] [2025-08-21T15:17:02.813Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1beta1/projects/494111208967/services/eventarc.googleapis.com:generateServiceIdentity x-goog-quota-user=projects/494111208967
+[debug] [2025-08-21T15:17:02.813Z] >>> [apiv2][body] POST https://serviceusage.googleapis.com/v1beta1/projects/494111208967/services/eventarc.googleapis.com:generateServiceIdentity {}
+[debug] [2025-08-21T15:17:04.977Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1beta1/projects/494111208967/services/eventarc.googleapis.com:generateServiceIdentity 200
+[debug] [2025-08-21T15:17:04.977Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1beta1/projects/494111208967/services/eventarc.googleapis.com:generateServiceIdentity {"name":"operations/finished.DONE_OPERATION","done":true,"response":{"@type":"type.googleapis.com/google.api.serviceusage.v1beta1.ServiceIdentity","email":"service-494111208967@gcp-sa-eventarc.iam.gserviceaccount.com","uniqueId":"114844567379113134102"}}
+[debug] [2025-08-21T15:17:05.067Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1beta1/projects/494111208967/services/pubsub.googleapis.com:generateServiceIdentity 200
+[debug] [2025-08-21T15:17:05.068Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1beta1/projects/494111208967/services/pubsub.googleapis.com:generateServiceIdentity {"name":"operations/finished.DONE_OPERATION","done":true,"response":{"@type":"type.googleapis.com/google.api.serviceusage.v1beta1.ServiceIdentity","email":"service-494111208967@gcp-sa-pubsub.iam.gserviceaccount.com","uniqueId":"104558259674656405055"}}
+[debug] [2025-08-21T15:17:05.073Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:05.074Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:05.074Z] >>> [apiv2][query] GET https://compute.googleapis.com/compute/v1/projects/494111208967 [none]
+[debug] [2025-08-21T15:17:06.227Z] <<< [apiv2][status] GET https://compute.googleapis.com/compute/v1/projects/494111208967 200
+[debug] [2025-08-21T15:17:06.228Z] <<< [apiv2][body] GET https://compute.googleapis.com/compute/v1/projects/494111208967 {"kind":"compute#project","id":"8812870357226261257","creationTimestamp":"2025-08-21T08:06:14.305-07:00","name":"alqabas-80720","commonInstanceMetadata":{"kind":"compute#metadata","fingerprint":"igJtdjM_Dq8="},"quotas":[{"metric":"SNAPSHOTS","limit":1000,"usage":0},{"metric":"NETWORKS","limit":5,"usage":1},{"metric":"FIREWALLS","limit":100,"usage":4},{"metric":"IMAGES","limit":100,"usage":0},{"metric":"STATIC_ADDRESSES","limit":8,"usage":0},{"metric":"ROUTES","limit":200,"usage":0},{"metric":"FORWARDING_RULES","limit":15,"usage":0},{"metric":"TARGET_POOLS","limit":50,"usage":0},{"metric":"HEALTH_CHECKS","limit":75,"usage":0},{"metric":"IN_USE_ADDRESSES","limit":8,"usage":0},{"metric":"TARGET_INSTANCES","limit":50,"usage":0},{"metric":"TARGET_HTTP_PROXIES","limit":10,"usage":0},{"metric":"URL_MAPS","limit":10,"usage":0},{"metric":"BACKEND_SERVICES","limit":50,"usage":0},{"metric":"INSTANCE_TEMPLATES","limit":100,"usage":0},{"metric":"TARGET_VPN_GATEWAYS","limit":5,"usage":0},{"metric":"VPN_TUNNELS","limit":10,"usage":0},{"metric":"BACKEND_BUCKETS","limit":3,"usage":0},{"metric":"ROUTERS","limit":10,"usage":0},{"metric":"TARGET_SSL_PROXIES","limit":10,"usage":0},{"metric":"TARGET_HTTPS_PROXIES","limit":10,"usage":0},{"metric":"SSL_CERTIFICATES","limit":10,"usage":0},{"metric":"SUBNETWORKS","limit":100,"usage":0},{"metric":"TARGET_TCP_PROXIES","limit":10,"usage":0},{"metric":"CPUS_ALL_REGIONS","limit":32,"usage":0},{"metric":"SECURITY_POLICIES","limit":10,"usage":0},{"metric":"SECURITY_POLICY_RULES","limit":100,"usage":0},{"metric":"XPN_SERVICE_PROJECTS","limit":1000,"usage":0},{"metric":"PACKET_MIRRORINGS","limit":20,"usage":0},{"metric":"NETWORK_ENDPOINT_GROUPS","limit":100,"usage":0},{"metric":"INTERCONNECTS","limit":6,"usage":0},{"metric":"SSL_POLICIES","limit":10,"usage":0},{"metric":"GLOBAL_INTERNAL_ADDRESSES","limit":5000,"usage":0},{"metric":"VPN_GATEWAYS","limit":5,"usage":0},{"metric":"MACHINE_IMAGES","limit":100,"usage":0},{"metric":"SECURITY_POLICY_CEVAL_RULES","limit":20,"usage":0},{"metric":"GPUS_ALL_REGIONS","limit":0,"usage":0},{"metric":"EXTERNAL_VPN_GATEWAYS","limit":5,"usage":0},{"metric":"PUBLIC_ADVERTISED_PREFIXES","limit":1,"usage":0},{"metric":"PUBLIC_DELEGATED_PREFIXES","limit":10,"usage":0},{"metric":"STATIC_BYOIP_ADDRESSES","limit":128,"usage":0},{"metric":"NETWORK_FIREWALL_POLICIES","limit":10,"usage":0},{"metric":"INTERNAL_TRAFFIC_DIRECTOR_FORWARDING_RULES","limit":15,"usage":0},{"metric":"GLOBAL_EXTERNAL_MANAGED_FORWARDING_RULES","limit":15,"usage":0},{"metric":"GLOBAL_INTERNAL_MANAGED_BACKEND_SERVICES","limit":50,"usage":0},{"metric":"GLOBAL_EXTERNAL_MANAGED_BACKEND_SERVICES","limit":50,"usage":0},{"metric":"GLOBAL_EXTERNAL_PROXY_LB_BACKEND_SERVICES","limit":50,"usage":0},{"metric":"GLOBAL_INTERNAL_TRAFFIC_DIRECTOR_BACKEND_SERVICES","limit":250,"usage":0}],"selfLink":"https://www.googleapis.com/compute/v1/projects/alqabas-80720","defaultServiceAccount":"494111208967-compute@developer.gserviceaccount.com","xpnProjectStatus":"UNSPECIFIED_XPN_PROJECT_STATUS","defaultNetworkTier":"PREMIUM","vmDnsSetting":"ZONAL_ONLY","cloudArmorTier":"CA_STANDARD"}
+[debug] [2025-08-21T15:17:06.229Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:06.229Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:06.229Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/494111208967:getIamPolicy [none]
+[debug] [2025-08-21T15:17:08.230Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/494111208967:getIamPolicy 200
+[debug] [2025-08-21T15:17:08.230Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/494111208967:getIamPolicy {"version":1,"etag":"BwY84W4nwl0=","bindings":[{"role":"roles/cloudbuild.builds.builder","members":["serviceAccount:494111208967@cloudbuild.gserviceaccount.com"]},{"role":"roles/cloudbuild.serviceAgent","members":["serviceAccount:service-494111208967@gcp-sa-cloudbuild.iam.gserviceaccount.com"]},{"role":"roles/cloudfunctions.admin","members":["serviceAccount:494111208967-compute@developer.gserviceaccount.com","serviceAccount:alqabas-80720@appspot.gserviceaccount.com"]},{"role":"roles/cloudfunctions.developer","members":["serviceAccount:494111208967-compute@developer.gserviceaccount.com"]},{"role":"roles/cloudfunctions.invoker","members":["serviceAccount:alqabas-80720@appspot.gserviceaccount.com"]},{"role":"roles/cloudfunctions.serviceAgent","members":["serviceAccount:service-494111208967@gcf-admin-robot.iam.gserviceaccount.com"]},{"role":"roles/compute.serviceAgent","members":["serviceAccount:service-494111208967@compute-system.iam.gserviceaccount.com"]},{"role":"roles/containerregistry.ServiceAgent","members":["serviceAccount:service-494111208967@containerregistry.iam.gserviceaccount.com"]},{"role":"roles/editor","members":["serviceAccount:494111208967-compute@developer.gserviceaccount.com","serviceAccount:494111208967@cloudservices.gserviceaccount.com","serviceAccount:alqabas-80720@appspot.gserviceaccount.com"]},{"role":"roles/eventarc.eventReceiver","members":["serviceAccount:494111208967-compute@developer.gserviceaccount.com"]},{"role":"roles/firebase.managementServiceAgent","members":["serviceAccount:service-494111208967@gcp-sa-firebase.iam.gserviceaccount.com"]},{"role":"roles/firebase.sdkAdminServiceAgent","members":["serviceAccount:firebase-adminsdk-fbsvc@alqabas-80720.iam.gserviceaccount.com"]},{"role":"roles/firebaseauth.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@alqabas-80720.iam.gserviceaccount.com"]},{"role":"roles/firebasedatabase.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@alqabas-80720.iam.gserviceaccount.com"]},{"role":"roles/firebasemods.serviceAgent","members":["serviceAccount:service-494111208967@gcp-sa-firebasemods.iam.gserviceaccount.com"]},{"role":"roles/firebaserules.system","members":["serviceAccount:service-494111208967@firebase-rules.iam.gserviceaccount.com"]},{"role":"roles/firebasestorage.serviceAgent","members":["serviceAccount:service-494111208967@gcp-sa-firebasestorage.iam.gserviceaccount.com"]},{"role":"roles/firestore.serviceAgent","members":["serviceAccount:service-494111208967@gcp-sa-firestore.iam.gserviceaccount.com"]},{"role":"roles/iam.serviceAccountTokenCreator","members":["serviceAccount:firebase-adminsdk-fbsvc@alqabas-80720.iam.gserviceaccount.com","serviceAccount:service-494111208967@gcp-sa-pubsub.iam.gserviceaccount.com"]},{"role":"roles/iam.serviceAccountUser","members":["serviceAccount:494111208967-compute@developer.gserviceaccount.com","serviceAccount:alqabas-80720@appspot.gserviceaccount.com"]},{"role":"roles/owner","members":["user:alqabastechnology@gmail.com"]},{"role":"roles/run.invoker","members":["serviceAccount:494111208967-compute@developer.gserviceaccount.com"]},{"role":"roles/run.serviceAgent","members":["serviceAccount:service-494111208967@serverless-robot-prod.iam.gserviceaccount.com"]},{"role":"roles/storage.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@alqabas-80720.iam.gserviceaccount.com"]}]}
+[debug] [2025-08-21T15:17:08.232Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:08.232Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:08.232Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720 [none]
+[debug] [2025-08-21T15:17:08.702Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720 200
+[debug] [2025-08-21T15:17:08.702Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/alqabas-80720 {"projectNumber":"494111208967","projectId":"alqabas-80720","lifecycleState":"ACTIVE","name":"ALqabas","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-08-15T21:41:34.106095Z"}
+[debug] [2025-08-21T15:17:08.704Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:08.704Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:08.704Z] >>> [apiv2][query] GET https://cloudbilling.googleapis.com/v1/projects/alqabas-80720/billingInfo [none]
+[debug] [2025-08-21T15:17:09.837Z] <<< [apiv2][status] GET https://cloudbilling.googleapis.com/v1/projects/alqabas-80720/billingInfo 200
+[debug] [2025-08-21T15:17:09.837Z] <<< [apiv2][body] GET https://cloudbilling.googleapis.com/v1/projects/alqabas-80720/billingInfo {"name":"projects/alqabas-80720/billingInfo","projectId":"alqabas-80720","billingAccountName":"billingAccounts/014544-366765-375AC0","billingEnabled":true}
+[debug] [2025-08-21T15:17:09.838Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:09.838Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:09.838Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions:generateUploadUrl [none]
+[debug] [2025-08-21T15:17:11.373Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions:generateUploadUrl 200
+[debug] [2025-08-21T15:17:11.373Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions:generateUploadUrl {"uploadUrl":"https://storage.googleapis.com/gcf-v2-uploads-494111208967.us-central1.cloudfunctions.appspot.com/d20770a3-d2b5-4cb8-8b91-09a33a6b7540.zip?GoogleAccessId=service-494111208967@gcf-admin-robot.iam.gserviceaccount.com&Expires=1755791231&Signature=H%2B07cnEkv67oR6kagOkN5dcN%2BT5siQ3Ch4LwB0B884ZmAELxRdfLN3ndx3pjgU94cQIiYti8MXyzEmt9mf2DAxWO5Pcj%2B1myxqmq1J%2FkCFlgbG5DKKBkb4Y7fUJ3ATq31euKHvzsnCFdENd2ElVjidhilH5usS7B3Siq2mdNuva8mgOwvo%2FdbkS2TXIN9JvmiK1aMqvolYieO8y5meaHxxOndgLKENpaWF%2FrkSoctjJUgrNaUNAu1zgMfGT78PTNmx%2F5cpBOLrhgPD35ItTylVdDY6dDYuZ2jkrjJu2GT51GPbaAS4V2cZPejPJGJ5lPkNvwlDe7%2BCJ3OSL05S4gyw%3D%3D","storageSource":{"bucket":"gcf-v2-uploads-494111208967.us-central1.cloudfunctions.appspot.com","object":"d20770a3-d2b5-4cb8-8b91-09a33a6b7540.zip"}}
+[debug] [2025-08-21T15:17:11.374Z] >>> [apiv2][query] PUT https://storage.googleapis.com/gcf-v2-uploads-494111208967.us-central1.cloudfunctions.appspot.com/d20770a3-d2b5-4cb8-8b91-09a33a6b7540.zip GoogleAccessId=service-494111208967%40gcf-admin-robot.iam.gserviceaccount.com&Expires=1755791231&Signature=H%2B07cnEkv67oR6kagOkN5dcN%2BT5siQ3Ch4LwB0B884ZmAELxRdfLN3ndx3pjgU94cQIiYti8MXyzEmt9mf2DAxWO5Pcj%2B1myxqmq1J%2FkCFlgbG5DKKBkb4Y7fUJ3ATq31euKHvzsnCFdENd2ElVjidhilH5usS7B3Siq2mdNuva8mgOwvo%2FdbkS2TXIN9JvmiK1aMqvolYieO8y5meaHxxOndgLKENpaWF%2FrkSoctjJUgrNaUNAu1zgMfGT78PTNmx%2F5cpBOLrhgPD35ItTylVdDY6dDYuZ2jkrjJu2GT51GPbaAS4V2cZPejPJGJ5lPkNvwlDe7%2BCJ3OSL05S4gyw%3D%3D
+[debug] [2025-08-21T15:17:11.375Z] >>> [apiv2][body] PUT https://storage.googleapis.com/gcf-v2-uploads-494111208967.us-central1.cloudfunctions.appspot.com/d20770a3-d2b5-4cb8-8b91-09a33a6b7540.zip [stream]
+[debug] [2025-08-21T15:17:13.234Z] <<< [apiv2][status] PUT https://storage.googleapis.com/gcf-v2-uploads-494111208967.us-central1.cloudfunctions.appspot.com/d20770a3-d2b5-4cb8-8b91-09a33a6b7540.zip 200
+[debug] [2025-08-21T15:17:13.234Z] <<< [apiv2][body] PUT https://storage.googleapis.com/gcf-v2-uploads-494111208967.us-central1.cloudfunctions.appspot.com/d20770a3-d2b5-4cb8-8b91-09a33a6b7540.zip [omitted]
+[info] +  functions: functions folder uploaded successfully 
+[info] i  functions: creating Node.js 22 (2nd Gen) function sendNewRequestNotificationOnCreate(us-central1)... 
+[info] i  functions: creating Node.js 22 (2nd Gen) function serviceRequestUpdateManager(us-central1)... 
+[info] i  functions: creating Node.js 22 (2nd Gen) function sendAnnouncementNotification(us-central1)... 
+[debug] [2025-08-21T15:17:13.238Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:13.238Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:13.238Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions functionId=sendNewRequestNotificationOnCreate
+[debug] [2025-08-21T15:17:13.238Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions {"name":"projects/alqabas-80720/locations/us-central1/functions/sendNewRequestNotificationOnCreate","buildConfig":{"runtime":"nodejs22","entryPoint":"sendNewRequestNotificationOnCreate","source":{"storageSource":{"bucket":"gcf-v2-uploads-494111208967.us-central1.cloudfunctions.appspot.com","object":"d20770a3-d2b5-4cb8-8b91-09a33a6b7540.zip"}},"environmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""}},"serviceConfig":{"environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"alqabas-80720\",\"databaseURL\":\"https://alqabas-80720-default-rtdb.europe-west1.firebasedatabase.app\",\"storageBucket\":\"alqabas-80720.firebasestorage.app\"}","GCLOUD_PROJECT":"alqabas-80720","EVENTARC_CLOUD_EVENT_SOURCE":"projects/alqabas-80720/locations/us-central1/services/sendNewRequestNotificationOnCreate","FUNCTION_SIGNATURE_TYPE":"cloudevent","FUNCTION_TARGET":"sendNewRequestNotificationOnCreate","LOG_EXECUTION_ID":"true"},"ingressSettings":null,"timeoutSeconds":null,"serviceAccountEmail":null,"availableMemory":"256Mi","minInstanceCount":null,"maxInstanceCount":null,"maxInstanceRequestConcurrency":80,"availableCpu":"1","vpcConnector":null,"vpcConnectorEgressSettings":null},"labels":{"deployment-tool":"cli-firebase","firebase-functions-hash":"6022a0b10b154aa0bcb605983a1010996f44050d"},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.created","retryPolicy":"RETRY_POLICY_DO_NOT_RETRY","eventFilters":[{"attribute":"database","value":"(default)"},{"attribute":"namespace","value":"(default)"},{"attribute":"document","value":"serviceRequests/{requestId}","operator":"match-path-pattern"}],"triggerRegion":"me-central2"}}
+[debug] [2025-08-21T15:17:15.524Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions 403
+[debug] [2025-08-21T15:17:15.524Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions {"error":{"code":403,"message":"Validation failed for trigger projects/alqabas-80720/locations/me-central2/triggers/sendnewrequestnotificationoncreate-070767: Permission denied on 'locations/me-central2' (or it may not exist).","status":"PERMISSION_DENIED"}}
+[warn] !  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions?functionId=sendNewRequestNotificationOnCreate had HTTP Error: 403, Validation failed for trigger projects/alqabas-80720/locations/me-central2/triggers/sendnewrequestnotificationoncreate-070767: Permission denied on 'locations/me-central2' (or it may not exist). 
+[warn] !  functions:  failed to create function projects/alqabas-80720/locations/us-central1/functions/sendNewRequestNotificationOnCreate 
+[error] Failed to create function projects/alqabas-80720/locations/us-central1/functions/sendNewRequestNotificationOnCreate
+[debug] [2025-08-21T15:17:15.527Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:15.528Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:15.528Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:15.528Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:15.528Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions functionId=serviceRequestUpdateManager
+[debug] [2025-08-21T15:17:15.528Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions {"name":"projects/alqabas-80720/locations/us-central1/functions/serviceRequestUpdateManager","buildConfig":{"runtime":"nodejs22","entryPoint":"serviceRequestUpdateManager","source":{"storageSource":{"bucket":"gcf-v2-uploads-494111208967.us-central1.cloudfunctions.appspot.com","object":"d20770a3-d2b5-4cb8-8b91-09a33a6b7540.zip"}},"environmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""}},"serviceConfig":{"environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"alqabas-80720\",\"databaseURL\":\"https://alqabas-80720-default-rtdb.europe-west1.firebasedatabase.app\",\"storageBucket\":\"alqabas-80720.firebasestorage.app\"}","GCLOUD_PROJECT":"alqabas-80720","EVENTARC_CLOUD_EVENT_SOURCE":"projects/alqabas-80720/locations/us-central1/services/serviceRequestUpdateManager","FUNCTION_SIGNATURE_TYPE":"cloudevent","FUNCTION_TARGET":"serviceRequestUpdateManager","LOG_EXECUTION_ID":"true"},"ingressSettings":null,"timeoutSeconds":null,"serviceAccountEmail":null,"availableMemory":"256Mi","minInstanceCount":null,"maxInstanceCount":null,"maxInstanceRequestConcurrency":80,"availableCpu":"1","vpcConnector":null,"vpcConnectorEgressSettings":null},"labels":{"deployment-tool":"cli-firebase","firebase-functions-hash":"6022a0b10b154aa0bcb605983a1010996f44050d"},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.updated","retryPolicy":"RETRY_POLICY_DO_NOT_RETRY","eventFilters":[{"attribute":"database","value":"(default)"},{"attribute":"namespace","value":"(default)"},{"attribute":"document","value":"serviceRequests/{requestId}","operator":"match-path-pattern"}],"triggerRegion":"me-central2"}}
+[debug] [2025-08-21T15:17:15.528Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions functionId=sendAnnouncementNotification
+[debug] [2025-08-21T15:17:15.529Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions {"name":"projects/alqabas-80720/locations/us-central1/functions/sendAnnouncementNotification","buildConfig":{"runtime":"nodejs22","entryPoint":"sendAnnouncementNotification","source":{"storageSource":{"bucket":"gcf-v2-uploads-494111208967.us-central1.cloudfunctions.appspot.com","object":"d20770a3-d2b5-4cb8-8b91-09a33a6b7540.zip"}},"environmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""}},"serviceConfig":{"environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"alqabas-80720\",\"databaseURL\":\"https://alqabas-80720-default-rtdb.europe-west1.firebasedatabase.app\",\"storageBucket\":\"alqabas-80720.firebasestorage.app\"}","GCLOUD_PROJECT":"alqabas-80720","EVENTARC_CLOUD_EVENT_SOURCE":"projects/alqabas-80720/locations/us-central1/services/sendAnnouncementNotification","FUNCTION_SIGNATURE_TYPE":"cloudevent","FUNCTION_TARGET":"sendAnnouncementNotification","LOG_EXECUTION_ID":"true"},"ingressSettings":null,"timeoutSeconds":null,"serviceAccountEmail":null,"availableMemory":"256Mi","minInstanceCount":null,"maxInstanceCount":null,"maxInstanceRequestConcurrency":80,"availableCpu":"1","vpcConnector":null,"vpcConnectorEgressSettings":null},"labels":{"deployment-tool":"cli-firebase","firebase-functions-hash":"6022a0b10b154aa0bcb605983a1010996f44050d"},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.created","retryPolicy":"RETRY_POLICY_DO_NOT_RETRY","eventFilters":[{"attribute":"database","value":"(default)"},{"attribute":"namespace","value":"(default)"},{"attribute":"document","value":"announcements/{announcementId}","operator":"match-path-pattern"}],"triggerRegion":"me-central2"}}
+[debug] [2025-08-21T15:17:17.848Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions 403
+[debug] [2025-08-21T15:17:17.848Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions {"error":{"code":403,"message":"Validation failed for trigger projects/alqabas-80720/locations/me-central2/triggers/servicerequestupdatemanager-503037: Permission denied on 'locations/me-central2' (or it may not exist).","status":"PERMISSION_DENIED"}}
+[warn] !  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions?functionId=serviceRequestUpdateManager had HTTP Error: 403, Validation failed for trigger projects/alqabas-80720/locations/me-central2/triggers/servicerequestupdatemanager-503037: Permission denied on 'locations/me-central2' (or it may not exist). 
+[warn] !  functions:  failed to create function projects/alqabas-80720/locations/us-central1/functions/serviceRequestUpdateManager 
+[error] Failed to create function projects/alqabas-80720/locations/us-central1/functions/serviceRequestUpdateManager
+[debug] [2025-08-21T15:17:18.221Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions 403
+[debug] [2025-08-21T15:17:18.221Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions {"error":{"code":403,"message":"Validation failed for trigger projects/alqabas-80720/locations/me-central2/triggers/sendannouncementnotification-462249: Permission denied on 'locations/me-central2' (or it may not exist).","status":"PERMISSION_DENIED"}}
+[warn] !  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions?functionId=sendAnnouncementNotification had HTTP Error: 403, Validation failed for trigger projects/alqabas-80720/locations/me-central2/triggers/sendannouncementnotification-462249: Permission denied on 'locations/me-central2' (or it may not exist). 
+[warn] !  functions:  failed to create function projects/alqabas-80720/locations/us-central1/functions/sendAnnouncementNotification 
+[error] Failed to create function projects/alqabas-80720/locations/us-central1/functions/sendAnnouncementNotification
+[debug] [2025-08-21T15:17:18.233Z] Total Function Deployment time: 4987
+[debug] [2025-08-21T15:17:18.233Z] 3 Functions Deployed
+[debug] [2025-08-21T15:17:18.233Z] 3 Functions Errored
+[debug] [2025-08-21T15:17:18.233Z] 0 Function Deployments Aborted
+[debug] [2025-08-21T15:17:18.233Z] Average Function Deployment time: 3963.6666666666665
+[info] 
+[info] Functions deploy had errors with the following functions:
+	sendAnnouncementNotification(us-central1)
+	sendNewRequestNotificationOnCreate(us-central1)
+	serviceRequestUpdateManager(us-central1)
+[debug] [2025-08-21T15:17:19.075Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:19.075Z] Checked if tokens are valid: true, expires at: 1755792120160
+[debug] [2025-08-21T15:17:19.075Z] >>> [apiv2][query] GET https://artifactregistry.googleapis.com/v1/projects/alqabas-80720/locations/us-central1/repositories/gcf-artifacts [none]
+[debug] [2025-08-21T15:17:20.713Z] <<< [apiv2][status] GET https://artifactregistry.googleapis.com/v1/projects/alqabas-80720/locations/us-central1/repositories/gcf-artifacts 404
+[debug] [2025-08-21T15:17:20.714Z] <<< [apiv2][body] GET https://artifactregistry.googleapis.com/v1/projects/alqabas-80720/locations/us-central1/repositories/gcf-artifacts {"error":{"code":404,"message":"Requested entity was not found.","status":"NOT_FOUND"}}
+[debug] [2025-08-21T15:17:20.714Z] Failed to check artifact cleanup policy for region us-central1: Request to https://artifactregistry.googleapis.com/v1/projects/alqabas-80720/locations/us-central1/repositories/gcf-artifacts had HTTP Error: 404, Requested entity was not found. {"name":"FirebaseError","children":[],"context":{"body":{"error":{"code":404,"message":"Requested entity was not found.","status":"NOT_FOUND"}},"response":{"statusCode":404}},"exit":1,"message":"Request to https://artifactregistry.googleapis.com/v1/projects/alqabas-80720/locations/us-central1/repositories/gcf-artifacts had HTTP Error: 404, Requested entity was not found.","status":404}
+[debug] [2025-08-21T15:17:20.714Z] Functions deploy failed.
+[debug] [2025-08-21T15:17:20.715Z] {
+  "endpoint": {
+    "id": "sendNewRequestNotificationOnCreate",
+    "project": "alqabas-80720",
+    "region": "us-central1",
+    "entryPoint": "sendNewRequestNotificationOnCreate",
+    "platform": "gcfv2",
+    "runtime": "nodejs22",
+    "eventTrigger": {
+      "eventType": "google.cloud.firestore.document.v1.created",
+      "retry": false,
+      "eventFilters": {
+        "database": "(default)",
+        "namespace": "(default)"
+      },
+      "eventFilterPathPatterns": {
+        "document": "serviceRequests/{requestId}"
+      },
+      "region": "me-central2"
+    },
+    "labels": {
+      "deployment-tool": "cli-firebase"
+    },
+    "serviceAccount": null,
+    "ingressSettings": null,
+    "availableMemoryMb": null,
+    "timeoutSeconds": null,
+    "maxInstances": null,
+    "minInstances": null,
+    "concurrency": 80,
+    "vpc": null,
+    "environmentVariables": {
+      "FIREBASE_CONFIG": "{\"projectId\":\"alqabas-80720\",\"databaseURL\":\"https://alqabas-80720-default-rtdb.europe-west1.firebasedatabase.app\",\"storageBucket\":\"alqabas-80720.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "alqabas-80720",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/alqabas-80720/locations/us-central1/services/sendNewRequestNotificationOnCreate"
+    },
+    "codebase": "default",
+    "cpu": 1,
+    "targetedByOnly": false,
+    "hash": "6022a0b10b154aa0bcb605983a1010996f44050d"
+  },
+  "op": "create",
+  "original": {
+    "name": "FirebaseError",
+    "children": [],
+    "context": {
+      "function": "projects/alqabas-80720/locations/us-central1/functions/sendNewRequestNotificationOnCreate"
+    },
+    "exit": 1,
+    "message": "Failed to create function projects/alqabas-80720/locations/us-central1/functions/sendNewRequestNotificationOnCreate",
+    "original": {
+      "name": "FirebaseError",
+      "children": [],
+      "context": {
+        "body": {
+          "error": {
+            "code": 403,
+            "message": "Validation failed for trigger projects/alqabas-80720/locations/me-central2/triggers/sendnewrequestnotificationoncreate-070767: Permission denied on 'locations/me-central2' (or it may not exist).",
+            "status": "PERMISSION_DENIED"
+          }
+        },
+        "response": {
+          "statusCode": 403
+        }
+      },
+      "exit": 1,
+      "message": "Request to https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions?functionId=sendNewRequestNotificationOnCreate had HTTP Error: 403, Validation failed for trigger projects/alqabas-80720/locations/me-central2/triggers/sendnewrequestnotificationoncreate-070767: Permission denied on 'locations/me-central2' (or it may not exist).",
+      "status": 403
+    },
+    "status": 403,
+    "code": 403
+  }
+}
+[debug] [2025-08-21T15:17:20.715Z] {
+  "endpoint": {
+    "id": "serviceRequestUpdateManager",
+    "project": "alqabas-80720",
+    "region": "us-central1",
+    "entryPoint": "serviceRequestUpdateManager",
+    "platform": "gcfv2",
+    "runtime": "nodejs22",
+    "eventTrigger": {
+      "eventType": "google.cloud.firestore.document.v1.updated",
+      "retry": false,
+      "eventFilters": {
+        "database": "(default)",
+        "namespace": "(default)"
+      },
+      "eventFilterPathPatterns": {
+        "document": "serviceRequests/{requestId}"
+      },
+      "region": "me-central2"
+    },
+    "labels": {
+      "deployment-tool": "cli-firebase"
+    },
+    "serviceAccount": null,
+    "ingressSettings": null,
+    "availableMemoryMb": null,
+    "timeoutSeconds": null,
+    "maxInstances": null,
+    "minInstances": null,
+    "concurrency": 80,
+    "vpc": null,
+    "environmentVariables": {
+      "FIREBASE_CONFIG": "{\"projectId\":\"alqabas-80720\",\"databaseURL\":\"https://alqabas-80720-default-rtdb.europe-west1.firebasedatabase.app\",\"storageBucket\":\"alqabas-80720.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "alqabas-80720",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/alqabas-80720/locations/us-central1/services/serviceRequestUpdateManager"
+    },
+    "codebase": "default",
+    "cpu": 1,
+    "targetedByOnly": false,
+    "hash": "6022a0b10b154aa0bcb605983a1010996f44050d"
+  },
+  "op": "create",
+  "original": {
+    "name": "FirebaseError",
+    "children": [],
+    "context": {
+      "function": "projects/alqabas-80720/locations/us-central1/functions/serviceRequestUpdateManager"
+    },
+    "exit": 1,
+    "message": "Failed to create function projects/alqabas-80720/locations/us-central1/functions/serviceRequestUpdateManager",
+    "original": {
+      "name": "FirebaseError",
+      "children": [],
+      "context": {
+        "body": {
+          "error": {
+            "code": 403,
+            "message": "Validation failed for trigger projects/alqabas-80720/locations/me-central2/triggers/servicerequestupdatemanager-503037: Permission denied on 'locations/me-central2' (or it may not exist).",
+            "status": "PERMISSION_DENIED"
+          }
+        },
+        "response": {
+          "statusCode": 403
+        }
+      },
+      "exit": 1,
+      "message": "Request to https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions?functionId=serviceRequestUpdateManager had HTTP Error: 403, Validation failed for trigger projects/alqabas-80720/locations/me-central2/triggers/servicerequestupdatemanager-503037: Permission denied on 'locations/me-central2' (or it may not exist).",
+      "status": 403
+    },
+    "status": 403,
+    "code": 403
+  }
+}
+[debug] [2025-08-21T15:17:20.715Z] {
+  "endpoint": {
+    "id": "sendAnnouncementNotification",
+    "project": "alqabas-80720",
+    "region": "us-central1",
+    "entryPoint": "sendAnnouncementNotification",
+    "platform": "gcfv2",
+    "runtime": "nodejs22",
+    "eventTrigger": {
+      "eventType": "google.cloud.firestore.document.v1.created",
+      "retry": false,
+      "eventFilters": {
+        "database": "(default)",
+        "namespace": "(default)"
+      },
+      "eventFilterPathPatterns": {
+        "document": "announcements/{announcementId}"
+      },
+      "region": "me-central2"
+    },
+    "labels": {
+      "deployment-tool": "cli-firebase"
+    },
+    "serviceAccount": null,
+    "ingressSettings": null,
+    "availableMemoryMb": null,
+    "timeoutSeconds": null,
+    "maxInstances": null,
+    "minInstances": null,
+    "concurrency": 80,
+    "vpc": null,
+    "environmentVariables": {
+      "FIREBASE_CONFIG": "{\"projectId\":\"alqabas-80720\",\"databaseURL\":\"https://alqabas-80720-default-rtdb.europe-west1.firebasedatabase.app\",\"storageBucket\":\"alqabas-80720.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "alqabas-80720",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/alqabas-80720/locations/us-central1/services/sendAnnouncementNotification"
+    },
+    "codebase": "default",
+    "cpu": 1,
+    "targetedByOnly": false,
+    "hash": "6022a0b10b154aa0bcb605983a1010996f44050d"
+  },
+  "op": "create",
+  "original": {
+    "name": "FirebaseError",
+    "children": [],
+    "context": {
+      "function": "projects/alqabas-80720/locations/us-central1/functions/sendAnnouncementNotification"
+    },
+    "exit": 1,
+    "message": "Failed to create function projects/alqabas-80720/locations/us-central1/functions/sendAnnouncementNotification",
+    "original": {
+      "name": "FirebaseError",
+      "children": [],
+      "context": {
+        "body": {
+          "error": {
+            "code": 403,
+            "message": "Validation failed for trigger projects/alqabas-80720/locations/me-central2/triggers/sendannouncementnotification-462249: Permission denied on 'locations/me-central2' (or it may not exist).",
+            "status": "PERMISSION_DENIED"
+          }
+        },
+        "response": {
+          "statusCode": 403
+        }
+      },
+      "exit": 1,
+      "message": "Request to https://cloudfunctions.googleapis.com/v2/projects/alqabas-80720/locations/us-central1/functions?functionId=sendAnnouncementNotification had HTTP Error: 403, Validation failed for trigger projects/alqabas-80720/locations/me-central2/triggers/sendannouncementnotification-462249: Permission denied on 'locations/me-central2' (or it may not exist).",
+      "status": 403
+    },
+    "status": 403,
+    "code": 403
+  }
+}
+[error] Error: There was an error deploying functions:
+[error] - Error Failed to create function sendNewRequestNotificationOnCreate in region us-central1
+[error] - Error Failed to create function serviceRequestUpdateManager in region us-central1
+[error] - Error Failed to create function sendAnnouncementNotification in region us-central1
