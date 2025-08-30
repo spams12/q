@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useScrollToTop } from '@react-navigation/native';
 import { liteClient as algoliasearch } from 'algoliasearch/lite';
 import { router } from 'expo-router';
-import { collection, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
+import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import React, {
   useCallback,
   useEffect,
@@ -230,13 +230,13 @@ const SearchHeader = ({
 
 // --- (AlgoliaHitAdapter component remains the same) ---
 const AlgoliaHitAdapter = ({ hit, users }: { hit: any, users: User[] }) => {
-  const getTimestampFromMilliseconds = (ms: number | undefined): Timestamp | undefined => {
+  const getTimestampFromMilliseconds = (ms: number | undefined): FirebaseFirestoreTypes.Timestamp | undefined => {
     if (typeof ms !== 'number') {
       return undefined;
     }
     const seconds = Math.floor(ms / 1000);
     const nanoseconds = (ms % 1000) * 1000000;
-    return new Timestamp(seconds, nanoseconds);
+    return new firestore.Timestamp(seconds, nanoseconds);
   };
 
   const transformedItem: ServiceRequest = {
@@ -306,17 +306,15 @@ const HybridList = ({ sortOrder, setSortOrder, onOpenFilters, users }: HybridLis
     }
 
     setIsFirebaseLoading(true);
-    const baseQuery = collection(db, 'serviceRequests');
-    const queryConstraints = [];
+    let query: FirebaseFirestoreTypes.Query = db.collection('serviceRequests');
 
     // Always filter by creatorId for the Firebase real-time listener
     if (realuserUid) {
-      queryConstraints.push(where('creatorId', '==', realuserUid));
+      query = query.where('creatorId', '==', realuserUid);
     }
-    queryConstraints.push(orderBy('createdAt', sortOrder));
-    const finalQuery = query(baseQuery, ...queryConstraints);
+    query = query.orderBy('createdAt', sortOrder);
 
-    const unsubscribe = onSnapshot(finalQuery, (querySnapshot) => {
+    const unsubscribe = query.onSnapshot((querySnapshot) => {
       const requestsData = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
@@ -435,8 +433,8 @@ export default function App() {
 
 
   useEffect(() => {
-    const usersRef = collection(db, 'users');
-    const unsubscribe = onSnapshot(usersRef, (snapshot) => {
+    const usersRef = db.collection('users');
+    const unsubscribe = usersRef.onSnapshot((snapshot) => {
       const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
       setUsers(usersData);
       setIsUsersLoading(false);
@@ -448,8 +446,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const teamsRef = collection(db, 'teams');
-    const unsubscribe = onSnapshot(teamsRef, (snapshot) => {
+    const teamsRef = db.collection('teams');
+    const unsubscribe = teamsRef.onSnapshot((snapshot) => {
       const teamsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team));
       setTeams(teamsData);
       setIsTeamsLoading(false);

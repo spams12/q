@@ -1,41 +1,34 @@
-// src/firebaseConfig.ts
+import auth from '@react-native-firebase/auth';
+import database from '@react-native-firebase/database';
+import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
+import { CommentAttachment } from './types';
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { initializeApp } from "firebase/app";
-import { getReactNativePersistence, initializeAuth } from "firebase/auth";
-import { getDatabase } from "firebase/database"; // <-- Import for RTDB
-import { getFirestore } from "firebase/firestore";
-import { getDownloadURL, getStorage, ref, uploadBytes } from "firebase/storage";
-import { CommentAttachment } from "./types";
+const db = firestore();
+const rtdb = database();
+const firebaseStorage = storage();
 
-const app = initializeApp(firebaseConfig);
-
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage),
-});
-
-const db = getFirestore(app); // This is your Firestore instance
-const rtdb = getDatabase(app); // <-- Initialize and get your Realtime Database instance
-const storage = getStorage(app);
-
-// This function remains unchanged
 export const uploadCommentAttachment = async (
-  file: File,
+  filePath: string,
   ticketId: string
 ): Promise<CommentAttachment> => {
-  const storageRef = ref(
-    storage,
-    `serviceRequests/${ticketId}/comments/${file.name}`
+  const fileName = filePath.split('/').pop() || 'unknown';
+  const storageRef = firebaseStorage.ref(
+    `serviceRequests/${ticketId}/comments/${fileName}`
   );
-  await uploadBytes(storageRef, file);
-  const downloadURL = await getDownloadURL(storageRef);
+  await storageRef.putFile(filePath);
+  const downloadURL = await storageRef.getDownloadURL();
+
+  // Note: @react-native-firebase/storage doesn't easily provide file size or type.
+  // This will need to be handled differently, perhaps by passing them as arguments
+  // or using another library to get file stats before uploading.
+  // For now, we'll return placeholders.
   return {
     downloadURL,
-    fileName: file.name,
-    fileSize: file.size,
-    fileType: file.type,
+    fileName: fileName,
+    fileSize: 0, // Placeholder
+    fileType: 'application/octet-stream', // Placeholder
   };
 };
 
-// Export all the services
-export { auth, db, rtdb, storage };
+export { auth, db, rtdb, firebaseStorage as storage };

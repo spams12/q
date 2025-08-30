@@ -3,7 +3,7 @@
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Timestamp } from 'firebase/firestore';
+import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { Hit } from 'instantsearch.js';
 import { getHighlightedParts, getPropertyByPath } from 'instantsearch.js/es/lib/utils';
 import React, { Fragment, useCallback } from 'react';
@@ -123,9 +123,9 @@ const InfoCard: React.FC<InfoCardProps> = React.memo(({
     });
   };
 
-  const formatTimestamp = useCallback((timestamp: Timestamp | string | undefined) => {
+  const formatTimestamp = useCallback((timestamp: FirebaseFirestoreTypes.Timestamp | string | undefined) => {
     if (!timestamp) return 'N/A';
-    const date = (timestamp as Timestamp)?.toDate ? (timestamp as Timestamp).toDate() : new Date(timestamp as string);
+    const date = (timestamp as FirebaseFirestoreTypes.Timestamp)?.toDate ? (timestamp as FirebaseFirestoreTypes.Timestamp).toDate() : new Date(timestamp as string);
     return date.toLocaleString('en-GB', {
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', hour12: true,

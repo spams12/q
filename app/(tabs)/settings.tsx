@@ -7,9 +7,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
-import { signOut } from 'firebase/auth';
-import { Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, updateDoc, where } from 'firebase/firestore';
-import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
+import auth from '@react-native-firebase/auth';
+import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 import React, { Children, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -205,9 +205,9 @@ const SettingsPage = () => {
   useEffect(() => {
     if (!userdoc?.id) return;
 
-    const userDocRef = doc(db, 'users', userdoc.id);
-    const unsubscribe = onSnapshot(userDocRef, (snapshot) => {
-      if (snapshot.exists()) {
+    const userDocRef = db.collection('users').doc(userdoc.id);
+    const unsubscribe = userDocRef.onSnapshot((snapshot) => {
+      if (snapshot.exists) {
         setUserdoc({ id: snapshot.id, ...snapshot.data() } as User);
       } else {
         console.log('User document does not exist');
@@ -222,9 +222,9 @@ const SettingsPage = () => {
   useEffect(() => {
     if (!realuserUid) return;
 
-    const timeTrackingDocRef = doc(db, 'userTimeTracking', realuserUid);
-    const unsubscribe = onSnapshot(timeTrackingDocRef, (snapshot) => {
-      if (snapshot.exists()) {
+    const timeTrackingDocRef = db.collection('userTimeTracking').doc(realuserUid);
+    const unsubscribe = timeTrackingDocRef.onSnapshot((snapshot) => {
+      if (snapshot.exists) {
         setTimeTrackingData(snapshot.data() as { sessions: any[], totalDurationSeconds: number });
       } else {
         setTimeTrackingData({ sessions: [], totalDurationSeconds: 0 });
@@ -244,8 +244,8 @@ const SettingsPage = () => {
       setInvoiceData({ total: 0, count: 0 });
       return;
     }
-    const q = query(collection(db, 'invoices'), where('createdBy', '==', realuserUid), where('createdAt', '>=', latestClearTimeString));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const q = db.collection('invoices').where('createdBy', '==', realuserUid).where('createdAt', '>=', latestClearTimeString);
+    const unsubscribe = q.onSnapshot((snapshot) => {
       let total = 0;
       snapshot.forEach((doc) => {
         total += doc.data().totalAmount;
@@ -292,21 +292,19 @@ const SettingsPage = () => {
     if (!realuserUid) return;
     setIsRefreshing(true);
     try {
-      const userDocPromise = getDoc(doc(db, 'users', realuserUid));
-      const timeTrackingPromise = getDoc(doc(db, 'userTimeTracking', realuserUid));
-      const invoiceQuery = query(
-        collection(db, 'invoices'),
-        where('createdBy', '==', realuserUid),
-        where('createdAt', '>=', latestClearTimeString)
-      );
-      const invoiceSnapshotPromise = getDocs(invoiceQuery);
+      const userDocPromise = db.collection('users').doc(realuserUid).get();
+      const timeTrackingPromise = db.collection('userTimeTracking').doc(realuserUid).get();
+      const invoiceQuery = db.collection('invoices')
+        .where('createdBy', '==', realuserUid)
+        .where('createdAt', '>=', latestClearTimeString);
+      const invoiceSnapshotPromise = invoiceQuery.get();
 
       const [userDocSnapshot, timeTrackingSnapshot, invoiceSnapshot] = await Promise.all([userDocPromise, timeTrackingPromise, invoiceSnapshotPromise]);
 
-      if (userDocSnapshot.exists()) {
+      if (userDocSnapshot.exists) {
         setUserdoc({ id: userDocSnapshot.id, ...userDocSnapshot.data() } as User);
       }
-      if (timeTrackingSnapshot.exists()) {
+      if (timeTrackingSnapshot.exists) {
         setTimeTrackingData(timeTrackingSnapshot.data() as { sessions: any[], totalDurationSeconds: number });
       }
 
@@ -340,15 +338,12 @@ const SettingsPage = () => {
       if (result.canceled || !userdoc?.id) return;
 
       const imageUri = result.assets[0].uri;
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-      const storage = getStorage();
-      const storageRef = ref(storage, `profile_pictures/${userdoc.id}`);
-      await uploadBytes(storageRef, blob);
-      const downloadURL = await getDownloadURL(storageRef);
+      const storageRef = storage().ref(`profile_pictures/${userdoc.id}`);
+      await storageRef.putFile(imageUri);
+      const downloadURL = await storageRef.getDownloadURL();
 
-      const userDocRef = doc(db, 'users', userdoc.id);
-      await updateDoc(userDocRef, { photoURL: downloadURL });
+      const userDocRef = db.collection('users').doc(userdoc.id);
+      await userDocRef.update({ photoURL: downloadURL });
       showDialog({ status: 'success', message: 'تم تحديث الصورة الشخصية بنجاح.' });
     } catch (error) {
       console.error('Error uploading image: ', error);
@@ -369,24 +364,24 @@ const SettingsPage = () => {
     setIsLoggingOut(true);
     try {
       if (userdoc) {
-        const userDocRef = doc(db, 'users', userdoc.id);
+        const userDocRef = db.collection('users').doc(userdoc.id);
         const { data: currentToken } = await Notifications.getExpoPushTokenAsync();
 
         if (currentToken) {
-          const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists()) {
+          const userDocSnap = await userDocRef.get();
+          if (userDocSnap.exists) {
             const userData = userDocSnap.data();
             const existingTokens = userData.expoPushTokens?.QTM || [];
             const newTokens = existingTokens.filter((t: string) => t !== currentToken);
             if (newTokens.length < existingTokens.length) {
-              await updateDoc(userDocRef, {
+              await userDocRef.update({
                 'expoPushTokens.QTM': newTokens,
               });
             }
           }
         }
       }
-      await signOut(auth);
+      await auth().signOut();
     } catch (error) {
       console.error("Failed to log out:", error);
       showDialog({ status: 'error', message: 'فشل تسجيل الخروج. يرجى المحاولة مرة أخرى.' });
@@ -403,8 +398,8 @@ const SettingsPage = () => {
     }
     setIsActionLoading(true);
     try {
-      const userDocRef = doc(db, 'users', userdoc.id);
-      await updateDoc(userDocRef, { phone: newPhone });
+      const userDocRef = db.collection('users').doc(userdoc.id);
+      await userDocRef.update({ phone: newPhone });
       showDialog({ status: 'success', message: 'تم تحديث رقم الهاتف بنجاح.' });
     } catch (error) {
       console.error('Error updating phone number: ', error);
@@ -419,7 +414,7 @@ const SettingsPage = () => {
   const handleToggleClock = useCallback(async () => {
     if (!realuserUid) return;
     setIsActionLoading(true);
-    const timeTrackingDocRef = doc(db, 'userTimeTracking', realuserUid);
+    const timeTrackingDocRef = db.collection('userTimeTracking').doc(realuserUid);
 
     try {
       const currentSessions = [...(timeTrackingData.sessions || [])];
@@ -427,7 +422,7 @@ const SettingsPage = () => {
 
       if (activeSessionIndex !== -1) {
         // CLOCKING OUT
-        currentSessions[activeSessionIndex].logOutTime = Timestamp.now();
+        currentSessions[activeSessionIndex].logOutTime = firestore.Timestamp.now();
 
         const totalSeconds = currentSessions.reduce((acc, session) => {
           if (session.logInTime && session.logOutTime) {
@@ -437,16 +432,16 @@ const SettingsPage = () => {
           return acc;
         }, 0);
 
-        await updateDoc(timeTrackingDocRef, {
+        await timeTrackingDocRef.update({
           sessions: currentSessions,
           totalDurationSeconds: totalSeconds,
         });
       } else {
         // CLOCKING IN
-        const newSession = { logInTime: Timestamp.now(), logOutTime: null };
+        const newSession = { logInTime: firestore.Timestamp.now(), logOutTime: null };
         const updatedSessions = [...currentSessions, newSession];
 
-        await setDoc(timeTrackingDocRef, {
+        await timeTrackingDocRef.set({
           userId: realuserUid,
           sessions: updatedSessions,
           totalDurationSeconds: timeTrackingData.totalDurationSeconds || 0,

@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-// --- MODIFIED: Import signInWithCustomToken and signOut for the new flow ---
-import { signInWithCustomToken, signOut } from 'firebase/auth';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 import React, { memo, useEffect, useState } from 'react';
 import {
   DimensionValue,
@@ -251,14 +250,13 @@ const LoginScreen: React.FC = () => {
         return;
       }
 
-      const userCredential = await signInWithCustomToken(auth, data.token);
+      const userCredential = await auth().signInWithCustomToken(data.token);
 
-      const usersCollectionRef = collection(db, 'users');
-      const q = query(usersCollectionRef, where('uid', '==', userCredential.user.uid));
-      const querySnapshot = await getDocs(q);
+      const usersCollectionRef = firestore().collection('users');
+      const querySnapshot = await usersCollectionRef.where('uid', '==', userCredential.user.uid).get();
 
       if (querySnapshot.empty) {
-        await signOut(auth);
+        await auth().signOut();
         showDialog({ status: 'error', message: 'لم يتم العثور على بيانات المستخدم. يرجى الاتصال بالدعم.' });
         handleBackToCredentials();
         return;
@@ -273,7 +271,7 @@ const LoginScreen: React.FC = () => {
         });
         router.replace('/(tabs)/');
       } else {
-        await signOut(auth); // Log out if role is not allowed
+        await auth().signOut(); // Log out if role is not allowed
         showDialog({ status: 'error', message: 'ليس لديك الصلاحية للوصول إلى هذا التطبيق.' });
         handleBackToCredentials();
       }

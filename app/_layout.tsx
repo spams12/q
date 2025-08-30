@@ -4,12 +4,8 @@ import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { User as FirebaseUser, onAuthStateChanged } from 'firebase/auth';
-import {
-  arrayUnion,
-  doc,
-  updateDoc,
-} from 'firebase/firestore';
+import { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
   AppState,
@@ -182,9 +178,9 @@ async function registerPushToken(userDocId: string) {
     console.log('Expo Push Token:', token);
 
     if (token) {
-      const userDocRef = doc(db, 'users', userDocId);
-      await updateDoc(userDocRef, {
-        "expoPushTokens.QTM": arrayUnion(token),
+      const userDocRef = db.collection('users').doc(userDocId);
+      await userDocRef.update({
+        "expoPushTokens.QTM": firestore.FieldValue.arrayUnion(token),
       });
       console.log(`Token successfully added for user with doc ID ${userDocId}`);
     }
@@ -193,7 +189,7 @@ async function registerPushToken(userDocId: string) {
   }
 }
 
-function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseUser | null; profile: AppUser | null; authLoaded: boolean }) {
+function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseAuthTypes.User | null; profile: AppUser | null; authLoaded: boolean }) {
   useProtectedRoute(user, profile, authLoaded)
   const { theme } = useTheme();
   return (
@@ -248,7 +244,7 @@ function RootLayoutContent() {
     Cairo: require('../assets/fonts/Cairo.ttf'),
   });
 
-  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
   const [isPermissionModalVisible, setIsPermissionModalVisible] = useState(false);
   const { userdoc } = usePermissions();
@@ -275,11 +271,11 @@ function RootLayoutContent() {
 
   useEffect(() => {
     if (error) throw error;
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const subscriber = auth().onAuthStateChanged((currentUser) => {
       setUser(currentUser);
       setAuthLoaded(true);
     });
-    return () => unsubscribe();
+    return subscriber; // unsubscribe on unmount
   }, [error]);
 
   // FIX: This hook now depends on the stable `userdoc?.id` string.
@@ -331,9 +327,9 @@ function RootLayoutContent() {
       const notificationDocId = data?.docId || data?.notificationId;
 
       if (userdoc?.id && notificationDocId) {
-        const notificationRef = doc(db, "users", userdoc.id, "notifications", notificationDocId);
+        const notificationRef = db.collection("users").doc(userdoc.id).collection("notifications").doc(notificationDocId);
         try {
-          await updateDoc(notificationRef, {
+          await notificationRef.update({
             isRead: true,
             readAt: new Date(),
           });

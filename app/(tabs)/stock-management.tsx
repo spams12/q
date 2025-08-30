@@ -1,7 +1,7 @@
 import { UseDialog } from '@/context/DialogContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useScrollToTop } from '@react-navigation/native';
-import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
+import firestore from '@react-native-firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -47,9 +47,9 @@ const StockManagementScreen: React.FC = () => {
     }
     setLoading(true);
 
-    const userDocRef = doc(db, 'users', userUid);
-    const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
-      if (doc.exists()) {
+    const userDocRef = db.collection('users').doc(userUid);
+    const unsubscribeUser = userDocRef.onSnapshot((doc) => {
+      if (doc.exists) {
         const userData = { id: doc.id, ...doc.data() } as User;
         // Sort stock items by name
         const sortedItems = (userData.stockItems || []).sort((a, b) =>
@@ -65,12 +65,9 @@ const StockManagementScreen: React.FC = () => {
       showDialog({ status: "error", message: "فشل في جلب بيانات المستخدم" })
     });
 
-    const transactionsQuery = query(
-      collection(db, 'stockTransactions'),
-      where('userId', '==', userUid),
-    );
+    const transactionsQuery = db.collection('stockTransactions').where('userId', '==', userUid);
 
-    const unsubscribeTransactions = onSnapshot(transactionsQuery, (snapshot) => {
+    const unsubscribeTransactions = transactionsQuery.onSnapshot((snapshot) => {
       const transactionData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StockTransaction));
       // Sort transactions by item name
       transactionData.sort((a, b) => a.itemName.localeCompare(b.itemName, 'ar'));
