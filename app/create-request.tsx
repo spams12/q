@@ -1,6 +1,5 @@
 import CreateServiceRequestForm from '@/components/CreateServiceRequestForm';
 import { db } from '@/lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { User } from '../lib/types';
@@ -10,8 +9,8 @@ export default function CreateServiceRequestScreen() {
   const [users, setUsers] = useState<User[]>([]); 
   useEffect(() => {
     const fetchUsers = async () => {
-      const usersCollection = collection(db, 'users');
-      const usersSnapshot = await getDocs(usersCollection);
+      const usersCollection = db.collection('users');
+      const usersSnapshot = await usersCollection.get();
       const usersList = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
       setUsers(usersList);
     };

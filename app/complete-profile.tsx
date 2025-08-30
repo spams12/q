@@ -8,8 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient'; // ✨ Import LinearGradient
 import { useRouter } from 'expo-router';
-import { doc, updateDoc } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 import { default as React, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -191,15 +191,13 @@ export default function CompleteProfileScreen() {
     try {
       const dataToUpdate: { phone: string; photoURL?: string } = { phone };
       if (displayImage && !displayImage.startsWith('http')) {
-        const response = await fetch(displayImage);
-        const blob = await response.blob();
-        const storageRef = ref(storage, `profile-pictures/${userdoc.id}`);
-        await uploadBytes(storageRef, blob);
-        const newPhotoURL = await getDownloadURL(storageRef);
+        const storageRef = storage().ref(`profile-pictures/${userdoc.id}`);
+        await storageRef.putFile(displayImage);
+        const newPhotoURL = await storageRef.getDownloadURL();
         dataToUpdate.photoURL = newPhotoURL;
       }
-      const userDocRef = doc(db, 'users', userdoc.id);
-      await updateDoc(userDocRef, dataToUpdate);
+      const userDocRef = db.collection('users').doc(userdoc.id);
+      await userDocRef.update(dataToUpdate);
       router.replace('/(tabs)');
     } catch (error) {
       console.error('Error completing profile:', error);

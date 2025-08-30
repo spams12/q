@@ -9,8 +9,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { arrayUnion, collection, doc, getDocs, onSnapshot, runTransaction, Timestamp, updateDoc } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useKeyboardHandler } from 'react-native-keyboard-controller';
@@ -53,7 +53,7 @@ const useKeyboardSpacer = (insets: any) => {
 
 
 const { width } = Dimensions.get('window');
-const formatDateTime = (timestamp: Timestamp | undefined) => { // Added type for timestamp
+const formatDateTime = (timestamp: FirebaseFirestoreTypes.Timestamp | undefined) => { // Added type for timestamp
     if (!timestamp) return 'N/A';
     const date = timestamp.toDate();
     return date.toLocaleString('en-GB', {
@@ -201,17 +201,17 @@ const TicketDetailPage = () => {
         if (!id) return;
 
         const fetchUsers = async () => {
-            const usersCollection = collection(db, 'users');
-            const usersSnapshot = await getDocs(usersCollection);
+            const usersCollection = db.collection('users');
+            const usersSnapshot = await usersCollection.get();
             const usersList = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
             setUsers(usersList);
         };
 
         fetchUsers();
 
-        const docRef = doc(db, 'serviceRequests', id as string);
-        const unsubscribe = onSnapshot(docRef, (doc) => {
-            if (doc.exists()) {
+        const docRef = db.collection('serviceRequests').doc(id as string);
+        const unsubscribe = docRef.onSnapshot((doc) => {
+            if (doc.exists) {
                 const data = { id: doc.id, ...doc.data() } as ServiceRequest;
                 setServiceRequest(data);
 
@@ -284,12 +284,12 @@ const TicketDetailPage = () => {
                 id: `${Date.now()}-${userdoc.id}`,
                 userId: userdoc.id,
                 userName: userdoc.name || 'Unknown',
-                timestamp: Timestamp.now(),
+                timestamp: firestore.Timestamp.now(),
                 ...comment,
             };
-            await updateDoc(doc(db, 'serviceRequests', id as string), {
-                comments: arrayUnion(newCommentData),
-                lastUpdated: Timestamp.now(),
+            await db.collection('serviceRequests').doc(id as string).update({
+                comments: firestore.FieldValue.arrayUnion(newCommentData),
+                lastUpdated: firestore.Timestamp.now(),
             });
         } catch (e) {
             console.error("Failed to add comment: ", e);
@@ -367,7 +367,7 @@ const TicketDetailPage = () => {
                     latitude: location.coords.latitude,
                     longitude: location.coords.longitude,
                 },
-                timestamp: Timestamp.now(),
+                timestamp: firestore.Timestamp.now(),
                 userId: userdoc.id,
                 userName: userdoc.name,
             };
@@ -396,11 +396,9 @@ const TicketDetailPage = () => {
             if (attachmentsToSave.length > 0) {
                 for (const asset of attachmentsToSave) {
                     const attachmentId = `attachment_${timestamp}_${Math.random().toString(36).substring(2, 9)}`;
-                    const response = await fetch(asset.uri);
-                    const blob = await response.blob();
-                    const storageRef = ref(storage, `tickets/${id}/comment-attachments/${attachmentId}_${asset.name}`);
-                    await uploadBytes(storageRef, blob);
-                    const fileUrl = await getDownloadURL(storageRef);
+                    const storageRef = storage().ref(`tickets/${id}/comment-attachments/${attachmentId}_${asset.name}`);
+                    await storageRef.putFile(asset.uri);
+                    const fileUrl = await storageRef.getDownloadURL();
 
                     uploadedAttachments.push({
                         id: attachmentId,
@@ -416,7 +414,7 @@ const TicketDetailPage = () => {
                 id: `comment_${timestamp}`,
                 content: commentToSave.trim(),
                 attachments: uploadedAttachments,
-                timestamp: Timestamp.now(),
+                timestamp: firestore.Timestamp.now(),
                 userId: userdoc.id,
                 userName: userdoc.name,
             };
@@ -442,11 +440,11 @@ const TicketDetailPage = () => {
         setSubscriberIndexBeingProcessed(subscriberIndex);
 
         try {
-            await runTransaction(db, async (transaction) => {
-                const requestRef = doc(db, "serviceRequests", id as string);
+            await db.runTransaction(async (transaction) => {
+                const requestRef = db.collection("serviceRequests").doc(id as string);
                 const serviceRequestDoc = await transaction.get(requestRef);
 
-                if (!serviceRequestDoc.exists()) {
+                if (!serviceRequestDoc.exists) {
                     throw new Error("لم يتم العثور على طلب الخدمة.");
                 }
 
@@ -490,7 +488,7 @@ const TicketDetailPage = () => {
                     notes: "فاتورة اشتراك",
                 };
 
-                const invoiceRef = doc(db, "invoices", newInvoice.id);
+                const invoiceRef = db.collection("invoices").doc(newInvoice.id);
                 transaction.set(invoiceRef, newInvoice);
 
                 const updatedSubscribers = subscribers?.map((sub, index) =>
@@ -498,7 +496,7 @@ const TicketDetailPage = () => {
                 ) || [];
 
                 transaction.update(requestRef, {
-                    invoiceIds: arrayUnion(newInvoice.id),
+                    invoiceIds: firestore.FieldValue.arrayUnion(newInvoice.id),
                     subscribers: updatedSubscribers,
                     lastUpdated: new Date().toISOString(),
                 });

@@ -4,7 +4,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { db } from '@/lib/firebase';
 import { User } from '@/lib/types';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import firestore from '@react-native-firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Platform, SectionList, StyleSheet, TouchableOpacity, View } from 'react-native';
 
@@ -84,18 +84,18 @@ export default function FamilyScreen() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const hierarchyDocRef = doc(db, 'settings', 'roleHierarchy');
-        const hierarchyDoc = await getDoc(hierarchyDocRef);
+        const hierarchyDocRef = db.collection('settings').doc('roleHierarchy');
+        const hierarchyDoc = await hierarchyDocRef.get();
         let roleHierarchyMap: { [key: string]: number } = {};
-        if (hierarchyDoc.exists()) {
+        if (hierarchyDoc.exists) {
           const data = hierarchyDoc.data();
           if (data && data.hierarchy) {
             roleHierarchyMap = data.hierarchy;
           }
         }
 
-        const usersCollection = collection(db, 'users');
-        const usersSnapshot = await getDocs(usersCollection);
+        const usersCollection = db.collection('users');
+        const usersSnapshot = await usersCollection.get();
         const usersList = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
 
         const groups: { [key: string]: User[] } = usersList.reduce((acc, user) => {

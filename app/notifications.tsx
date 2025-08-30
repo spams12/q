@@ -8,17 +8,7 @@ import { Video } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import { shareAsync } from 'expo-sharing';
-import {
-  collection,
-  doc,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query,
-  updateDoc,
-  where,
-  writeBatch
-} from 'firebase/firestore';
+import firestore from '@react-native-firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -216,10 +206,10 @@ export default function NotificationsScreen() {
     }
 
     setLoading(true);
-    const notificationsRef = collection(db, "users", userdoc.id, "notifications");
-    const q = query(notificationsRef, orderBy('createdAt', 'desc'));
+    const notificationsRef = db.collection("users").doc(userdoc.id).collection("notifications");
+    const q = notificationsRef.orderBy('createdAt', 'desc');
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = q.onSnapshot((snapshot) => {
       const fetchedNotifications: Notification[] = snapshot.docs.map(doc => {
         const data = doc.data();
         const timestamp = data.createdAt?.toDate?.().toISOString() || new Date().toISOString();
@@ -271,9 +261,9 @@ export default function NotificationsScreen() {
 
   const handleNotificationPress = useCallback(async (item: Notification) => {
     if (!item.isRead && userdoc?.id) {
-      const notificationRef = doc(db, "users", userdoc.id, "notifications", item.docId);
+      const notificationRef = db.collection("users").doc(userdoc.id).collection("notifications").doc(item.docId);
       try {
-        await updateDoc(notificationRef, {
+        await notificationRef.update({
           isRead: true,
           readAt: new Date(),
         });
@@ -309,10 +299,10 @@ export default function NotificationsScreen() {
           onPress: async () => {
             setIsDeleting(true);
             try {
-              const notificationsRef = collection(db, "users", userdoc.id, "notifications");
-              const q = query(notificationsRef, where('isRead', '==', true));
+              const notificationsRef = db.collection("users").doc(userdoc.id).collection("notifications");
+              const q = notificationsRef.where('isRead', '==', true);
 
-              const querySnapshot = await getDocs(q);
+              const querySnapshot = await q.get();
 
               if (querySnapshot.empty) {
                 Alert.alert('لا يوجد شيء للحذف', 'لم يتم العثور على إشعارات مقروءة للحذف.');
@@ -320,7 +310,7 @@ export default function NotificationsScreen() {
                 return;
               }
 
-              const batch = writeBatch(db);
+              const batch = db.batch();
               querySnapshot.forEach((doc) => {
                 batch.delete(doc.ref);
               });
@@ -355,17 +345,17 @@ export default function NotificationsScreen() {
           onPress: async () => {
             setIsMarkingAsRead(true);
             try {
-              const notificationsRef = collection(db, "users", userdoc.id, "notifications");
-              const q = query(notificationsRef, where('isRead', '==', false));
+              const notificationsRef = db.collection("users").doc(userdoc.id).collection("notifications");
+              const q = notificationsRef.where('isRead', '==', false);
 
-              const querySnapshot = await getDocs(q);
+              const querySnapshot = await q.get();
 
               if (querySnapshot.empty) {
                 setIsMarkingAsRead(false);
                 return;
               }
 
-              const batch = writeBatch(db);
+              const batch = db.batch();
               querySnapshot.forEach((doc) => {
                 batch.update(doc.ref, { isRead: true, readAt: new Date() });
               });

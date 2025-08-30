@@ -3,7 +3,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { db } from '@/lib/firebase';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { collection, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
+import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -27,8 +27,8 @@ export interface Invoice {
   id: string;
   linkedServiceRequestId: string;
   createdBy: string;
-  createdAt: Timestamp;
-  lastUpdated: Timestamp;
+  createdAt: FirebaseFirestoreTypes.Timestamp;
+  lastUpdated: FirebaseFirestoreTypes.Timestamp;
   items: InvoiceItem[];
   totalAmount: number;
   status: 'draft' | 'submitted' | 'approved' | 'paid';
@@ -39,7 +39,7 @@ export interface Invoice {
   customerEmail?: string;
   type: string;
   statusLastChangedBy?: string;
-  statusLastChangedAt?: Timestamp;
+  statusLastChangedAt?: FirebaseFirestoreTypes.Timestamp;
   teamId: string | null;
   teamCreatorId: string | null;
   isSubscriptionInvoice?: boolean;
@@ -48,8 +48,8 @@ export interface Invoice {
 }
 
 // Helper to format date for display
-const formatDate = (date: Timestamp | Date | string) => {
-  const d = date instanceof Timestamp ? date.toDate() : new Date(date);
+const formatDate = (date: FirebaseFirestoreTypes.Timestamp | Date | string) => {
+  const d = date instanceof firestore.Timestamp ? date.toDate() : new Date(date);
   return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
 };
 
@@ -96,11 +96,9 @@ const InvoicesScreen = () => {
     setInvoicesLoading(true);
     setError(null); // Reset error on new fetch
 
-    let invoicesQuery = query(
-      collection(db, "invoices"),
-      where("createdBy", "==", userdoc.uid),
-      orderBy("createdAt", "desc")
-    );
+    let invoicesQuery: FirebaseFirestoreTypes.Query = db.collection("invoices")
+      .where("createdBy", "==", userdoc.uid)
+      .orderBy("createdAt", "desc");
 
     if (selectedTime !== "all" && userdoc.lastClearTimes && userdoc.lastClearTimes.length > 0) {
       const sortedTimestamps = [...userdoc.lastClearTimes].sort((a, b) => a.toMillis() - b.toMillis());
@@ -110,26 +108,23 @@ const InvoicesScreen = () => {
         const selectedTimestamp = sortedTimestamps[selectedIndex];
 
         // Fetch invoices created up to the selected clear date.
-        let baseQuery = query(
-          collection(db, "invoices"),
-          where("createdBy", "==", userdoc.uid),
-          where("createdAt", "<=", selectedTimestamp) // Use Timestamp object directly
-        );
+        let baseQuery = db.collection("invoices")
+          .where("createdBy", "==", userdoc.uid)
+          .where("createdAt", "<=", selectedTimestamp); // Use Timestamp object directly
 
         // If there's a previous clear date, create a range.
         if (selectedIndex > 0) {
           const previousTimestamp = sortedTimestamps[selectedIndex - 1];
-          baseQuery = query(baseQuery, where("createdAt", ">", previousTimestamp));
+          baseQuery = baseQuery.where("createdAt", ">", previousTimestamp);
         }
 
         // Apply final ordering
-        invoicesQuery = query(baseQuery, orderBy("createdAt", "desc"));
+        invoicesQuery = baseQuery.orderBy("createdAt", "desc");
       }
     }
 
     // onSnapshot provides real-time updates
-    const unsubscribe = onSnapshot(
-      invoicesQuery,
+    const unsubscribe = invoicesQuery.onSnapshot(
       (snapshot) => {
         const fetchedInvoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
         setInvoices(fetchedInvoices);

@@ -8,14 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useScrollToTop } from '@react-navigation/native';
 import { liteClient as algoliasearch } from 'algoliasearch/lite';
 import { useRouter } from 'expo-router';
-import {
-  collection,
-  onSnapshot,
-  orderBy,
-  query,
-  Timestamp,
-  where
-} from 'firebase/firestore';
+import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   InstantSearch,
@@ -300,7 +293,7 @@ interface AlgoliaHitAdapterProps {
 const AlgoliaHitAdapter: React.FC<AlgoliaHitAdapterProps> = ({ hit, users, userUid, loadingState, handleAcceptTask, handleRejectTask }) => {
   const getTimestampFromMilliseconds = (ms) => {
     if (typeof ms !== 'number') return undefined;
-    return new Timestamp(Math.floor(ms / 1000), (ms % 1000) * 1000000);
+    return new firestore.Timestamp(Math.floor(ms / 1000), (ms % 1000) * 1000000);
   };
   const userResponses = (hit.userResponses || []);
   const hasResponded = userResponses.some(res => res.userId === userUid);
@@ -413,13 +406,18 @@ const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader,
       return;
     }
     setIsFirebaseLoading(true);
-    const queryConstraints = [where('assignedUsers', 'array-contains', userUid)];
-    if (requestView === 'open') queryConstraints.push(where('status', '==', 'مفتوح'));
-    else if (requestView === 'pending') queryConstraints.push(where('status', '==', 'قيد المعالجة'));
-    else if (requestView === 'closed') queryConstraints.push(where('status', 'in', ['مكتمل']));
-    queryConstraints.push(orderBy('createdAt', sortOrder));
-    const finalQuery = query(collection(db, 'serviceRequests'), ...queryConstraints);
-    const unsubscribe = onSnapshot(finalQuery, (querySnapshot) => {
+    let query: FirebaseFirestoreTypes.Query = db.collection('serviceRequests');
+    query = query.where('assignedUsers', 'array-contains', userUid);
+    if (requestView === 'open') {
+      query = query.where('status', '==', 'مفتوح');
+    } else if (requestView === 'pending') {
+      query = query.where('status', '==', 'قيد المعالجة');
+    } else if (requestView === 'closed') {
+      query = query.where('status', 'in', ['مكتمل']);
+    }
+    query = query.orderBy('createdAt', sortOrder);
+
+    const unsubscribe = query.onSnapshot((querySnapshot) => {
       const requestsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
       setFirebaseRequests(requestsData);
       setIsFirebaseLoading(false);
@@ -539,7 +537,7 @@ export default function Taskscreen() {
   useScrollToTop(listRef);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'users'), snapshot => {
+    const unsubscribe = db.collection('users').onSnapshot(snapshot => {
       setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
       setIsUsersLoading(false);
     });
@@ -547,7 +545,7 @@ export default function Taskscreen() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'teams'), snapshot => {
+    const unsubscribe = db.collection('teams').onSnapshot(snapshot => {
       setTeams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team)));
       setIsTeamsLoading(false);
     });

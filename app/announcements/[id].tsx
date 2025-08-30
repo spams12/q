@@ -7,7 +7,7 @@ import { db } from '@/lib/firebase';
 import { Ionicons } from '@expo/vector-icons';
 import { Video } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, getDoc } from 'firebase/firestore';
+import firestore from '@react-native-firebase/firestore';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -77,10 +77,10 @@ export default function AnnouncementDetailsScreen() {
       if (typeof id !== 'string') return;
 
       try {
-        const docRef = doc(db, 'announcements', id);
-        const docSnap = await getDoc(docRef);
+        const docRef = db.collection('announcements').doc(id);
+        const docSnap = await docRef.get();
 
-        if (docSnap.exists()) {
+        if (docSnap.exists) {
           const data = docSnap.data();
           const timestamp = data.createdAt?.toDate?.().toISOString() || new Date().toISOString();
           setAnnouncement({

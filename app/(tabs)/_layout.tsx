@@ -7,8 +7,6 @@ import { HapticTab } from '@/components/HapticTab';
 import { usePermissions } from '@/context/PermissionsContext';
 import { useTheme } from '@/context/ThemeContext';
 import { db } from '@/lib/firebase';
-import { query } from 'firebase/database';
-import { collection, onSnapshot, where } from 'firebase/firestore';
 
 export default function TabLayout() {
   const { theme } = useTheme();
@@ -26,13 +24,13 @@ export default function TabLayout() {
     }
 
     // Define the reference to the user's notifications sub-collection
-    const notificationsRef = collection(db, "users", userdoc.id, "notifications");
+    const notificationsRef = db.collection("users").doc(userdoc.id).collection("notifications");
 
     // Create a query to fetch only the notifications where 'isRead' is false
-    const q = query(notificationsRef, where("isRead", "==", false));
+    const q = notificationsRef.where("isRead", "==", false);
 
     // Set up the real-time listener
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    const unsubscribe = q.onSnapshot((querySnapshot) => {
       // The number of documents in the result is our unread count
       const count = querySnapshot.size;
       setUnreadCount(count);
