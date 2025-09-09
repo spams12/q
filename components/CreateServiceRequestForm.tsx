@@ -601,7 +601,7 @@ export default function CreateServiceRequestForm({
       case 'assign_team': return 'نقل إلى فريق';
       case 'confirm_admin': return 'تأكيد الإسناد للإدارة';
       case 'confirm_noc': return 'تأكيد الإسناد للعمليات';
-      case 'options': default: return 'إسناد المهمة';
+      case 'options': default: return 'حدد القسم';
     }
   };
 
@@ -740,6 +740,8 @@ export default function CreateServiceRequestForm({
       setSubscribers([{ id: uuidv4(), name: "", phone: "", zoneNumber: "", packageType: "", price: "", serviceType: "" }]);
       setAttachments([]);
       onSuccess();
+      router.replace('/(tabs)');
+
     } catch (error) { console.error("Error adding ticket:", error); }
     finally { setIsSubmitting(false); }
   };
@@ -883,10 +885,11 @@ export default function CreateServiceRequestForm({
                         </TouchableOpacity>
                       }
                       <TouchableOpacity style={styles.mainOptionButton} onPress={() => { setTempAssignmentOption('admin'); setAssignModalView('confirm_admin'); }}>
-                        <ShieldCheck size={24} color={colors.primary} /><Text style={styles.mainOptionButtonText}>إسناد إلى قسم الإدارة</Text><ChevronRight size={22} color={colors.subtleText} />
+                        <ShieldCheck size={24} color={colors.primary} /><Text style={styles.mainOptionButtonText}>قسم الادارة (QCM)
+                        </Text><ChevronRight size={22} color={colors.subtleText} />
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.mainOptionButton} onPress={() => { setTempAssignmentOption('noc'); setAssignModalView('confirm_noc'); }}>
-                        <Network size={24} color={colors.primary} /><Text style={styles.mainOptionButtonText}>إسناد إلى قسم العمليات (FOC)</Text><ChevronRight size={22} color={colors.subtleText} />
+                        <Network size={24} color={colors.primary} /><Text style={styles.mainOptionButtonText}>قسم العمليات (FOC)</Text><ChevronRight size={22} color={colors.subtleText} />
                       </TouchableOpacity>
                     </View>
                   </ScrollView>
