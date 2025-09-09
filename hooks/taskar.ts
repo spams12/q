@@ -2,6 +2,7 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { Alert } from "react-native";
 
+import firestore from "@react-native-firebase/firestore";
 import { db, rtdb } from "../lib/firebase";
 import { Comment, ServiceRequest, User } from "../lib/types";
 
@@ -119,7 +120,7 @@ export const handleAcceptTask = async (
 
       transaction.update(docRef, {
         userResponses: newUserResponses,
-        comments: db.firestore.FieldValue.arrayUnion(newComment),
+        comments: firestore.FieldValue.arrayUnion(newComment),
         status: newStatus,
         lastUpdated: new Date(),
       });
@@ -222,7 +223,7 @@ export const handleRejectTask = async (
 
       transaction.update(docRef, {
         userResponses: newUserResponses,
-        comments: db.firestore.FieldValue.arrayUnion(newComment),
+        comments: firestore.FieldValue.arrayUnion(newComment),
         lastUpdated: new Date(),
         assignedUsers: newAssignedUsers,
       });
@@ -276,7 +277,7 @@ export const handleLogArrival = async (
       onLocationTimestamp: new Date(),
       estimatedTime:
         timeUnit === "hours" ? estimatedDuration * 60 : estimatedDuration,
-      comments: db.firestore.FieldValue.arrayUnion(arrivalComment),
+      comments: firestore.FieldValue.arrayUnion(arrivalComment),
       lastUpdated: new Date(),
     });
     Alert.alert("نجاح", "تم تسجيل الوصول بنجاح.");
@@ -359,7 +360,7 @@ export const handleMarkAsDone = async (
 
       const updatePayload: { [key: string]: any } = {
         userResponses: newUserResponses,
-        comments: db.firestore.FieldValue.arrayUnion(completionComment),
+        comments: firestore.FieldValue.arrayUnion(completionComment),
         lastUpdated: new Date(),
       };
 
