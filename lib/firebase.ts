@@ -1,8 +1,8 @@
-import auth from '@react-native-firebase/auth';
-import database from '@react-native-firebase/database';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
-import { CommentAttachment } from './types';
+import auth from "@react-native-firebase/auth";
+import database from "@react-native-firebase/database";
+import firestore from "@react-native-firebase/firestore";
+import storage from "@react-native-firebase/storage";
+import { CommentAttachment } from "./types";
 
 const db = firestore();
 const rtdb = database();
@@ -12,7 +12,7 @@ export const uploadCommentAttachment = async (
   filePath: string,
   ticketId: string
 ): Promise<CommentAttachment> => {
-  const fileName = filePath.split('/').pop() || 'unknown';
+  const fileName = filePath.split("/").pop() || "unknown";
   const storageRef = firebaseStorage.ref(
     `serviceRequests/${ticketId}/comments/${fileName}`
   );
@@ -27,7 +27,7 @@ export const uploadCommentAttachment = async (
     downloadURL,
     fileName: fileName,
     fileSize: 0, // Placeholder
-    fileType: 'application/octet-stream', // Placeholder
+    fileType: "application/octet-stream", // Placeholder
   };
 };
 

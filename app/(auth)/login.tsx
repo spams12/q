@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import firestore from '@react-native-firebase/firestore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
 import React, { memo, useEffect, useState } from 'react';
 import {
   DimensionValue,
@@ -31,7 +30,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { UseDialog } from '@/context/DialogContext';
-import { auth, db } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
 
 // Define the roles that are allowed to access this app.
 const ALLOWED_ROLES = ['فني', 'تسويق', 'Developer', 'مدير'];

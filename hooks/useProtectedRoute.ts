@@ -19,19 +19,23 @@ export function useProtectedRoute(
     }
 
     const inAuthGroup = segments[0] === "(auth)";
+    const inCompleteProfile = segments.includes("complete-profile");
 
     if (user) {
       // If the user is authenticated but the profile is incomplete,
       // redirect them to the complete-profile screen.
-      if (profile && (!profile.phone || !profile.photoURL)) {
+      if (profile && (!profile.phone || !profile.photoURL) && !inCompleteProfile) {
         router.replace("/complete-profile");
-      }
-      // If the user is authenticated and is currently in the auth flow,
+      } 
+      // If the user is authenticated and has completed profile, and is in auth flow,
       // redirect them to the main app (tabs).
+      else if (profile && profile.phone && profile.photoURL && inAuthGroup) {
+        router.replace("/(tabs)/");
+      }
     } else {
       // If the user is not authenticated and is not in the auth flow,
       // redirect them to the login screen.
-      if (!inAuthGroup) {
+      if (!inAuthGroup && !inCompleteProfile) {
         router.replace("/login");
       }
     }

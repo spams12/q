@@ -20,17 +20,9 @@ import {
 import { useIsFocused, useScrollToTop } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 
-// FIREBASE
-import {
-  collection,
-  getDocs,
-  orderBy,
-  query,
-  where,
-  type DocumentSnapshot,
-  type QueryConstraint
-} from "firebase/firestore";
-import { db } from "../../lib/firebase";
+// FIREBASE (MODIFIED: Using react-native-firebase)
+import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+
 
 // ICONS
 import { CheckCircle, Clock, Inbox, ListChecks, Search, TrendingDown, TrendingUp, XCircle } from "lucide-react-native";
@@ -38,7 +30,7 @@ import { CheckCircle, Clock, Inbox, ListChecks, Search, TrendingDown, TrendingUp
 // CONTEXT & TYPES
 import { UseDialog } from "@/context/DialogContext";
 import { useTheme } from "../../context/ThemeContext";
-import useAuth from "../../hooks/use-firebase-auth";
+import useAuth from "../../hooks/use-firebase-auth"; // Assuming this hook is updated to use @react-native-firebase/auth
 import { ServiceRequest } from "../../lib/types";
 
 
@@ -113,7 +105,7 @@ const StatCard = ({ title, value, icon, color, styles }: { title: string; value:
   );
 };
 
-// MODIFIED: This component now uses explicit rows for the 2x2 layout
+
 const TechnicianStatCards = React.memo(({ tickets, styles, currentUserDocId }: { tickets: ServiceRequest[], styles: any, currentUserDocId: string | null }) => {
   const stats = useMemo(() => {
     const pending = tickets.filter(t => ["مفتوح", "قيد المعالجة"].includes(t.status)).length;
@@ -505,7 +497,8 @@ const EmptyList = ({ searchTerm, styles }: EmptyListProps) => (
   </View>
 );
 
-const mapDocToServiceRequest = (docSnap: DocumentSnapshot): ServiceRequest => {
+// MODIFIED: Updated DocumentSnapshot type
+const mapDocToServiceRequest = (docSnap: FirebaseFirestoreTypes.DocumentSnapshot): ServiceRequest => {
   const data = docSnap.data() as any;
   return { id: docSnap.id, ...data } as ServiceRequest;
 };
@@ -527,26 +520,28 @@ function TechnicianDashboardScreen() {
   const [selectedTab, setSelectedTab] = useState<"all" | "pending" | "completed" | "rejected">("all");
   const [searchTerm, setSearchTerm] = useState("");
 
+  // MODIFIED: Switched to react-native-firebase query syntax
   const fetchUserDocId = useCallback(async () => {
     if (!user?.email) return null;
-    const usersQuery = query(collection(db, "users"), where("email", "==", user.email));
-    const usersSnapshot = await getDocs(usersQuery);
+    const usersSnapshot = await firestore()
+      .collection("users")
+      .where("email", "==", user.email)
+      .get();
     if (usersSnapshot.empty) return null;
     return usersSnapshot.docs[0].id;
   }, [user]);
 
+  // MODIFIED: Switched to react-native-firebase query syntax
   const fetchTasks = useCallback(async (userDocId: string) => {
     try {
-      const constraints: QueryConstraint[] = [
-        where("assignedUsers", "array-contains", userDocId),
-        orderBy("date", "desc"),
-      ];
+      const querySnapshot = await firestore()
+        .collection("serviceRequests")
+        .where("assignedUsers", "array-contains", userDocId)
+        .orderBy("date", "desc")
+        .get();
 
-      const q = query(collection(db, "serviceRequests"), ...constraints);
-      const snap = await getDocs(q);
-
-      if (!snap.empty) {
-        const newTasks = snap.docs.map(mapDocToServiceRequest);
+      if (!querySnapshot.empty) {
+        const newTasks = querySnapshot.docs.map(mapDocToServiceRequest);
         setTasks(newTasks);
       } else {
         setTasks([]);
@@ -682,7 +677,7 @@ function TechnicianDashboardScreen() {
 
 export default React.memo(TechnicianDashboardScreen);
 
-// MODIFIED: Styles updated for a stable 2x2 grid layout
+
 const getStyles = (theme: any, width: number) => {
   const containerPadding = 16;
   const scrollViewPadding = 20;
@@ -699,6 +694,7 @@ const getStyles = (theme: any, width: number) => {
     },
     scrollContentContainer: {
       paddingBottom: 40,
+
     },
     dashboardContainer: {
       padding: containerPadding,
@@ -733,16 +729,14 @@ const getStyles = (theme: any, width: number) => {
       color: theme.textSecondary,
       fontFamily: 'Cairo',
     },
-    // --- StatCard styles MODIFIED for 2x2 grid ---
     technicianStatsContainer: {
-      flexDirection: 'column', // Lays out the rows vertically
-      gap: statCardGap,         // Creates vertical space between rows
+      flexDirection: 'column',
+      gap: statCardGap,
       marginBottom: 24,
     },
-    // New style for rows
     statCardRow: {
       flexDirection: 'row',
-      justifyContent: 'space-between', // Spaces the two cards in a row
+      justifyContent: 'space-between',
     },
     statCardContainer: {
       width: statCardWidth,
@@ -790,8 +784,6 @@ const getStyles = (theme: any, width: number) => {
       borderRadius: 50,
       opacity: 0.08,
     },
-
-    // PerformanceSummaryCard styles
     container: {
       backgroundColor: theme.card,
       borderRadius: 16,
@@ -820,8 +812,6 @@ const getStyles = (theme: any, width: number) => {
       paddingHorizontal: scrollViewPadding,
       gap: 16,
     },
-
-    // New StatInfoCard styles
     infoCard: {
       width: cardWidth,
       borderRadius: 24,
@@ -851,8 +841,6 @@ const getStyles = (theme: any, width: number) => {
       textAlign: 'right',
       marginTop: 4,
     },
-
-    // Modified SLA card style
     card: {
       width: cardWidth,
       borderRadius: 24,
@@ -939,8 +927,6 @@ const getStyles = (theme: any, width: number) => {
       justifyContent: 'center',
       alignItems: 'center',
     },
-
-    // TaskList styles
     taskListContainer: {
       backgroundColor: theme.card,
       borderRadius: 16,
@@ -1054,7 +1040,6 @@ const getStyles = (theme: any, width: number) => {
       fontFamily: 'Cairo',
       textAlign: 'center',
     },
-    // TicketItem styles
     ticketItemContainer: {
       backgroundColor: theme.card,
       borderBottomWidth: 1,

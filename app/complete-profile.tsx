@@ -4,12 +4,11 @@ import StyledTextInput from '@/components/ui/StyledTextInput';
 import { UseDialog } from '@/context/DialogContext';
 import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext'; // ✨ Import Theme type
+import useFirebaseAuth from '@/hooks/use-firebase-auth';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient'; // ✨ Import LinearGradient
 import { useRouter } from 'expo-router';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
 import { default as React, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -21,7 +20,7 @@ import {
   View,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { auth, db, storage } from '../lib/firebase';
+import { db, storage } from '../lib/firebase';
 
 // ✨ Moved styles outside the component for performance and organization
 //    It's a function that takes the theme and returns the styles object.
@@ -125,10 +124,10 @@ export default function CompleteProfileScreen() {
   const [displayImage, setDisplayImage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
-  const user = auth.currentUser;
+  const user = useFirebaseAuth();
   const { theme } = useTheme();
   const { showDialog } = UseDialog();
-  const { userdoc } = usePermissions();
+  const { userdoc, refreshUser } = usePermissions(); // ✨ Added refreshUser from PermissionsContext
 
   const styles = getStyles(theme); // ✨ Get styles based on the current theme
 
@@ -162,7 +161,6 @@ export default function CompleteProfileScreen() {
   };
 
   const handleCompleteProfile = async () => {
-    // ... (your existing logic is great, no changes needed here)
     if (!user) {
       showDialog({
         status: 'error',
@@ -191,13 +189,22 @@ export default function CompleteProfileScreen() {
     try {
       const dataToUpdate: { phone: string; photoURL?: string } = { phone };
       if (displayImage && !displayImage.startsWith('http')) {
-        const storageRef = storage().ref(`profile-pictures/${userdoc.id}`);
-        await storageRef.putFile(displayImage);
-        const newPhotoURL = await storageRef.getDownloadURL();
-        dataToUpdate.photoURL = newPhotoURL;
+        if (userdoc) {
+          const storageRef = storage.ref(`profile-pictures/${userdoc.id}`);
+          await storageRef.putFile(displayImage);
+          const newPhotoURL = await storageRef.getDownloadURL();
+          dataToUpdate.photoURL = newPhotoURL;
+        }
       }
-      const userDocRef = db.collection('users').doc(userdoc.id);
-      await userDocRef.update(dataToUpdate);
+      if (userdoc) {
+        const userDocRef = db.collection('users').doc(userdoc.id);
+        await userDocRef.update(dataToUpdate);
+
+        // ✨ Refresh user permissions and profile data
+        console.log('Profile updated, refreshing user data...');
+        await refreshUser();
+        console.log('User data refreshed, navigating to tabs...');
+      }
       router.replace('/(tabs)');
     } catch (error) {
       console.error('Error completing profile:', error);

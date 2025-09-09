@@ -4,10 +4,10 @@ import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
 import { ServiceRequest } from '@/lib/types';
 import { Ionicons } from '@expo/vector-icons';
+import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { useScrollToTop } from '@react-navigation/native';
 import { liteClient as algoliasearch } from 'algoliasearch/lite';
 import { router } from 'expo-router';
-import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import React, {
   useCallback,
   useEffect,
@@ -418,7 +418,7 @@ const HybridList = ({ sortOrder, setSortOrder, onOpenFilters, users }: HybridLis
     </View>
   );
 };
-const indexName = 'hello';
+
 export default function App() {
   const { theme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
@@ -430,6 +430,7 @@ export default function App() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [isUsersLoading, setIsUsersLoading] = useState(true);
   const [isTeamsLoading, setIsTeamsLoading] = useState(true);
+  const indexName = sortOrder === 'asc' ? 'hello_asc' : 'hello';
 
 
   useEffect(() => {

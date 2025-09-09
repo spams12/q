@@ -1,13 +1,5 @@
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
-import { get, remove, ref as rtdbRef, set } from "firebase/database";
-import {
-  arrayUnion,
-  doc,
-  runTransaction,
-  Timestamp,
-  updateDoc,
-} from "firebase/firestore";
 import { Alert } from "react-native";
 
 import { db, rtdb } from "../lib/firebase";
@@ -42,15 +34,11 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
         speed,
         heading,
         accuracy,
-        timestamp: Timestamp.fromMillis(location.timestamp),
+        timestamp: location.timestamp,
       };
       try {
         // Update the activeTechnicians branch in RTDB for live tracking
-        const technicianRef = rtdbRef(
-          rtdb,
-          `activeTechnicians/${currentUserDoc.id}/location`
-        );
-        await set(technicianRef, locationData);
+        await rtdb.ref(`activeTechnicians/${currentUserDoc.id}/location`).set(locationData);
         console.log(`RTDB Location updated for user: ${currentUserDoc.id}`);
       } catch (e) {
         console.error(
@@ -94,10 +82,10 @@ export const handleAcceptTask = async (
     }
 
     // Run Firestore transaction to update task status
-    const taskTitle = await runTransaction(db, async (transaction) => {
-      const docRef = doc(db, "serviceRequests", id);
+    const taskTitle = await db.runTransaction(async (transaction) => {
+      const docRef = db.doc(`serviceRequests/${id}`);
       const sfDoc = await transaction.get(docRef);
-      if (!sfDoc.exists()) throw "Task document does not exist!";
+      if (!sfDoc.exists) throw "Task document does not exist!";
 
       const data = sfDoc.data() as ServiceRequest;
       const newUserResponses = data.userResponses
@@ -123,7 +111,7 @@ export const handleAcceptTask = async (
         content: "قبلت المهمة وسأعمل عليها",
         userId: userdoc.id,
         userName: userdoc.name || "النظام",
-        timestamp: Timestamp.now(),
+        timestamp: new Date(),
         isStatusChange: true,
       };
 
@@ -131,20 +119,16 @@ export const handleAcceptTask = async (
 
       transaction.update(docRef, {
         userResponses: newUserResponses,
-        comments: arrayUnion(newComment),
+        comments: db.firestore.FieldValue.arrayUnion(newComment),
         status: newStatus,
-        lastUpdated: Timestamp.now(),
+        lastUpdated: new Date(),
       });
 
       return data.title; // Return title for RTDB
     });
 
     // Add task to Realtime Database for live tracking
-    const technicianTaskRef = rtdbRef(
-      rtdb,
-      `activeTechnicians/${userdoc.id}/activeTasks/${id}`
-    );
-    await set(technicianTaskRef, {
+    await rtdb.ref(`activeTechnicians/${userdoc.id}/activeTasks/${id}`).set({
       title: taskTitle,
       acceptedAt: Date.now(),
     });
@@ -198,10 +182,10 @@ export const handleRejectTask = async (
     await cleanupTaskFromRtdb(userdoc.id, id);
 
     // Then, update Firestore to reflect the rejection
-    await runTransaction(db, async (transaction) => {
-      const docRef = doc(db, "serviceRequests", id);
+    await db.runTransaction(async (transaction) => {
+      const docRef = db.doc(`serviceRequests/${id}`);
       const sfDoc = await transaction.get(docRef);
-      if (!sfDoc.exists()) throw "Document does not exist!";
+      if (!sfDoc.exists) throw "Document does not exist!";
 
       const data = sfDoc.data() as ServiceRequest;
       const newUserResponses = data.userResponses
@@ -232,14 +216,14 @@ export const handleRejectTask = async (
         content: `رفض المستخدم ${userdoc.name} المهمة.`,
         userId: userdoc.id,
         userName: userdoc.name || "النظام",
-        timestamp: Timestamp.now(),
+        timestamp: new Date(),
         isStatusChange: true,
       };
 
       transaction.update(docRef, {
         userResponses: newUserResponses,
-        comments: arrayUnion(newComment),
-        lastUpdated: Timestamp.now(),
+        comments: db.firestore.FieldValue.arrayUnion(newComment),
+        lastUpdated: new Date(),
         assignedUsers: newAssignedUsers,
       });
     });
@@ -280,20 +264,20 @@ export const handleLogArrival = async (
     id: `${Date.now()}-${userdoc.id}`,
     userId: userdoc.id,
     userName: userdoc.name || "Unknown",
-    timestamp: Timestamp.now(),
+    timestamp: new Date(),
     content: `وصل الفني للموقع. مدة العمل المقدرة: ${estimatedDuration} ${durationText}.`,
     isStatusChange: true,
   };
 
   try {
-    const docRef = doc(db, "serviceRequests", id);
-    await updateDoc(docRef, {
+    const docRef = db.doc(`serviceRequests/${id}`);
+    await docRef.update({
       onLocation: true,
-      onLocationTimestamp: Timestamp.now(),
+      onLocationTimestamp: new Date(),
       estimatedTime:
         timeUnit === "hours" ? estimatedDuration * 60 : estimatedDuration,
-      comments: arrayUnion(arrivalComment),
-      lastUpdated: Timestamp.now(),
+      comments: db.firestore.FieldValue.arrayUnion(arrivalComment),
+      lastUpdated: new Date(),
     });
     Alert.alert("نجاح", "تم تسجيل الوصول بنجاح.");
   } catch (error) {
@@ -326,11 +310,11 @@ export const handleMarkAsDone = async (
     await cleanupTaskFromRtdb(userdoc.id, id);
 
     // Step 2: Run Firestore transaction to update the task state.
-    await runTransaction(db, async (transaction) => {
-      const docRef = doc(db, "serviceRequests", id);
+    await db.runTransaction(async (transaction) => {
+      const docRef = db.doc(`serviceRequests/${id}`);
       const sfDoc = await transaction.get(docRef);
 
-      if (!sfDoc.exists()) throw "Document does not exist!";
+      if (!sfDoc.exists) throw "Document does not exist!";
 
       // Re-fetch the latest data inside the transaction
       const latestServiceRequest = sfDoc.data() as ServiceRequest;
@@ -357,7 +341,7 @@ export const handleMarkAsDone = async (
         id: `${Date.now()}-${userdoc.id}`,
         userId: userdoc.id,
         userName: userdoc.name || "Unknown",
-        timestamp: Timestamp.now(),
+        timestamp: new Date(),
         content: `أكمل ${userdoc.name} الجزء الخاص به من المهمة.`,
         isStatusChange: true,
       };
@@ -375,13 +359,13 @@ export const handleMarkAsDone = async (
 
       const updatePayload: { [key: string]: any } = {
         userResponses: newUserResponses,
-        comments: arrayUnion(completionComment),
-        lastUpdated: Timestamp.now(),
+        comments: db.firestore.FieldValue.arrayUnion(completionComment),
+        lastUpdated: new Date(),
       };
 
       if (allAssignedUsersCompleted) {
         updatePayload.status = "مكتمل";
-        updatePayload.completionTimestamp = Timestamp.now();
+        updatePayload.completionTimestamp = new Date();
       }
 
       transaction.update(docRef, updatePayload);
@@ -406,18 +390,10 @@ export const handleMarkAsDone = async (
 const cleanupTaskFromRtdb = async (userUid: string, taskId: string) => {
   if (!userUid || !taskId) return;
 
-  const taskRef = rtdbRef(
-    rtdb,
-    `activeTechnicians/${userUid}/activeTasks/${taskId}`
-  );
-  await remove(taskRef);
+  await rtdb.ref(`activeTechnicians/${userUid}/activeTasks/${taskId}`).remove();
   console.log(`Removed task ${taskId} from RTDB for user ${userUid}.`);
 
-  const remainingTasksRef = rtdbRef(
-    rtdb,
-    `activeTechnicians/${userUid}/activeTasks`
-  );
-  const snapshot = await get(remainingTasksRef);
+  const snapshot = await rtdb.ref(`activeTechnicians/${userUid}/activeTasks`).once('value');
 
   const isTracking = await Location.hasStartedLocationUpdatesAsync(
     LOCATION_TASK_NAME
@@ -428,8 +404,7 @@ const cleanupTaskFromRtdb = async (userUid: string, taskId: string) => {
     if (isTracking) {
       await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
       // Also remove the technician's top-level node from RTDB to keep it clean
-      const technicianRef = rtdbRef(rtdb, `activeTechnicians/${userUid}`);
-      await remove(technicianRef);
+      await rtdb.ref(`activeTechnicians/${userUid}`).remove();
       console.log(
         `Stopped tracking and removed RTDB record for user ${userUid}.`
       );

@@ -2,26 +2,22 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
-import { db } from '@/lib/firebase';
+// --- MODIFIED: Use the native Firebase library ---
 import { Ionicons } from '@expo/vector-icons';
-import { Video } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
-import { useRouter } from 'expo-router';
-import { shareAsync } from 'expo-sharing';
 import firestore from '@react-native-firebase/firestore';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Animated,
   FlatList,
-  Image,
   Modal,
-  Platform,
   RefreshControl,
   StyleSheet,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
 // --- INTERFACE (UNCHANGED) ---
@@ -37,11 +33,7 @@ interface Notification {
   isRead: boolean;
 }
 
-// --- HELPER FUNCTIONS (UNCHANGED) ---
-const isVideoUrl = (url?: string): boolean => {
-  if (!url) return false;
-  return /\.(mp4|mov|mkv|webm)$/i.test(url);
-};
+// --- HELPER FUNCTIONS ---
 
 const getNotificationIcon = (theme: Theme, type: Notification['type']) => {
   type NotificationIconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -76,37 +68,35 @@ const formatTimestamp = (timestamp?: string): string => {
 };
 
 
-// --- NOTIFICATION ITEM COMPONENT (UNCHANGED) ---
+// --- NOTIFICATION ITEM COMPONENT ---
 interface NotificationItemProps {
   item: Notification;
   onPress: (item: Notification) => void;
-  onMediaPress: (url: string) => void;
+  onMediaPress: (item: Notification) => void;
 }
 
 const NotificationItem = React.memo(({ item, onPress, onMediaPress }: NotificationItemProps) => {
   const { theme, themeName } = useTheme();
   const styles = getStyles(theme, themeName);
   const icon = getNotificationIcon(theme, item.type);
-  const isVideo = isVideoUrl(item.imageUrl);
   const isRead = item.isRead;
   const [imageAspectRatio, setImageAspectRatio] = useState<number | undefined>(undefined);
 
-  useEffect(() => {
-    if (item.source === 'announcement' && item.imageUrl && !isVideo) {
-      let isMounted = true;
-      Image.getSize(item.imageUrl, (width, height) => {
-        if (isMounted && height > 0) {
-          setImageAspectRatio(width / height);
-        }
-      }, (error) => {
-        console.error(`Could not get image size for ${item.imageUrl}:`, error);
-        if (isMounted) {
-          setImageAspectRatio(16 / 9);
-        }
-      });
-      return () => { isMounted = false; };
+  const handleImageLoad = useCallback((event: any) => {
+    if (event?.source) {
+      const { width, height } = event.source;
+      if (width && height && height > 0) {
+        setImageAspectRatio(width / height);
+      }
     }
-  }, [item.source, item.imageUrl, isVideo]);
+  }, []);
+
+  useEffect(() => {
+    if (item.source === 'announcement' && item.imageUrl) {
+      // Reset aspect ratio when image URL changes
+      setImageAspectRatio(undefined);
+    }
+  }, [item.source, item.imageUrl]);
 
   return (
     <View style={styles.notificationWrapper}>
@@ -127,30 +117,17 @@ const NotificationItem = React.memo(({ item, onPress, onMediaPress }: Notificati
               {item.body}
             </ThemedText>
             {item.imageUrl && (
-              <TouchableOpacity onPress={() => onMediaPress(item.imageUrl!)} style={styles.mediaContainer}>
-                {isVideo ? (
-                  <View>
-                    <Video
-                      source={{ uri: item.imageUrl }}
-                      style={styles.mediaPreview}
-                      resizeMode="cover"
-                      isMuted
-                    />
-                    <View style={styles.playIconOverlay}>
-                      <Ionicons name="play-circle" size={48} color="rgba(255, 255, 255, 0.8)" />
-                    </View>
-                  </View>
-                ) : (
-                  <Image
-                    source={{ uri: item.imageUrl }}
-                    style={
-                      item.source === 'announcement' && imageAspectRatio
-                        ? [styles.announcementImage, { aspectRatio: imageAspectRatio }]
-                        : styles.mediaPreview
-                    }
-                    resizeMode="cover"
-                  />
-                )}
+              <TouchableOpacity onPress={() => onMediaPress(item)} style={styles.mediaContainer}>
+                <Image
+                  source={{ uri: item.imageUrl }}
+                  style={
+                    item.source === 'announcement' && imageAspectRatio
+                      ? [styles.announcementImage, { aspectRatio: imageAspectRatio }]
+                      : styles.mediaPreview
+                  }
+                  contentFit="cover"
+                  onLoad={handleImageLoad}
+                />
               </TouchableOpacity>
             )}
             <ThemedText style={styles.timestamp}>{formatTimestamp(item.timestamp)}</ThemedText>
@@ -183,15 +160,9 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  // --- MODIFIED: Added new state for marking as read ---
   const [isMarkingAsRead, setIsMarkingAsRead] = useState(false);
   const fadeAnim = useMemo(() => new Animated.Value(0), []);
 
-  const [isModalVisible, setModalVisible] = useState(false);
-  const [selectedMediaUrl, setSelectedMediaUrl] = useState<string | null>(null);
-  const [downloadDialogVisible, setDownloadDialogVisible] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [downloadInfo, setDownloadInfo] = useState<{ fileName: string; totalSize: number } | null>(null);
 
   const router = useRouter();
   const { theme, themeName } = useTheme();
@@ -206,11 +177,15 @@ export default function NotificationsScreen() {
     }
 
     setLoading(true);
-    const notificationsRef = db.collection("users").doc(userdoc.id).collection("notifications");
-    const q = notificationsRef.orderBy('createdAt', 'desc');
+    // --- MODIFIED: Use native SDK for querying and listening to snapshots ---
+    const notificationsQuery = firestore()
+      .collection("users")
+      .doc(userdoc.id)
+      .collection("notifications")
+      .orderBy('createdAt', 'desc');
 
-    const unsubscribe = q.onSnapshot((snapshot) => {
-      const fetchedNotifications: Notification[] = snapshot.docs.map(doc => {
+    const unsubscribe = notificationsQuery.onSnapshot(querySnapshot => {
+      const fetchedNotifications: Notification[] = querySnapshot.docs.map(doc => {
         const data = doc.data();
         const timestamp = data.createdAt?.toDate?.().toISOString() || new Date().toISOString();
         return {
@@ -236,7 +211,7 @@ export default function NotificationsScreen() {
           useNativeDriver: true,
         }).start();
       }
-    }, (error) => {
+    }, error => {
       console.error("Error fetching notifications snapshot:", error);
       Alert.alert("خطأ", "لا يمكن تحميل الإشعارات.");
       setLoading(false);
@@ -249,7 +224,6 @@ export default function NotificationsScreen() {
     return notifications.some(n => n.isRead);
   }, [notifications]);
 
-  // --- MODIFIED: Added a memo to check for unread notifications ---
   const hasUnreadNotifications = useMemo(() => {
     return notifications.some(n => !n.isRead);
   }, [notifications]);
@@ -261,11 +235,16 @@ export default function NotificationsScreen() {
 
   const handleNotificationPress = useCallback(async (item: Notification) => {
     if (!item.isRead && userdoc?.id) {
-      const notificationRef = db.collection("users").doc(userdoc.id).collection("notifications").doc(item.docId);
+      // --- MODIFIED: Use native SDK for document reference and update ---
+      const notificationRef = firestore()
+        .collection("users")
+        .doc(userdoc.id)
+        .collection("notifications")
+        .doc(item.docId);
       try {
         await notificationRef.update({
           isRead: true,
-          readAt: new Date(),
+          readAt: firestore.FieldValue.serverTimestamp(),
         });
       } catch (error) {
         console.error("Error marking notification as read:", error);
@@ -273,7 +252,13 @@ export default function NotificationsScreen() {
     }
 
     if (item.source === 'serviceRequest' || item.source === 'info') {
-      router.push(`/tasks/${item.id}`);
+      router.push({
+        pathname: "/tasks/[id]",
+        params: {
+          id: item.id,
+          showActions: 'true'
+        }
+      })
     } else if (item.source === 'announcement') {
       router.push(`/announcements/${item.id}`);
     } else {
@@ -284,7 +269,6 @@ export default function NotificationsScreen() {
   const handleDeleteNotifications = async (type: 'all' | 'read') => {
     if (!userdoc?.id) return;
 
-    // --- MODIFIED: Removed 'all' type logic from here as it's replaced ---
     const title = 'حذف الإشعارات المقروءة';
     const message = 'هل أنت متأكد أنك تريد حذف جميع الإشعارات المقروءة؟';
 
@@ -299,10 +283,14 @@ export default function NotificationsScreen() {
           onPress: async () => {
             setIsDeleting(true);
             try {
-              const notificationsRef = db.collection("users").doc(userdoc.id).collection("notifications");
-              const q = notificationsRef.where('isRead', '==', true);
+              // --- MODIFIED: Use native SDK for querying and batch writing ---
+              const notificationsQuery = firestore()
+                .collection("users")
+                .doc(userdoc.id)
+                .collection("notifications")
+                .where('isRead', '==', true);
 
-              const querySnapshot = await q.get();
+              const querySnapshot = await notificationsQuery.get();
 
               if (querySnapshot.empty) {
                 Alert.alert('لا يوجد شيء للحذف', 'لم يتم العثور على إشعارات مقروءة للحذف.');
@@ -310,7 +298,7 @@ export default function NotificationsScreen() {
                 return;
               }
 
-              const batch = db.batch();
+              const batch = firestore().batch();
               querySnapshot.forEach((doc) => {
                 batch.delete(doc.ref);
               });
@@ -330,7 +318,6 @@ export default function NotificationsScreen() {
     );
   };
 
-  // --- MODIFIED: New function to mark all notifications as read ---
   const handleMarkAllAsRead = async () => {
     if (!userdoc?.id || !hasUnreadNotifications) return;
 
@@ -345,19 +332,23 @@ export default function NotificationsScreen() {
           onPress: async () => {
             setIsMarkingAsRead(true);
             try {
-              const notificationsRef = db.collection("users").doc(userdoc.id).collection("notifications");
-              const q = notificationsRef.where('isRead', '==', false);
+              // --- MODIFIED: Use native SDK for querying and batch writing ---
+              const notificationsQuery = firestore()
+                .collection("users")
+                .doc(userdoc.id)
+                .collection("notifications")
+                .where('isRead', '==', false);
 
-              const querySnapshot = await q.get();
+              const querySnapshot = await notificationsQuery.get();
 
               if (querySnapshot.empty) {
                 setIsMarkingAsRead(false);
                 return;
               }
 
-              const batch = db.batch();
+              const batch = firestore().batch();
               querySnapshot.forEach((doc) => {
-                batch.update(doc.ref, { isRead: true, readAt: new Date() });
+                batch.update(doc.ref, { isRead: true, readAt: firestore.FieldValue.serverTimestamp() });
               });
 
               await batch.commit();
@@ -374,82 +365,24 @@ export default function NotificationsScreen() {
     );
   };
 
-  const handleMediaPress = useCallback((url: string) => {
-    setSelectedMediaUrl(url);
-    setModalVisible(true);
-  }, []);
-
-  const closeMediaModal = () => {
-    setModalVisible(false);
-    setSelectedMediaUrl(null);
-  };
-
-  // --- Unchanged Media Functions (saveFile, handleDownload) ---
-  const saveFile = async (fileUri: string, fileName: string, mimeType?: string) => {
-    if (Platform.OS === 'android') {
-      try {
-        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-        if (permissions.granted) {
-          const base64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
-          await FileSystem.StorageAccessFramework.createFileAsync(permissions.directoryUri, fileName, mimeType || 'application/octet-stream')
-            .then(async (newFileUri) => {
-              await FileSystem.writeAsStringAsync(newFileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
-            })
-            .catch((e) => {
-              console.error(e);
-              Alert.alert('خطأ', 'حدث خطأ أثناء إنشاء الملف.');
-            });
-        } else {
-          await shareAsync(fileUri, { dialogTitle: 'مشاركة أو حفظ هذا الملف' });
+  const handleMediaPress = useCallback((item: Notification) => {
+    // Navigate the same way as notification press
+    if (item.source === 'serviceRequest' || item.source === 'info') {
+      router.push({
+        pathname: "/tasks/[id]",
+        params: {
+          id: item.id,
+          showActions: 'true'
         }
-      } catch (e) {
-        console.error(e);
-        Alert.alert('خطأ', 'حدث خطأ أثناء حفظ الملف.');
-        await shareAsync(fileUri, { dialogTitle: 'مشاركة أو حفظ هذا الملف' }).catch(shareError => console.error(shareError));
-      }
+      })
+    } else if (item.source === 'announcement') {
+      router.push(`/announcements/${item.id}`);
     } else {
-      await shareAsync(fileUri, { dialogTitle: 'مشاركة أو حفظ هذا الملف' });
+      console.warn(`No navigation route defined for notification source: ${item.source}`);
     }
-  };
+  }, [router]);
 
-  const handleDownload = async (url?: string) => {
-    const downloadUrl = url || selectedMediaUrl;
-    if (!downloadUrl) return;
-
-    closeMediaModal();
-
-    const fileExtension = downloadUrl.split('.').pop()?.split('?')[0] || 'tmp';
-    const fileName = `download-${Date.now()}.${fileExtension}`;
-    const tempFileUri = FileSystem.cacheDirectory + fileName;
-
-    setDownloadProgress(0);
-    setDownloadInfo({ fileName, totalSize: 0 });
-    setDownloadDialogVisible(true);
-
-    const downloadResumable = FileSystem.createDownloadResumable(
-      downloadUrl,
-      tempFileUri,
-      {},
-      (progress) => {
-        const percentage = progress.totalBytesWritten / progress.totalBytesExpectedToWrite;
-        setDownloadProgress(percentage);
-      }
-    );
-
-    try {
-      const result = await downloadResumable.downloadAsync();
-      if (result) {
-        setDownloadDialogVisible(false);
-        await saveFile(result.uri, fileName, result.mimeType);
-      } else {
-        throw new Error('فشل التحميل: لم يتم إرجاع نتيجة.');
-      }
-    } catch (error) {
-      console.error(error);
-      setDownloadDialogVisible(false);
-      Alert.alert('خطأ', 'لا يمكن تحميل الملف.');
-    }
-  };
+  // --- Removed Media Modal and Download Functions ---
   // ---
 
   const renderItem = useCallback(
@@ -476,14 +409,12 @@ export default function NotificationsScreen() {
   return (
     <ThemedView style={styles.container}>
       {notifications.length > 0 && (
-        // --- MODIFIED: Header buttons ---
         <View style={styles.headerContainer}>
           <TouchableOpacity
             style={[styles.deleteButton, !hasReadNotifications && styles.disabledButton]}
             onPress={() => handleDeleteNotifications('read')}
             disabled={!hasReadNotifications || isDeleting}
           >
-            <Ionicons name="trash-bin-outline" size={18} color={!hasReadNotifications ? theme.textSecondary : theme.destructive} />
             <ThemedText style={[styles.deleteButtonText, { color: !hasReadNotifications ? theme.textSecondary : theme.destructive }]}>
               حذف المقروءة
             </ThemedText>
@@ -520,45 +451,7 @@ export default function NotificationsScreen() {
         />
       </Animated.View>
 
-      <Modal visible={isModalVisible} transparent={true} animationType="fade">
-        <View style={styles.modalContainer}>
-          <TouchableOpacity style={styles.modalCloseButton} onPress={closeMediaModal}>
-            <Ionicons name="close-circle" size={32} color={theme.white} />
-          </TouchableOpacity>
-          {selectedMediaUrl && (
-            isVideoUrl(selectedMediaUrl) ? (
-              <Video
-                source={{ uri: selectedMediaUrl }}
-                style={styles.modalMedia}
-                resizeMode="contain"
-                useNativeControls
-                shouldPlay
-              />
-            ) : (
-              <Image source={{ uri: selectedMediaUrl }} style={styles.modalMedia} resizeMode="contain" />
-            )
-          )}
-          <TouchableOpacity style={styles.modalDownloadButton} onPress={() => handleDownload()}>
-            <Ionicons name="download-outline" size={24} color={theme.white} style={{ marginRight: 8 }} />
-            <ThemedText style={{ color: theme.white, fontWeight: 'bold' }}>تحميل</ThemedText>
-          </TouchableOpacity>
-        </View>
-      </Modal>
 
-      <Modal visible={downloadDialogVisible} transparent={true} animationType="fade">
-        <View style={styles.dialogContainer}>
-          <View style={styles.dialogContent}>
-            <ThemedText style={styles.dialogTitle}>جاري التحميل...</ThemedText>
-            {downloadInfo && <ThemedText style={styles.dialogText}>{downloadInfo.fileName}</ThemedText>}
-            <View style={styles.progressBarContainer}>
-              <View style={[styles.progressBar, { width: `${downloadProgress * 100}%` }]} />
-            </View>
-            <ThemedText style={styles.dialogText}>{`${Math.round(downloadProgress * 100)}%`}</ThemedText>
-          </View>
-        </View>
-      </Modal>
-
-      {/* --- MODIFIED: Loading modal for both deleting and marking as read --- */}
       <Modal visible={isDeleting || isMarkingAsRead} transparent={true} animationType="fade">
         <View style={styles.dialogContainer}>
           <View style={styles.dialogContent}>
@@ -698,37 +591,6 @@ const getStyles = (theme: Theme, themeName: 'light' | 'dark') =>
     },
     announcementImage: {
       width: '100%',
-    },
-    playIconOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    modalContainer: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.9)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    modalMedia: {
-      width: '100%',
-      height: '80%',
-    },
-    modalCloseButton: {
-      position: 'absolute',
-      top: Platform.OS === 'ios' ? 60 : 40,
-      right: 20,
-      zIndex: 1,
-    },
-    modalDownloadButton: {
-      position: 'absolute',
-      bottom: Platform.OS === 'ios' ? 60 : 40,
-      backgroundColor: theme.primary,
-      paddingVertical: 12,
-      paddingHorizontal: 24,
-      borderRadius: 30,
-      flexDirection: 'row',
-      alignItems: 'center',
     },
     dialogContainer: {
       flex: 1,

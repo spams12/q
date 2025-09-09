@@ -5,10 +5,10 @@ import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
 import { ServiceRequest } from '@/lib/types';
 import { Ionicons } from '@expo/vector-icons';
+import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { useScrollToTop } from '@react-navigation/native';
 import { liteClient as algoliasearch } from 'algoliasearch/lite';
 import { useRouter } from 'expo-router';
-import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   InstantSearch,
@@ -521,7 +521,7 @@ export default function Taskscreen() {
   const [isUsersLoading, setIsUsersLoading] = useState(true);
   const [isTeamsLoading, setIsTeamsLoading] = useState(true);
   const [statusCounts, setStatusCounts] = useState<StatusCounts>({ open: 0, pending: 0, closed: 0 });
-  const indexName = 'hello';
+  const indexName = sortOrder === 'asc' ? 'hello_asc' : 'hello';
 
   // State and handler for tab switching
   const [isTabSwitching, setIsTabSwitching] = useState(false);

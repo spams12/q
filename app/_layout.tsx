@@ -1,11 +1,11 @@
 // src/app/_layout.tsx
 
+import { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
   AppState,
@@ -206,6 +206,7 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseAuthTypes.
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="tasks/[id]" options={{ headerShown: false }} />
+
         <Stack.Screen name="announcements/[id]" options={{
           title: 'الاعلانات',
           headerTitleAlign: 'center',
@@ -229,6 +230,14 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseAuthTypes.
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="family" options={{ headerBackTitle: "رجوع", title: "العائلة" }} />
         <Stack.Screen name="about" options={{ headerBackTitle: "رجوع", }} />
+        <Stack.Screen name="create-post" options={{ headerShown: false }} />
+        <Stack.Screen name="post-detail" options={{ headerShown: false }} />
+        <Stack.Screen name="backpack" options={{
+          headerBackTitle: "رجوع",
+          headerTitle: "الحقيبة"
+        }} />
+
+
         <Stack.Screen name="invoices" options={{
           headerBackTitle: "رجوع",
           headerTitle: "الفواتير"

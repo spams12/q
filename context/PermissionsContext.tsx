@@ -1,7 +1,5 @@
-"use client"
-
-import { User } from "@/lib/types";
-import { collection, doc, getDoc, getDocs, limit, query, where } from "firebase/firestore";
+import { User } from "@/lib/types"; // Assuming this type definition is still valid
+import firestore from '@react-native-firebase/firestore';
 import {
   createContext,
   ReactNode,
@@ -9,8 +7,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import useFirebaseAuth from "../hooks/use-firebase-auth";
-import { db } from "../lib/firebase";
+import useFirebaseAuth from "../hooks/use-firebase-auth"; // Assuming this hook is adapted for react-native-firebase/auth
 
 // Define all possible permissions as constants
 export const PERMISSIONS = {
@@ -191,7 +188,7 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   const [isCurrentUserTeamLeader, setIsCurrentUserTeamLeader] = useState<boolean>(false);
   const [userdoc, setUserDoc] = useState<User | null>(null);
   const [realuserUid, setrealuserUid] = useState<string | null>(null);
-
+  const [unsubscribe, setUnsubscribe] = useState<(() => void) | null>(null); // ✨ Added unsubscribe function
 
   const fetchUserPermissionsAndInfo = async () => {
     if (!user) {
@@ -209,12 +206,12 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
     setLoading(true);
 
     try {
-      const q = query(
-        collection(db, "users"),
-        where("email", "==", user.email),
-        limit(1)
-      );
-      const querySnapshot = await getDocs(q);
+      // MODIFIED: Switched to react-native-firebase query syntax
+      const querySnapshot = await firestore()
+        .collection('users')
+        .where('email', '==', user.email)
+        .limit(1)
+        .get();
 
       if (!querySnapshot.empty) {
         const userDocSnapshot = querySnapshot.docs[0];
@@ -230,11 +227,18 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
 
         if (teamId) {
           try {
-            const teamDocRef = doc(db, "teams", teamId);
-            const teamDocSnap = await getDoc(teamDocRef);
-            if (teamDocSnap.exists()) {
+            // MODIFIED: Switched to react-native-firebase doc fetching
+            const teamDocRef = firestore().collection('teams').doc(teamId);
+            const teamDocSnap = await teamDocRef.get();
+
+            // MODIFIED: Changed .exists() to .exists
+            if (teamDocSnap.exists) {
               const teamData = teamDocSnap.data();
-              setIsCurrentUserTeamLeader(teamData.leaderId === (userDocData.uid as string || user.uid));
+              if (teamData) {
+                setIsCurrentUserTeamLeader(teamData.leaderId === (userDocData.uid as string || user.uid));
+              } else {
+                setIsCurrentUserTeamLeader(false);
+              }
             } else {
               console.warn(`Team document with ID ${teamId} not found.`);
               setIsCurrentUserTeamLeader(false);
@@ -299,6 +303,41 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // ✨ Added real-time listener for user document
+  const subscribeToUserDocument = () => {
+    if (!user) {
+      return null;
+    }
+
+    const unsubscribeListener = firestore()
+      .collection('users')
+      .where('email', '==', user.email)
+      .limit(1)
+      .onSnapshot(
+        (querySnapshot) => {
+          if (!querySnapshot.empty) {
+            const userDocSnapshot = querySnapshot.docs[0];
+            const userDocData = userDocSnapshot.data();
+            const docId = userDocSnapshot.id;
+            setUserName((userDocData.name as string) || user.displayName || null);
+            setUserDoc({ ...userDocData, id: docId } as User);
+            
+            // Update other state variables as needed
+            setUserUid(docId || user.uid);
+            setrealuserUid(user.uid);
+            
+            const teamId = userDocData.teamId as string | null;
+            setCurrentUserTeamId(teamId);
+          }
+        },
+        (error) => {
+          console.error("Error subscribing to user document:", error);
+        }
+      );
+      
+    return unsubscribeListener;
+  };
+
   useEffect(() => {
     if (authLoading) {
       setLoading(true);
@@ -311,11 +350,30 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
       setIsCurrentUserTeamLeader(false);
       return;
     }
+    
+    // Clean up previous subscription
+    if (unsubscribe) {
+      unsubscribe();
+      setUnsubscribe(null);
+    }
+    
     fetchUserPermissionsAndInfo();
+    
+    // Set up real-time listener
+    const newUnsubscribe = subscribeToUserDocument();
+    if (newUnsubscribe) {
+      setUnsubscribe(() => newUnsubscribe);
+    }
   }, [user, authLoading]);
 
   const refreshUser = async () => {
-    await fetchUserPermissionsAndInfo();
+    try {
+      await fetchUserPermissionsAndInfo();
+    } catch (error) {
+      console.error("Error refreshing user data:", error);
+      // Re-throw the error so it can be handled by the caller
+      throw error;
+    }
   };
 
   const hasPermission = (permission: string) => {

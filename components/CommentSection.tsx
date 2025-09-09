@@ -3,16 +3,18 @@ import { format, formatDistanceToNowStrict, isSameDay, isToday, isYesterday } fr
 import { arSA } from 'date-fns/locale';
 import { BlurView } from 'expo-blur';
 import * as FileSystem from 'expo-file-system';
+import { Image, ImageLoadEventData } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as MediaLibrary from 'expo-media-library';
 import { shareAsync } from 'expo-sharing';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   FlatList,
-  Image,
   Linking,
   Modal,
   Platform,
@@ -22,16 +24,19 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-// Import Gesture Handler and Reanimated
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  runOnJS,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
-import { usePermissions } from '@/context/PermissionsContext';
 import { useTheme } from '../context/ThemeContext';
 import { Comment, User } from '../lib/types';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-const calculatedWidth = screenWidth * 0.8;
 
 // --- Helper functions (unchanged) ---
 const getAvatarFallback = (name: string = 'مستخدم غير معروف') => {
@@ -80,6 +85,194 @@ interface CommentSectionProps {
   currentUserId: string;
 }
 
+interface MediaItem {
+  type: 'image' | 'video';
+  url: string;
+  comment: Comment;
+}
+
+// --- MODIFIED COMPONENT: MediaRenderer ---
+const MediaRenderer = ({ item, index, activeIndex, modalPlayer, setScrollEnabled }: any) => {
+  const PAN_SPEED_MULTIPLIER = 2.0;
+
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
+  const isActive = index === activeIndex;
+
+  const [imageAspectRatio, setImageAspectRatio] = useState<number>(1);
+
+  const scale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedScale = useSharedValue(1);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  useEffect(() => {
+    if (!isActive) {
+      scale.value = 1;
+      translateX.value = 0;
+      translateY.value = 0;
+      savedScale.value = 1;
+      savedTranslateX.value = 0;
+      savedTranslateY.value = 0;
+      setImageAspectRatio(1);
+    }
+  }, [isActive, scale, translateX, translateY, savedScale, savedTranslateX, savedTranslateY]);
+
+  useAnimatedReaction(
+    () => scale.value,
+    (currentScale, previousScale) => {
+      if (currentScale > 1 && previousScale && previousScale <= 1) {
+        runOnJS(setScrollEnabled)(false);
+      } else if (currentScale <= 1 && previousScale && previousScale > 1) {
+        runOnJS(setScrollEnabled)(true);
+      }
+    }
+  );
+
+  // --- THIS ANIMATED STYLE IS NOW APPLIED TO THE CONTAINER ---
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  const getContainerDimensions = (aspectRatio: number) => {
+    const maxWidth = screenWidth * 0.9;
+    const maxHeight = screenHeight * 0.9;
+
+    let width, height;
+
+    if (aspectRatio > 1) {
+      width = Math.min(maxWidth, maxHeight * aspectRatio);
+      height = width / aspectRatio;
+    } else {
+      height = Math.min(maxHeight, maxWidth / aspectRatio);
+      width = height * aspectRatio;
+    }
+
+    width = Math.max(width, 200);
+    height = Math.max(height, 200);
+
+    return { width, height };
+  };
+
+  const zoomGesture = useMemo(() => {
+    const doubleTapGesture = Gesture.Tap()
+      .numberOfTaps(2)
+      .maxDuration(250)
+      .onEnd(() => {
+        'worklet';
+        const FILL_SCALE = 2.0;
+        const MAX_SCALE = 3.5;
+        const isAtBase = Math.abs(scale.value - 1) < 0.01;
+        const isAtFill = Math.abs(scale.value - FILL_SCALE) < 0.01;
+
+        if (isAtBase) {
+          scale.value = withTiming(FILL_SCALE);
+          savedScale.value = FILL_SCALE;
+        } else if (isAtFill) {
+          scale.value = withTiming(MAX_SCALE);
+          savedScale.value = MAX_SCALE;
+        } else {
+          scale.value = withTiming(1);
+          savedScale.value = 1;
+          translateX.value = withTiming(0);
+          translateY.value = withTiming(0);
+          savedTranslateX.value = 0;
+          savedTranslateY.value = 0;
+        }
+      });
+
+    const pinchGesture = Gesture.Pinch()
+      .onUpdate((event) => {
+        const newScale = savedScale.value * event.scale;
+        scale.value = Math.max(1, Math.min(newScale, 5));
+      })
+      .onEnd(() => {
+        savedScale.value = scale.value;
+      });
+
+    const panGesture = Gesture.Pan()
+      .averageTouches(true)
+      .onUpdate((event) => {
+        if (scale.value > 1) {
+          translateX.value = savedTranslateX.value + event.translationX * PAN_SPEED_MULTIPLIER;
+          translateY.value = savedTranslateY.value + event.translationY * PAN_SPEED_MULTIPLIER;
+        }
+      })
+      .onEnd(() => {
+        savedTranslateX.value = translateX.value;
+        savedTranslateY.value = translateY.value;
+      });
+
+    const composedGesture = Gesture.Simultaneous(panGesture, pinchGesture);
+    return Gesture.Exclusive(doubleTapGesture, composedGesture);
+  }, [scale, savedScale, translateX, savedTranslateX, translateY, savedTranslateY]);
+
+  if (item.type === 'image') {
+    const containerDimensions = getContainerDimensions(imageAspectRatio);
+
+    return (
+      <View style={styles.fullscreenContainer}>
+        <GestureDetector gesture={zoomGesture}>
+          {/* --- MODIFICATION START --- */}
+          {/* The animatedStyle is now applied here, to the container */}
+          <Animated.View
+            style={[
+              styles.mediaViewerContainer,
+              containerDimensions,
+              { borderRadius: 30, overflow: 'hidden' },
+              animatedStyle, // <-- MOVED THE STYLE HERE
+            ]}
+            collapsable={false}
+          >
+            {/* The Image component no longer needs to be animated directly */}
+            <Image
+              source={{ uri: item.url }}
+              style={[
+                styles.mediaViewerElement,
+                { resizeMode: 'cover' }, // animatedStyle was removed from here
+              ]}
+              onLoad={(event) => {
+                const { width, height } = event.nativeEvent.source;
+                if (height > 0) {
+                  setImageAspectRatio(width / height);
+                }
+              }}
+            />
+          </Animated.View>
+          {/* --- MODIFICATION END --- */}
+        </GestureDetector>
+      </View>
+    );
+  }
+
+  if (item.type === 'video') {
+    return (
+      <View style={styles.fullscreenContainer}>
+        <View style={[styles.mediaViewerContainer, { borderRadius: 30, overflow: 'hidden' }]}>
+          {isActive ? (
+            <VideoView
+              player={modalPlayer}
+              style={styles.mediaViewerElement}
+
+            />
+          ) : (
+            <View style={{ flex: 1, backgroundColor: 'black' }} />
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  return null;
+};
+
+
 const AttachmentVideoPreview: React.FC<{ mediaUrl: string; style: any }> = ({ mediaUrl, style }) => {
   const player = useVideoPlayer(mediaUrl, (p) => {
     p.muted = true;
@@ -93,35 +286,54 @@ const AutoSizedImage: React.FC<{
   resizeMode?: 'cover' | 'contain' | 'stretch' | 'repeat' | 'center';
 }> = ({ uri, style, resizeMode = 'contain' }) => {
   const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    if (uri) {
-      Image.getSize(
-        uri,
-        (width, height) => {
-          if (height > 0) {
-            setAspectRatio(width / height);
-          } else {
-            setAspectRatio(1);
-          }
-        },
-        () => {
-          setAspectRatio(1); // Fallback to square on error
-        }
-      );
+  const handleLoad = (event: ImageLoadEventData) => {
+    const { width, height } = event.source;
+    if (height > 0) {
+      setAspectRatio(width / height);
+    } else {
+      setAspectRatio(1);
     }
-  }, [uri]);
-
-  if (aspectRatio === null) {
-    return <View style={[style, { height: 250, backgroundColor: '#f0f0f0', borderRadius: 12 }]} />;
-  }
+  };
 
   return (
-    <Image
-      source={{ uri }}
-      style={[style, { aspectRatio }]}
-      resizeMode={resizeMode}
-    />
+    <View
+      style={[
+        style,
+        {
+          backgroundColor: 'black',
+          justifyContent: 'center',
+          alignItems: 'center',
+          overflow: 'hidden',
+        },
+        aspectRatio
+          ? { aspectRatio }
+          : { height: 250 },
+      ]}
+    >
+      <Image
+        source={{ uri }}
+        style={{ width: '100%', height: '100%' }}
+        resizeMode={resizeMode}
+        onLoadStart={() => setIsLoading(true)}
+        onLoad={handleLoad}
+        onLoadEnd={() => setIsLoading(false)}
+        onError={() => {
+          setIsLoading(false);
+          setAspectRatio(1);
+        }}
+        transition={250}
+      />
+
+      {isLoading && (
+        <ActivityIndicator
+          style={StyleSheet.absoluteFill}
+          color="#ffffff"
+          size="large"
+        />
+      )}
+    </View>
   );
 };
 
@@ -132,156 +344,88 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   currentUserId,
 }) => {
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [allImages, setAllImages] = useState<string[]>([]);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const { theme } = useTheme();
   const styles = getStyles(theme);
-  const { currentUserTeamId } = usePermissions()
+
   const [selectedCommentInfo, setSelectedCommentInfo] = useState<{
     userName: string;
     userPhoto?: string;
     formattedTimestamp: string;
   } | null>(null);
 
+  const [isModalScrolling, setIsModalScrolling] = useState(true);
+
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloadDialogVisible, setDownloadDialogVisible] = useState(false);
   const [downloadInfo, setDownloadInfo] = useState({ fileName: '', totalSize: 0 });
 
-  // Use RNAnimated for the existing modal animation
   const scaleAnim = useRef(new RNAnimated.Value(0)).current;
 
-  // Reanimated shared values for pinch-to-zoom and pan
-  const scale = useSharedValue(1);
-  const savedScale = useSharedValue(1);
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const savedTranslateX = useSharedValue(0);
-  const savedTranslateY = useSharedValue(0);
-
-  // Define the pinch gesture
-  const pinchGesture = Gesture.Pinch()
-    .onUpdate((e) => {
-      scale.value = savedScale.value * e.scale;
-    })
-    .onEnd(() => {
-      if (scale.value < 1) {
-        // Animate back to original size and reset translation
-        scale.value = withTiming(1);
-        savedScale.value = 1;
-        translateX.value = withTiming(0);
-        translateY.value = withTiming(0);
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
-      } else {
-        savedScale.value = scale.value;
-      }
-    });
-
-  // Define the pan gesture
-  const panGesture = Gesture.Pan()
-    .onUpdate((e) => {
-      // Only pan if zoomed in
-      if (scale.value <= 1) {
-        return;
-      }
-      translateX.value = savedTranslateX.value + e.translationX;
-      translateY.value = savedTranslateY.value + e.translationY;
-    })
-    .onEnd(() => {
-      if (scale.value <= 1) {
-        return;
-      }
-
-      // Calculate image dimensions based on styles (hardcoded aspect ratio for now)
-      const imageWidth = calculatedWidth;
-      const imageHeight = imageWidth / (9 / 16);
-
-      const scaledWidth = imageWidth * scale.value;
-      const scaledHeight = imageHeight * scale.value;
-
-      // Calculate maximum translation boundaries to keep the image on screen
-      const maxTx = scaledWidth > screenWidth ? (scaledWidth - screenWidth) / 2 : 0;
-      const maxTy = scaledHeight > screenHeight ? (scaledHeight - screenHeight) / 2 : 0;
-
-      // Clamp translation values to stay within boundaries
-      let clampedX = Math.max(-maxTx, Math.min(maxTx, translateX.value));
-      let clampedY = Math.max(-maxTy, Math.min(maxTy, translateY.value));
-
-      // Animate to the clamped position
-      translateX.value = withTiming(clampedX, { duration: 100 });
-      translateY.value = withTiming(clampedY, { duration: 100 });
-
-      // Save the final clamped position
-      savedTranslateX.value = clampedX;
-      savedTranslateY.value = clampedY;
-    });
-
-  // Define the double-tap gesture to toggle zoom
-  const doubleTap = Gesture.Tap()
-    .numberOfTaps(2)
-    .maxDuration(250)
-    .onStart(() => {
-      'worklet';
-      if (scale.value > 1) {
-        // If already zoomed, zoom out and reset position
-        scale.value = withTiming(1);
-        translateX.value = withTiming(0);
-        translateY.value = withTiming(0);
-        savedScale.value = 1;
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
-      } else {
-        // If not zoomed, zoom in to a fixed factor
-        const zoomFactor = 2;
-        scale.value = withTiming(zoomFactor);
-        savedScale.value = zoomFactor;
-      }
-    });
-
-  // Compose pinch and pan gestures to run simultaneously
-  const composedGesture = Gesture.Simultaneous(pinchGesture, panGesture);
-
-  // Use Exclusive to prioritize the double-tap gesture.
-  // If the double-tap fails, the pinch/pan gestures can activate.
-  const imageGesture = Gesture.Exclusive(doubleTap, composedGesture);
-
-
-  // Animated style for the image, including scale and translation
-  const animatedImageStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: scale.value },
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-    ],
-  }));
-
-  const modalPlayer = useVideoPlayer(selectedVideo || '', (player) => {
-    if (selectedVideo) {
-      player.play();
-      player.loop = true;
-    }
+  const modalPlayer = useVideoPlayer(null, (player) => {
+    player.loop = true;
   });
 
-  const onViewableItemsChanged = useCallback(({ viewableItems }) => {
+  const getUser = (userId: string) => users.find(u => u.id === userId);
+
+  const sortedComments = useMemo(() =>
+    comments
+      .slice()
+      .sort((a, b) => getCommentDate(a.timestamp).getTime() - getCommentDate(b.timestamp).getTime()),
+    [comments]
+  );
+
+  const allMedia: MediaItem[] = useMemo(() => {
+    const media: MediaItem[] = [];
+    sortedComments.forEach(comment => {
+      comment.attachments?.forEach(att => {
+        const isImage = att.fileType === 'image' || (/\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
+        const isVideo = att.fileType === 'video' || (/\.(mp4|mov|avi|mkv)$/i.test(att.fileName));
+        if ((isImage || isVideo) && att.fileUrl) {
+          media.push({
+            type: isImage ? 'image' : 'video',
+            url: att.fileUrl,
+            comment: comment,
+          });
+        }
+      });
+    });
+    return media;
+  }, [sortedComments]);
+
+  const selectedMediaIndexRef = useRef<number | null>(null);
+  useEffect(() => {
+    selectedMediaIndexRef.current = selectedMediaIndex;
+  }, [selectedMediaIndex]);
+
+  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: any[] }) => {
     if (viewableItems.length > 0) {
       const newIndex = viewableItems[0].index;
-      if (typeof newIndex === 'number') {
-        setSelectedImageIndex(newIndex);
-        if (allImages[newIndex]) {
-          setSelectedImage(allImages[newIndex]);
+      if (typeof newIndex === 'number' && newIndex !== selectedMediaIndexRef.current) {
+        const currentItem = allMedia[newIndex];
+        if (!currentItem) return;
+
+        setSelectedMediaIndex(newIndex);
+        setIsModalScrolling(true); // Re-enable scrolling when swiping
+
+        const user = getUser(currentItem.comment.userId);
+        const isCurrentUser = currentItem.comment.userId === currentUserId;
+        const commentDate = getCommentDate(currentItem.comment.timestamp);
+        setSelectedCommentInfo({
+          userName: isCurrentUser ? 'You' : user?.name || 'مستخدم غير معروف',
+          userPhoto: user?.photoURL,
+          formattedTimestamp: formatDistanceToNowStrict(commentDate, { addSuffix: true, locale: arSA }),
+        });
+
+        if (currentItem.type === 'video') {
+          modalPlayer.replaceAsync(currentItem.url);
+          modalPlayer.play();
+        } else {
+          modalPlayer.pause();
         }
-        // Reset scale and translation when swiping to a new image
-        scale.value = 1;
-        savedScale.value = 1;
-        translateX.value = 0;
-        translateY.value = 0;
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
       }
     }
-  }, [allImages, scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY]);
+  }, [allMedia, getUser, currentUserId, modalPlayer]);
 
   const viewabilityConfig = { viewAreaCoveragePercentThreshold: 50 };
 
@@ -297,22 +441,13 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 
   useEffect(() => {
     if (!modalVisible) {
-      setSelectedImage(null);
-      setSelectedVideo(null);
-      setAllImages([]);
-      setSelectedImageIndex(0);
-      setSelectedCommentInfo(null);
       modalPlayer.pause();
+      modalPlayer.replaceAsync(null);
+      setSelectedCommentInfo(null);
       scaleAnim.setValue(0);
-      // Reset zoom and pan state when modal closes
-      scale.value = 1;
-      savedScale.value = 1;
-      translateX.value = 0;
-      translateY.value = 0;
-      savedTranslateX.value = 0;
-      savedTranslateY.value = 0;
+      setIsModalScrolling(true);
     }
-  }, [modalVisible, modalPlayer, scaleAnim, scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY]);
+  }, [modalVisible, modalPlayer, scaleAnim]);
 
   const saveToGallery = async (fileUri: string) => {
     try {
@@ -334,7 +469,9 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   };
 
   const handleDownload = async (url?: string) => {
-    const downloadUrl = url || selectedImage || selectedVideo;
+    const currentMediaItem = allMedia[selectedMediaIndex];
+    const downloadUrl = url || currentMediaItem?.url;
+
     if (!downloadUrl) {
       Alert.alert('خطأ', 'لم يتم تحديد أي ملف للتحميل.');
       return;
@@ -380,7 +517,9 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   };
 
   const handleShare = async () => {
-    const url = selectedImage || selectedVideo;
+    const currentMediaItem = allMedia[selectedMediaIndex];
+    const url = currentMediaItem?.url;
+
     if (!url) return;
     try {
       const fileExtension = url.split('.').pop()?.split('?')[0] || 'tmp';
@@ -393,56 +532,29 @@ const CommentSection: React.FC<CommentSectionProps> = ({
     }
   };
 
+  const handleMediaPress = (mediaUrl: string) => {
+    const initialIndex = allMedia.findIndex(media => media.url === mediaUrl);
+    if (initialIndex === -1) return;
 
-  const getUser = (userId: string) => users.find(u => u.id === userId);
+    setSelectedMediaIndex(initialIndex);
 
-  const sortedComments = useMemo(() =>
-    comments
-      .slice()
-      .sort((a, b) => getCommentDate(a.timestamp).getTime() - getCommentDate(b.timestamp).getTime()),
-    [comments]
-  );
-
-  const openMediaModal = (comment: Comment) => {
-    const user = getUser(comment.userId);
-    const isCurrentUser = comment.userId === currentUserId;
-    const commentDate = getCommentDate(comment.timestamp);
-
-    let displayName = user?.name || 'مستخدم غير معروف';
-    let displayPhoto = user?.photoURL;
-
-    if (!isCurrentUser && user && user.teamId !== currentUserTeamId) {
-      // Different team → use role instead of name, no photo
-      displayName = user.role || 'عضو فريق';
-      displayPhoto = undefined;
-    }
+    const initialMediaItem = allMedia[initialIndex];
+    const user = getUser(initialMediaItem.comment.userId);
+    const isCurrentUser = initialMediaItem.comment.userId === currentUserId;
+    const commentDate = getCommentDate(initialMediaItem.comment.timestamp);
 
     setSelectedCommentInfo({
-      userName: isCurrentUser ? 'You' : displayName,
-      userPhoto: displayPhoto,
+      userName: isCurrentUser ? 'You' : user?.name || 'مستخدم غير معروف',
+      userPhoto: user?.photoURL,
       formattedTimestamp: formatDistanceToNowStrict(commentDate, { addSuffix: true, locale: arSA }),
     });
+
+    if (initialMediaItem.type === 'video') {
+      modalPlayer.replaceAsync(initialMediaItem.url);
+      modalPlayer.play();
+    }
+
     setModalVisible(true);
-  };
-
-  const handleImagePress = (imageUrl: string, images: string[], index: number, comment: Comment) => {
-    if (!imageUrl || !Array.isArray(images) || images.length === 0) return;
-    const validIndex = Math.max(0, Math.min(index, images.length - 1));
-
-    setSelectedImage(imageUrl);
-    setSelectedVideo(null);
-    setAllImages(images);
-    setSelectedImageIndex(validIndex);
-    openMediaModal(comment);
-  };
-
-  const handleVideoPress = (videoUrl: string, comment: Comment) => {
-    if (!videoUrl) return;
-    setSelectedVideo(videoUrl);
-    setSelectedImage(null);
-    setAllImages([]);
-    setSelectedImageIndex(0);
-    openMediaModal(comment);
   };
 
   const closeModal = () => {
@@ -475,6 +587,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 
   return (
     <View style={styles.container}>
+      {/* Download Dialog Modal */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -499,6 +612,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
         </View>
       </Modal>
 
+      {/* Main Media Viewer Modal */}
       <Modal
         animationType="none"
         transparent={true}
@@ -521,43 +635,33 @@ const CommentSection: React.FC<CommentSectionProps> = ({
               tint="dark"
               style={StyleSheet.absoluteFill}
             />
-            {selectedImage ? (
+            {allMedia.length > 0 && (
               <FlatList
-                data={allImages}
-                renderItem={({ item }) => (
-                  <GestureDetector gesture={imageGesture}>
-                    <View style={styles.fullscreenContainer}>
-                      <Animated.Image
-                        source={{ uri: item }}
-                        style={[styles.mediaContent, animatedImageStyle]}
-                        resizeMode="contain"
-                      />
-                    </View>
-                  </GestureDetector>
+                data={allMedia}
+                renderItem={({ item, index }) => (
+                  <MediaRenderer
+                    item={item}
+                    index={index}
+                    activeIndex={selectedMediaIndex}
+                    modalPlayer={modalPlayer}
+                    setScrollEnabled={setIsModalScrolling}
+                  />
                 )}
-                keyExtractor={(item, index) => `${item}_${index}`}
+                keyExtractor={(item) => item.url}
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
-                initialScrollIndex={selectedImageIndex}
+                initialScrollIndex={selectedMediaIndex}
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
+                scrollEnabled={isModalScrolling}
                 getItemLayout={(data, index) => ({
                   length: screenWidth,
                   offset: screenWidth * index,
                   index,
                 })}
               />
-            ) : selectedVideo ? (
-              <View style={styles.fullscreenContainer}>
-                <VideoView
-                  player={modalPlayer}
-                  style={styles.mediaContent}
-                  allowsFullscreen={false}
-                  allowsPictureInPicture={false}
-                />
-              </View>
-            ) : null}
+            )}
 
             <LinearGradient
               colors={['rgba(0,0,0,0.7)', 'transparent']}
@@ -594,10 +698,10 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                 </TouchableOpacity>
               </View>
             </View>
-            {allImages.length > 1 && (
+            {allMedia.length > 1 && (
               <View style={styles.progressContainer}>
-                {allImages.map((_, index) => (
-                  <View key={index} style={[styles.progressBar, index === selectedImageIndex && styles.progressBarActive]} />
+                {allMedia.map((_, index) => (
+                  <View key={index} style={[styles.progressBar, index === selectedMediaIndex && styles.progressBarActive]} />
                 ))}
               </View>
             )}
@@ -605,6 +709,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
         </GestureHandlerRootView>
       </Modal>
 
+      {/* Comment list */}
       <View style={styles.commentsList}>
         {sortedComments.length === 0 ? (
           <View style={styles.emptyCommentsContainer}>
@@ -618,14 +723,8 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             if (!user) {
               console.warn(`User data not found for userId: "${comment.userId}". Comment ID: ${comment.id}. Displaying fallback name.`);
             }
-            let userName = user?.name || comment.userName || 'مستخدم غير معروف';
-            let userPhoto = user?.photoURL;
-
-            if (!isCurrentUser && user && user.teamId !== currentUserTeamId) {
-              // Different team → role instead of name, no photo
-              userName = user.role || 'عضو فريق';
-              userPhoto = undefined;
-            } const isCurrentUser = comment.userId === currentUserId;
+            const userName = user?.name || comment.userName || 'مستخدم غير معروف';
+            const isCurrentUser = comment.userId === currentUserId;
             const commentDate = getCommentDate(comment.timestamp);
 
             let dateHeader = null;
@@ -640,11 +739,10 @@ const CommentSection: React.FC<CommentSectionProps> = ({
               );
             }
 
-            const isImageOnlyComment = !comment.content?.trim() && !comment.location && comment.attachments?.length > 0 &&
-              comment.attachments.every(att => att.fileType === 'image' || (/\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName)));
+            const isImageOnlyComment = !comment.content?.trim() && !comment.location && !!comment.attachments?.length &&
+              comment.attachments?.every(att => att.fileType === 'image' || (/\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName))) || false;
             const isLocationOnlyComment = !comment.content?.trim() && !comment.attachments?.length && !!comment.location;
-            const commentImages = comment.attachments?.filter(att => att.fileType === 'image' || /\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName))
-              .map(att => att.fileUrl).filter((url): url is string => !!url) || [];
+
 
             return (
               <React.Fragment key={comment.id}>
@@ -661,8 +759,8 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                   <View style={[styles.messageRow, isCurrentUser ? styles.messageRowRight : styles.messageRowLeft]}>
                     {!isCurrentUser && (
                       <View style={styles.avatarContainer}>
-                        {userPhoto ? (
-                          <Image source={{ uri: userPhoto }} style={styles.avatar} />
+                        {user?.photoURL ? (
+                          <Image source={{ uri: user.photoURL }} style={styles.avatar} />
                         ) : (
                           <View style={[styles.avatar, styles.avatarFallback]}>
                             <Text style={styles.avatarFallbackText}>{getAvatarFallback(userName)}</Text>
@@ -695,11 +793,8 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                               <TouchableOpacity
                                 key={att.id || attIndex}
                                 onPress={() => {
-                                  if (isImage && mediaUrl) {
-                                    const currentImageIndex = commentImages.indexOf(mediaUrl);
-                                    handleImagePress(mediaUrl, commentImages, currentImageIndex >= 0 ? currentImageIndex : 0, comment);
-                                  } else if (isVideo && mediaUrl) {
-                                    handleVideoPress(mediaUrl, comment);
+                                  if ((isImage || isVideo) && mediaUrl) {
+                                    handleMediaPress(mediaUrl);
                                   } else if (mediaUrl) {
                                     handleDownload(mediaUrl);
                                   }
@@ -780,7 +875,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 };
 
 const getStyles = (theme: any) => StyleSheet.create({
-  // --- All styles are unchanged ---
   container: { flex: 1, backgroundColor: theme.background },
   commentsList: { paddingVertical: 10, paddingHorizontal: 10 },
   messageRow: { flexDirection: 'row', marginBottom: 15, maxWidth: '85%', alignItems: 'flex-end', gap: 8 },
@@ -790,8 +884,8 @@ const getStyles = (theme: any) => StyleSheet.create({
   avatar: { width: 36, height: 36, borderRadius: 18 },
   avatarFallback: { justifyContent: 'center', alignItems: 'center', backgroundColor: theme.primary },
   avatarFallbackText: { color: theme.white, fontWeight: '600', fontSize: 12 },
-  commentBubble: { paddingVertical: 10, paddingHorizontal: 15, borderRadius: 20, maxWidth: '100%', overflow: 'hidden' },
-  unwrappedContentBubble: { padding: 0, backgroundColor: 'transparent', shadowOpacity: 0, elevation: 0, borderRadius: 12 },
+  commentBubble: { paddingVertical: 10, paddingHorizontal: 15, borderRadius: 25, maxWidth: '100%', overflow: 'hidden' },
+  unwrappedContentBubble: { padding: 0, backgroundColor: 'transparent', shadowOpacity: 0, elevation: 0, borderRadius: 20 },
   currentUserBubble: { backgroundColor: theme.currentUserBubble, borderBottomRightRadius: 5 },
   otherUserBubble: { backgroundColor: theme.otherUserBubble, borderBottomLeftRadius: 5, borderWidth: theme.themeName === 'light' ? StyleSheet.hairlineWidth : 0, borderColor: theme.border },
   userName: { fontWeight: '600', fontSize: 13, color: theme.primary, marginBottom: 4, textAlign: 'left' },
@@ -801,8 +895,8 @@ const getStyles = (theme: any) => StyleSheet.create({
   attachmentsContainer: { marginTop: 8, gap: 8 },
   attachmentItem: { borderRadius: 12, overflow: 'hidden' },
   imageAttachmentContainer: { position: 'relative', justifyContent: 'center', alignItems: 'center' },
-  attachmentImage: { width: screenWidth * 0.6, height: 250, borderRadius: 12, backgroundColor: theme.inputBackground },
-  fullWidthImage: { width: screenWidth * 0.6, backgroundColor: 'transparent', borderRadius: 12 },
+  attachmentImage: { width: screenWidth * 0.4, height: 250, borderRadius: 12, backgroundColor: theme.inputBackground },
+  fullWidthImage: { width: screenWidth * 0.4, backgroundColor: 'transparent', borderRadius: 12 },
   imageOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
   videoOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
   fileAttachment: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.inputBackground, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: theme.border, width: screenWidth * 0.65 },
@@ -847,13 +941,18 @@ const getStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  mediaContent: {
-    width: calculatedWidth,
-    height: 'auto',
-    aspectRatio: 9 / 16,
-    maxHeight: screenHeight * 0.9,
-    borderRadius: 12,
-    backgroundColor: 'transparent',
+  mediaViewerContainer: {
+    // NOTE: The width and height are now set dynamically in the component
+    // based on aspect ratio, but we keep the other properties here.
+    borderRadius: 30,
+    overflow: 'hidden',
+    backgroundColor: 'black',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mediaViewerElement: {
+    width: '100%',
+    height: '100%',
   },
   headerGradient: {
     position: 'absolute',

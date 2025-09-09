@@ -1,4 +1,4 @@
-import { FontAwesome, FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { FontAwesome, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { Tabs, router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Image, LayoutAnimation, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -129,10 +129,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="stock-management"
         options={{
-          title: 'الحقيبة',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="backpack" size={size} color={color} />
-          ),
+          title: 'community',
+          tabBarIcon: ({ color, size }) => <FontAwesome name="users" size={24} color={color} />,
         }}
       />
 

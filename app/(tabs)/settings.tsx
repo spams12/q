@@ -4,12 +4,11 @@ import { UseDialog } from '@/context/DialogContext';
 import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
-import auth from '@react-native-firebase/auth';
-import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
 import React, { Children, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -197,8 +196,24 @@ const SettingsPage = () => {
     const latestClearTime = (userdoc?.lastClearTimes && userdoc.lastClearTimes.length > 0)
       ? userdoc.lastClearTimes.reduce((latest, current) => (current.seconds > latest.seconds ? current : latest))
       : null;
-    const timeString = latestClearTime ? latestClearTime.toDate().toISOString() : new Date(0).toISOString();
-    const dateString = latestClearTime ? new Intl.DateTimeFormat('ar-IQ', { year: 'numeric', month: 'long', day: 'numeric' }).format(latestClearTime.toDate()) : 'لا توجد تصفية سابقة';
+
+    // Fixed date handling for iOS compatibility
+    let timeString = new Date(0).toISOString();
+    let dateString = 'لا توجد تصفية سابقة';
+
+    if (latestClearTime) {
+      try {
+        // Convert Firebase Timestamp to JavaScript Date properly for iOS
+        const date = new Date(latestClearTime.seconds * 1000 + latestClearTime.nanoseconds / 1000000);
+        timeString = date.toISOString();
+        dateString = new Intl.DateTimeFormat('ar-IQ', { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
+      } catch (error) {
+        console.error('Error converting timestamp:', error);
+        timeString = new Date(0).toISOString();
+        dateString = 'لا توجد تصفية سابقة';
+      }
+    }
+
     return { latestClearTimeString: timeString, formattedDate: dateString };
   }, [userdoc]);
 
@@ -275,11 +290,17 @@ const SettingsPage = () => {
     if (activeSession) {
       cleanupTimer();
       timerIntervalRef.current = setInterval(() => {
-        const now = new Date();
-        const start = (activeSession.logInTime as Timestamp).toDate();
-        const secondsElapsed = Math.floor((now.getTime() - start.getTime()) / 1000);
-        setElapsedTime(formatDuration(secondsElapsed));
-      }, 1000);
+        try {
+          // Fixed date handling for iOS compatibility
+          const now = new Date();
+          const start = new Date(activeSession.logInTime.seconds * 1000 + activeSession.logInTime.nanoseconds / 1000000);
+          const secondsElapsed = Math.floor((now.getTime() - start.getTime()) / 1000);
+          setElapsedTime(formatDuration(secondsElapsed));
+        } catch (error) {
+          console.error('Error calculating elapsed time:', error);
+          setElapsedTime('00:00:00');
+        }
+      }, 1000) as unknown as NodeJS.Timeout;
     } else {
       setElapsedTime('00:00:00');
       cleanupTimer();
@@ -460,6 +481,8 @@ const SettingsPage = () => {
   const goToInvoices = useCallback(() => router.push('/invoices'), [router]);
   const goToFamily = useCallback(() => router.push('/family'), [router]);
   const goToAbout = useCallback(() => router.push('/about'), [router]);
+  const goToBackpack = useCallback(() => router.push('/backpack'), [router]);
+
 
   if (!userdoc) {
     return (
@@ -561,7 +584,9 @@ const SettingsPage = () => {
         </SettingsGroup>
 
         <SettingsGroup styles={styles}>
+          <SettingRow styles={styles} icon="back-" title="الحقيبة" onPress={goToBackpack} iconColor="#FF69B4" />
           <SettingRow styles={styles} icon="people-circle-outline" title="عائله القبس" onPress={goToFamily} iconColor="#FF69B4" />
+
           <SettingRow styles={styles} icon="information-circle-outline" title="حول التطبيق" onPress={goToAbout} iconColor="#00BCD4" />
           <TouchableOpacity onPress={showLogoutDialog} style={styles.logoutButtonRow}>
             <View style={[styles.iconContainer, { backgroundColor: theme.destructive }]}>

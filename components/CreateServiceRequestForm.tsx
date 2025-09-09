@@ -1,10 +1,10 @@
 import { usePermissions } from "@/context/PermissionsContext";
 import { zodResolver } from "@hookform/resolvers/zod";
+import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { collection, doc, getDocs, query, serverTimestamp, setDoc, Timestamp, where } from "firebase/firestore";
-import { getDownloadURL, getStorage, ref, uploadBytesResumable } from "firebase/storage";
 import {
   ArrowLeftCircle,
   CheckCircle2,
@@ -54,7 +54,7 @@ export interface Comment {
   userId: string;
   userName: string;
   content: string;
-  timestamp: Timestamp | string;
+  timestamp: FirebaseFirestoreTypes.Timestamp | string;
   attachments?: CommentAttachment[];
   isStatusChange?: boolean;
   oldStatus?: string;
@@ -215,7 +215,7 @@ const Select = ({ label, options, selectedValue, onValueChange, placeholder, dis
         animationType="fade"
         statusBarTranslucent={Platform.OS === 'android'}
       >
-        <Pressable style={styles.modalOverlay} onPressIn={handleClose}>
+        <Pressable style={styles.selectModalOverlay} onPressIn={handleClose}>
           <View style={styles.selectModalContent} onStartShouldSetResponder={() => true}>
             <ScrollView keyboardShouldPersistTaps="handled">
               {filteredOptions.map(option => (
@@ -484,8 +484,7 @@ export default function CreateServiceRequestForm({
       if (!currentUserTeamId) return;
       try {
         setIsLoadingPackageTypes(true);
-        const q = query(collection(db, "invoice-settings"), where("teamId", "==", currentUserTeamId));
-        const snapshot = await getDocs(q);
+        const snapshot = await db.collection("invoice-settings").where("teamId", "==", currentUserTeamId).get();
         if (!snapshot.empty) {
           const data = snapshot.docs[0].data();
           setPackageTypes(data.packageTypes || []);
@@ -500,8 +499,7 @@ export default function CreateServiceRequestForm({
     const fetchZones = async () => {
       if (!currentUserTeamId) return;
       try {
-        const q = query(collection(db, "zones"), where("teamId", "==", currentUserTeamId));
-        const snapshot = await getDocs(q);
+        const snapshot = await db.collection("zones").where("teamId", "==", currentUserTeamId).get();
         const zonesData = snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name })) as { id: string, name: string }[];
         setZones(zonesData.sort((a, b) => a.name.localeCompare(b.name)));
       } catch (error) { console.error("Error fetching zones:", error); }
@@ -513,7 +511,7 @@ export default function CreateServiceRequestForm({
     const fetchAllTeams = async () => {
       try {
         setIsLoadingTeams(true);
-        const teamsSnapshot = await getDocs(collection(db, "teams"));
+        const teamsSnapshot = await db.collection("teams").get();
         const teamsData = teamsSnapshot.docs
           .map(doc => ({ id: doc.id, name: doc.data().name as string }))
           .filter(team => team.id !== currentUserTeamId); // Don't allow transfer to self
@@ -662,45 +660,35 @@ export default function CreateServiceRequestForm({
     try {
       const generateNumericId = () => Math.floor(10000000 + Math.random() * 90000000).toString();
       const ticketId = generateNumericId();
-      const storage = getStorage();
+      const firebaseStorage = storage();
       const uploadedAttachments: CommentAttachment[] = [];
       for (let i = 0; i < attachments.length; i++) {
         const fileAsset = attachments[i];
         const uploadedFileCount = i;
         const uniqueFileName = `${Date.now()}_${fileAsset.name}`;
-        const storageRef = ref(storage, `tickets/${ticketId}/comment-attachments/${uniqueFileName}`);
+        const storageRef = firebaseStorage.ref(`tickets/${ticketId}/comment-attachments/${uniqueFileName}`);
         const response = await fetch(fileAsset.uri);
         const blob = await response.blob();
-        const uploadTask = uploadBytesResumable(storageRef, blob);
-        await new Promise<void>((resolve, reject) => {
-          uploadTask.on('state_changed',
-            (snapshot) => {
-              const currentFileProgress = snapshot.bytesTransferred / snapshot.totalBytes;
-              const overallProgress = (uploadedFileCount + currentFileProgress) / totalFiles;
-              setUploadProgress(prev => ({
-                ...prev, progress: overallProgress, currentFile: i + 1,
-                statusMessage: `جاري رفع ${i + 1} من ${totalFiles}...`,
-              }));
-            },
-            (error) => { console.error("فشل الرفع", fileAsset.name, error); reject(error); },
-            async () => {
-              const progressAfterCompletion = (uploadedFileCount + 1) / totalFiles;
-              setUploadProgress(prev => ({ ...prev, progress: progressAfterCompletion }));
-              const fileUrl = await getDownloadURL(uploadTask.snapshot.ref);
-              uploadedAttachments.push({
-                id: `attachment_${Date.now()}_${uuidv4().slice(0, 8)}`,
-                fileUrl, fileName: fileAsset.name, fileType: getFileTypeCategory(fileAsset.mimeType), fileSize: fileAsset.size,
-              });
-              resolve();
-            }
-          );
-        });
+        const uploadTask = storageRef.put(blob);
+        try {
+          await uploadTask;
+          const progressAfterCompletion = (uploadedFileCount + 1) / totalFiles;
+          setUploadProgress(prev => ({ ...prev, progress: progressAfterCompletion }));
+          const fileUrl = await storageRef.getDownloadURL();
+          uploadedAttachments.push({
+            id: `attachment_${Date.now()}_${uuidv4().slice(0, 8)}`,
+            fileUrl, fileName: fileAsset.name, fileType: getFileTypeCategory(fileAsset.mimeType), fileSize: fileAsset.size,
+          });
+        } catch (error) {
+          console.error("فشل الرفع", fileAsset.name, error);
+          throw error;
+        }
       }
       setUploadProgress(prev => ({ ...prev, progress: 1, statusMessage: "جاري انشاء التكت...", }));
       const timestamp = new Date().toISOString();
       const initialComment: Comment = {
         id: `comment_${Date.now()}`, userId: realuserUid, userName: userName,
-        timestamp: timestamp, attachments: uploadedAttachments,
+        content: "", timestamp: timestamp, attachments: uploadedAttachments,
       };
       let department: string | null = null;
       let assignedUserList: string[] = [];
@@ -733,7 +721,7 @@ export default function CreateServiceRequestForm({
           customerEmail: values.customerEmail || "",
         }),
         title: values.title, description: values.description, type: values.type, status: "مفتوح",
-        priority: values.priority, date: serverTimestamp(), createdAt: serverTimestamp(), lastUpdated: timestamp,
+        priority: values.priority, date: firestore.FieldValue.serverTimestamp(), createdAt: firestore.FieldValue.serverTimestamp(), lastUpdated: timestamp,
         assignedUsers: assignedUserList, creatorId: realuserUid, creatorName: userName, senttouser: false, deleted: false,
         comments: uploadedAttachments.length > 0 ? [initialComment] : [], teamId: ticketTeamIds
       };
@@ -744,7 +732,7 @@ export default function CreateServiceRequestForm({
           packageType: sub.packageType, price: sub.price, serviceType: sub.serviceType, isPaid: false,
         }));
       }
-      await setDoc(doc(db, "serviceRequests", ticketId), ticketData);
+      await db.collection("serviceRequests").doc(ticketId).set(ticketData);
       reset();
       setSelectedUserIds([]);
       setSelectedTransferTeamId(null);
