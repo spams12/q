@@ -15,12 +15,9 @@ import { shareAsync } from 'expo-sharing';
 // --- NEW: Expo Video Imports ---
 import { VideoView, useVideoPlayer } from 'expo-video';
 // --- Expo Router and React Native Imports ---
-import { router } from 'expo-router';
-// --- MODIFICATION START ---
-// 1. Import useRef from React and useScrollToTop from @react-navigation/native
 import { useScrollToTop } from '@react-navigation/native';
+import { router } from 'expo-router';
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
-// --- MODIFICATION END ---
 import {
   ActivityIndicator,
   Alert,
@@ -35,7 +32,6 @@ import {
   View
 } from 'react-native';
 import 'react-native-get-random-values';
-// --- MODIFICATION: Removed useSafeAreaInsets since insets are not used in the code ---
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 

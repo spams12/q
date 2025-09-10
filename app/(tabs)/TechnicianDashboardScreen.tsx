@@ -29,6 +29,7 @@ import { CheckCircle, Clock, Inbox, ListChecks, Search, TrendingDown, TrendingUp
 
 // CONTEXT & TYPES
 import { UseDialog } from "@/context/DialogContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { useTheme } from "../../context/ThemeContext";
 import useAuth from "../../hooks/use-firebase-auth"; // Assuming this hook is updated to use @react-native-firebase/auth
 import { ServiceRequest } from "../../lib/types";
@@ -158,7 +159,8 @@ const TechnicianStatCards = React.memo(({ tickets, styles, currentUserDocId }: {
       </View>
     </View>
   );
-});
+})
+
 TechnicianStatCards.displayName = 'TechnicianStatCards';
 
 
@@ -233,7 +235,7 @@ const TicketItem: React.FC<TicketItemProps> = React.memo(({ ticket, currentUserD
               </View>
             </View>
             <Text style={styles.ticketCustomer}>العميل: {ticket.customerName}</Text>
-            <Text style={styles.ticketDate}>تاريخ الإنشاء: {formatTimestamp(ticket.date)}</Text>
+            <Text style={styles.ticketDate}>تاريخ الإنشاء: {formatTimestamp(ticket.createdAt)}</Text>
 
           </View>
 
@@ -333,10 +335,10 @@ const PerformanceSummaryCard = ({ tasks, styles, theme }: { tasks: ServiceReques
         <StatInfoCard
           title="متوسط وقت الإنجاز"
           value={formatDuration(averageCompletionTime)}
-          icon={<Clock size={20} color="#4A5568" />}
-          backgroundColor="#F7FAFC"
-          iconColor="#E2E8F0"
-          textColor="#2D3748"
+          icon={<Clock size={20} color="#FFFFFF" />}
+          backgroundColor="#F59E0B"
+          iconColor="rgba(0, 0, 0, 0.2)"
+          textColor="#000000"
           styles={styles}
         />
         <StatInfoCard
@@ -426,7 +428,7 @@ interface ListHeaderProps {
   selectedTab: "all" | "pending" | "completed" | "rejected";
   handleTabChange: (tab: "all" | "pending" | "completed" | "rejected") => void;
   styles: any;
-  currentUserDocId: string | null;
+  userdoc: any;
   theme: any;
 }
 
@@ -437,7 +439,7 @@ const ListHeader = React.memo(({
   selectedTab,
   handleTabChange,
   styles,
-  currentUserDocId,
+  userdoc,
   theme
 }: ListHeaderProps) => (
   <View style={styles.dashboardContainer}>
@@ -445,7 +447,7 @@ const ListHeader = React.memo(({
       <Text adjustsFontSizeToFit numberOfLines={1} style={styles.dashboardTitle}>الاحصائيات</Text>
       <Text adjustsFontSizeToFit numberOfLines={1} style={styles.dashboardSubtitle}>مرحباً بك، تتبع مهامك وأدائك</Text>
     </View>
-    <TechnicianStatCards tickets={tasks} styles={styles} currentUserDocId={currentUserDocId} />
+    <TechnicianStatCards tickets={tasks} styles={styles} currentUserDocId={userdoc?.id || null} />
     <PerformanceSummaryCard tasks={tasks} styles={styles} theme={theme} />
 
     <View style={styles.taskListContainer}>
@@ -505,6 +507,7 @@ const mapDocToServiceRequest = (docSnap: FirebaseFirestoreTypes.DocumentSnapshot
 
 function TechnicianDashboardScreen() {
   const { showDialog } = UseDialog()
+  const { userdoc } = usePermissions();
 
   const { theme } = useTheme();
   const { width } = useWindowDimensions();
@@ -513,7 +516,7 @@ function TechnicianDashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { user } = useAuth();
-  const [currentUserDocId, setCurrentUserDocId] = useState<string | null>(null);
+  // const [currentUserDocId, setCurrentUserDocId] = useState<string | null>(null);
   const router = useRouter();
   const isFocused = useIsFocused();
 
@@ -521,15 +524,15 @@ function TechnicianDashboardScreen() {
   const [searchTerm, setSearchTerm] = useState("");
 
   // MODIFIED: Switched to react-native-firebase query syntax
-  const fetchUserDocId = useCallback(async () => {
-    if (!user?.email) return null;
-    const usersSnapshot = await firestore()
-      .collection("users")
-      .where("email", "==", user.email)
-      .get();
-    if (usersSnapshot.empty) return null;
-    return usersSnapshot.docs[0].id;
-  }, [user]);
+  // const fetchUserDocId = useCallback(async () => {
+  //   if (!user?.email) return null;
+  //   const usersSnapshot = await firestore()
+  //     .collection("users")
+  //     .where("email", "==", user.email)
+  //     .get();
+  //   if (usersSnapshot.empty) return null;
+  //   return usersSnapshot.docs[0].id;
+  // }, [user]);
 
   // MODIFIED: Switched to react-native-firebase query syntax
   const fetchTasks = useCallback(async (userDocId: string) => {
@@ -537,7 +540,6 @@ function TechnicianDashboardScreen() {
       const querySnapshot = await firestore()
         .collection("serviceRequests")
         .where("assignedUsers", "array-contains", userDocId)
-        .orderBy("date", "desc")
         .get();
 
       if (!querySnapshot.empty) {
@@ -555,9 +557,9 @@ function TechnicianDashboardScreen() {
   const loadData = useCallback(async () => {
     if (user) {
       setLoading(true);
-      const docId = await fetchUserDocId();
+      // Use userdoc from PermissionsContext instead of fetching userDocId
+      const docId = userdoc?.id || null;
       if (docId) {
-        setCurrentUserDocId(docId);
         await fetchTasks(docId);
       } else {
         setTasks([]);
@@ -567,7 +569,7 @@ function TechnicianDashboardScreen() {
       setTasks([]);
       setLoading(false);
     }
-  }, [user, fetchUserDocId, fetchTasks]);
+  }, [user, userdoc, fetchTasks]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -596,7 +598,7 @@ function TechnicianDashboardScreen() {
       baseTickets = tasks.filter(ticket => ["مكتمل", "مغلق"].includes(ticket.status));
     } else if (selectedTab === "rejected") {
       baseTickets = tasks.filter(ticket => {
-        const userResponse = ticket.userResponses?.find(r => r.userId === currentUserDocId);
+        const userResponse = ticket.userResponses?.find(r => r.userId === userdoc?.id);
         return userResponse?.response === 'rejected';
       });
     }
@@ -611,17 +613,17 @@ function TechnicianDashboardScreen() {
     }
 
     return baseTickets;
-  }, [tasks, selectedTab, searchTerm, currentUserDocId]);
+  }, [tasks, selectedTab, searchTerm, userdoc]);
 
   const renderItem = useCallback(({ item }: { item: ServiceRequest }) => (
     <TicketItem
       ticket={item}
-      currentUserDocId={currentUserDocId}
+      currentUserDocId={userdoc?.id || null}
       router={router}
       styles={styles}
       theme={theme}
     />
-  ), [currentUserDocId, router, styles, theme]);
+  ), [userdoc, router, styles, theme]);
 
 
 
@@ -660,7 +662,7 @@ function TechnicianDashboardScreen() {
           selectedTab={selectedTab}
           handleTabChange={handleTabChange}
           styles={styles}
-          currentUserDocId={currentUserDocId}
+          userdoc={userdoc}
           theme={theme}
         />}
         ListEmptyComponent={loading ? null : <EmptyList searchTerm={searchTerm} styles={styles} />}

@@ -98,6 +98,7 @@ const DynamicStatusCountsProvider = ({ setStatusCounts, userUid, indexName }) =>
             },
           ]);
           const facets = results[0]?.facets || {};
+          console.log('facets', facets);
           const counts = facets.status || {};
           const closedCount = (counts['مكتمل'] || 0)
           setStatusCounts({
