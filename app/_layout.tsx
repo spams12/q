@@ -206,6 +206,12 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseAuthTypes.
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="tasks/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="invoices/[id]" options={{
+          title: 'الفواتير',
+          headerTitleAlign: 'center',
+          headerBackTitle: "رجوع",
+
+        }} />
 
         <Stack.Screen name="announcements/[id]" options={{
           title: 'الاعلانات',

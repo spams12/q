@@ -222,7 +222,7 @@ const SettingsPage = () => {
 
     const userDocRef = db.collection('users').doc(userdoc.id);
     const unsubscribe = userDocRef.onSnapshot((snapshot) => {
-      if (snapshot.exists) {
+      if (snapshot.exists()) {
         setUserdoc({ id: snapshot.id, ...snapshot.data() } as User);
       } else {
         console.log('User document does not exist');
@@ -239,7 +239,7 @@ const SettingsPage = () => {
 
     const timeTrackingDocRef = db.collection('userTimeTracking').doc(realuserUid);
     const unsubscribe = timeTrackingDocRef.onSnapshot((snapshot) => {
-      if (snapshot.exists) {
+      if (snapshot.exists()) {
         setTimeTrackingData(snapshot.data() as { sessions: any[], totalDurationSeconds: number });
       } else {
         setTimeTrackingData({ sessions: [], totalDurationSeconds: 0 });
@@ -322,10 +322,10 @@ const SettingsPage = () => {
 
       const [userDocSnapshot, timeTrackingSnapshot, invoiceSnapshot] = await Promise.all([userDocPromise, timeTrackingPromise, invoiceSnapshotPromise]);
 
-      if (userDocSnapshot.exists) {
+      if (userDocSnapshot.exists()) {
         setUserdoc({ id: userDocSnapshot.id, ...userDocSnapshot.data() } as User);
       }
-      if (timeTrackingSnapshot.exists) {
+      if (timeTrackingSnapshot.exists()) {
         setTimeTrackingData(timeTrackingSnapshot.data() as { sessions: any[], totalDurationSeconds: number });
       }
 
@@ -390,14 +390,16 @@ const SettingsPage = () => {
 
         if (currentToken) {
           const userDocSnap = await userDocRef.get();
-          if (userDocSnap.exists) {
+          if (userDocSnap.exists()) {
             const userData = userDocSnap.data();
-            const existingTokens = userData.expoPushTokens?.QTM || [];
-            const newTokens = existingTokens.filter((t: string) => t !== currentToken);
-            if (newTokens.length < existingTokens.length) {
-              await userDocRef.update({
-                'expoPushTokens.QTM': newTokens,
-              });
+            if (userData) {
+              const existingTokens = userData.expoPushTokens?.QTM || [];
+              const newTokens = existingTokens.filter((t: string) => t !== currentToken);
+              if (newTokens.length < existingTokens.length) {
+                await userDocRef.update({
+                  'expoPushTokens.QTM': newTokens,
+                });
+              }
             }
           }
         }
@@ -584,7 +586,7 @@ const SettingsPage = () => {
         </SettingsGroup>
 
         <SettingsGroup styles={styles}>
-          <SettingRow styles={styles} icon="back-" title="الحقيبة" onPress={goToBackpack} iconColor="#FF69B4" />
+          <SettingRow styles={styles} icon="bag-outline" title="الحقيبة" onPress={goToBackpack} iconColor="#FF69B4" />
           <SettingRow styles={styles} icon="people-circle-outline" title="عائله القبس" onPress={goToFamily} iconColor="#FF69B4" />
 
           <SettingRow styles={styles} icon="information-circle-outline" title="حول التطبيق" onPress={goToAbout} iconColor="#00BCD4" />

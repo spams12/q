@@ -420,7 +420,7 @@ export default function PostDetailScreen() {
         if (!postIdString) return;
         const unsubscribe = firestore().collection('posts').doc(postIdString)
             .onSnapshot(async (doc) => {
-                if (doc.exists) {
+                if (doc.exists()) {
                     const postData = doc.data();
                     if (!postData) { setLoading(false); return; }
 

@@ -35,18 +35,8 @@ import {
   UserStock,
   UserStockItem
 } from "@/lib/types";
-import {
-  arrayUnion,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  setDoc,
-  updateDoc,
-  where,
-} from "firebase/firestore";
-import InvoiceDetails from "./InvoiceDetails";
+import firestore from "@react-native-firebase/firestore";
+import { useRouter } from 'expo-router'; // Add this import
 import CustomDropdown from "./ui/CustomDropdown";
 
 // --- HELPER FUNCTION & CONSTANTS ---
@@ -405,12 +395,383 @@ interface InvoiceFormProps {
   onSuccess: () => void;
 }
 
+interface InvoiceListProps {
+  invoiceIds?: string[];
+  ticketId: string;
+  subscriberId?: string;
+  onInvoiceAdded: () => void;
+}
+
 function InvoiceForm({
   ticketId,
-  subscriberId,
+  subscriberId: propSubscriberId,
   onCancel,
   onSuccess,
 }: InvoiceFormProps) {
+  // --- NEW DESIGN SYSTEM STYLES ---
+  const getStyles = (theme: Theme, themeName: "light" | "dark") =>
+    StyleSheet.create({
+      // --- Layout & Structure ---
+      container: {
+        flex: 1,
+        backgroundColor: theme.background,
+      },
+      contentContainer: {
+        padding: 16,
+        paddingBottom: 100, // Space for floating footer
+      },
+      centered: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 20,
+        backgroundColor: theme.background,
+      },
+      footer: {
+        flexDirection: "row-reverse",
+        justifyContent: "space-between",
+        alignItems: "center",
+        borderTopColor: theme.border,
+        gap: 5,
+        marginBottom: 15
+      },
+
+      // --- Header ---
+      header: {
+        marginBottom: 5,
+      },
+      headerTitle: {
+        fontSize: 32,
+        fontWeight: "bold",
+        color: theme.text,
+        textAlign: "right",
+      },
+      headerSubtitle: {
+        fontSize: 17,
+        color: theme.textSecondary,
+        textAlign: "right",
+        marginTop: 4,
+      },
+
+      // --- Card ---
+      card: {
+        backgroundColor: theme.card,
+        borderRadius: 14,
+        padding: 16,
+        marginBottom: 20,
+        ...(themeName === "dark"
+          ? {
+            borderWidth: 1,
+            borderColor: theme.border,
+          }
+          : {
+            shadowColor: theme.black,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.05,
+            shadowRadius: 12,
+            elevation: 3,
+          }),
+      },
+      itemFormCard: {
+        borderColor: theme.primary,
+        borderWidth: 1.5,
+      },
+      cardHeader: {
+        flexDirection: "row-reverse",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 16,
+      },
+      cardTitle: {
+        fontSize: 20,
+        fontWeight: "600",
+        color: theme.text,
+        textAlign: "right",
+      },
+
+      // --- Buttons ---
+      button: {
+        flexDirection: "row-reverse",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+        gap: 8,
+      },
+      buttonLarge: {
+        flex: 1,
+        paddingVertical: 14,
+        backgroundColor: "green"
+      },
+      buttonFullWidth: {
+        width: "100%",
+      },
+      buttonText: {
+        color: theme.white,
+        fontSize: 16,
+        fontWeight: "600",
+      },
+      buttonPrimary: { backgroundColor: theme.primary },
+      buttonPrimaryPressed: { opacity: 0.8 },
+      buttonSecondary: { backgroundColor: theme.textSecondary },
+      buttonSecondaryPressed: { opacity: 0.8 },
+      buttonDisabled: { backgroundColor: theme.placeholder, opacity: 0.7 },
+      cancelButton: { padding: 4 },
+      deleteButton: { padding: 8 },
+
+      // --- Forms & Inputs ---
+      label: {
+        fontSize: 15,
+        fontWeight: "500",
+        color: theme.textSecondary,
+        marginBottom: 8,
+        marginTop: 12,
+        textAlign: "right",
+      },
+      input: {
+        backgroundColor: theme.inputBackground,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 10,
+        paddingHorizontal: 14,
+        paddingVertical: Platform.OS === "android" ? 12 : 14,
+        fontSize: 16,
+        color: theme.text,
+        textAlign: "right",
+      },
+      textArea: {
+        minHeight: 100,
+        textAlignVertical: "top",
+      },
+      pickerContainer: {
+        flexDirection: "row-reverse",
+        alignItems: "center",
+        backgroundColor: theme.inputBackground,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 10,
+      },
+      picker: {
+        flex: 1,
+        color: theme.text,
+        borderWidth: 0, // Hide default borders
+        backgroundColor: "transparent",
+        height: 50,
+      },
+      pickerItem: {
+        fontSize: 16,
+        color: theme.text,
+      },
+      pickerIcon: {
+        paddingHorizontal: 14,
+      },
+      inlineInputContainer: {
+        flexDirection: "row-reverse",
+        gap: 16,
+        marginTop: 12,
+      },
+      inlineInput: {
+        flex: 1,
+      },
+
+      // --- Checkbox ---
+      checkboxGroupContainer: {
+        flexDirection: "row-reverse",
+        flexWrap: "wrap",
+        gap: 20,
+        marginTop: 8,
+      },
+      checkboxWrapper: {
+        flexDirection: "row-reverse",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 4,
+      },
+      checkboxBase: {
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+      },
+      checkboxLabel: {
+        fontSize: 16,
+        color: theme.text,
+      },
+      formActions: {
+        marginTop: 24,
+      },
+
+      // --- Item List ---
+      itemListContainer: {
+        marginTop: 8,
+      },
+      itemRow: {
+        flexDirection: "row-reverse",
+        alignItems: "center",
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.border,
+      },
+      itemRowLast: {
+        borderBottomWidth: 0,
+      },
+      itemRowDetails: {
+        flex: 1,
+        marginRight: 12,
+      },
+      itemDescription: {
+        fontSize: 16,
+        fontWeight: "500",
+        color: theme.text,
+        textAlign: "right",
+      },
+      itemMeta: {
+        fontSize: 13,
+        color: theme.textSecondary,
+        textAlign: "right",
+        marginTop: 4,
+      },
+      itemDetail: {
+        fontSize: 14,
+        color: theme.textSecondary,
+        textAlign: "right",
+        marginBottom: 4,
+      },
+      itemTotal: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: theme.text,
+        minWidth: 90,
+        textAlign: "left",
+      },
+      itemContainer: {
+        backgroundColor: theme.inputBackground,
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: theme.border,
+      },
+      totalContainer: {
+        flexDirection: "row-reverse",
+        justifyContent: "space-between",
+        alignItems: "center",
+        borderTopWidth: 1,
+        borderTopColor: theme.border,
+        paddingTop: 16,
+        marginTop: 16,
+      },
+      totalLabel: {
+        fontSize: 17,
+        fontWeight: "bold",
+        color: theme.text,
+      },
+      totalValue: {
+        fontSize: 20,
+        fontWeight: "bold",
+        color: theme.primary,
+      },
+
+      // --- Empty State & Loaders ---
+      emptyStateContainer: {
+        alignItems: "center",
+        paddingVertical: 40,
+      },
+      emptyStateText: {
+        fontSize: 17,
+        color: theme.textSecondary,
+        marginTop: 16,
+        fontWeight: "500",
+      },
+      emptyStateSubText: {
+        fontSize: 14,
+        color: theme.placeholder,
+        marginTop: 6,
+      },
+      loadingText: {
+        marginTop: 12,
+        fontSize: 16,
+        color: theme.textSecondary,
+      },
+      errorText: {
+        fontSize: 20,
+        fontWeight: "600",
+        color: theme.text,
+        textAlign: "center",
+        marginTop: 16,
+      },
+      errorSubText: {
+        fontSize: 16,
+        color: theme.placeholder,
+        textAlign: "center",
+        marginTop: 8,
+        marginBottom: 24,
+      },
+
+      // --- Modal ---
+      modalBackdrop: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+      },
+      modalView: {
+        width: "90%",
+        maxWidth: 400,
+        maxHeight: "85%",
+        backgroundColor: theme.card,
+        borderRadius: 20,
+        padding: 24,
+        alignItems: "center",
+      },
+      modalHeader: {
+        flexDirection: "row-reverse",
+        alignItems: "center",
+        width: "100%",
+        marginBottom: 16,
+        gap: 12,
+      },
+      modalTitle: {
+        fontSize: 20,
+        fontWeight: "bold",
+        color: theme.text,
+      },
+      modalText: {
+        textAlign: "right",
+        fontSize: 16,
+        color: theme.textSecondary,
+        lineHeight: 24,
+        width: "100%",
+        marginBottom: 20,
+      },
+      missingItemsScroll: {
+        width: "100%",
+        maxHeight: 250,
+        marginBottom: 20,
+      },
+      missingItemCard: {
+        backgroundColor: theme.background,
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 10,
+      },
+      missingItemName: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: theme.text,
+        textAlign: "right",
+        marginBottom: 6,
+      },
+      missingItemDetails: {
+        flexDirection: "row-reverse",
+        justifyContent: "space-between",
+      },
+      missingItemDetail: {
+        fontSize: 14,
+        color: theme.placeholder,
+      },
+    });
+
   const { theme, themeName } = useTheme();
   const styles = getStyles(theme, themeName);
   const { user } = useFirebaseAuth();
@@ -531,13 +892,13 @@ function InvoiceForm({
       }
       try {
         setLoadingServiceRequest(true);
-        const serviceRequestRef = doc(db, "serviceRequests", ticketId);
-        let serviceRequestSnap = await getDoc(serviceRequestRef);
+        const serviceRequestRef = firestore().collection("serviceRequests").doc(ticketId);
+        let serviceRequestSnap = await serviceRequestRef.get();
 
         let collectionName = "serviceRequests";
         if (!serviceRequestSnap.exists()) {
-          const newServiceRequestRef = doc(db, "newserviceRequests", ticketId);
-          serviceRequestSnap = await getDoc(newServiceRequestRef);
+          const newServiceRequestRef = firestore().collection("newserviceRequests").doc(ticketId);
+          serviceRequestSnap = await newServiceRequestRef.get();
           if (serviceRequestSnap.exists()) {
             collectionName = "newserviceRequests";
           }
@@ -547,21 +908,33 @@ function InvoiceForm({
         if (serviceRequestSnap.exists()) {
           const data = serviceRequestSnap.data() as ServiceRequest;
           const request: ServiceRequest = {
+            onLocation: data.onLocation || false,
             id: data.id || ticketId,
             customerId: data.customerId || "",
             customerName: data.customerName || "",
+            customerEmail: data.customerEmail || "",
+            customerPhone: data.customerPhone || "",
             title: data.title || "",
             description: data.description || "",
             type: data.type || "مشكلة",
             status: data.status || "مفتوح",
             priority: data.priority || "متوسطة",
-            date: data.date || data.createdAt || "",
+            date: data.date || (data.createdAt ? data.createdAt.toDate().toISOString() : "") || "",
             createdAt: data.createdAt,
             lastUpdated:
-              data.lastUpdated || data.date || data.createdAt || "",
+              data.lastUpdated || (data.createdAt ? data.createdAt.toDate().toISOString() : "") || data.date || "",
+            assignedUsers: data.assignedUsers || [],
+            attachments: data.attachments || [],
+            comments: data.comments || [],
             creatorId: data.creatorId || "",
             creatorName: data.creatorName || "",
+            subscribers: data.subscribers || [],
             subscriberId: data.subscriberId || null,
+            invoiceIds: data.invoiceIds || [],
+            userResponses: data.userResponses || [],
+            completionTimestamp: data.completionTimestamp,
+            onLocationTimestamp: data.onLocationTimestamp,
+            estimatedTime: data.estimatedTime,
           };
 
           setServiceRequest(request);
@@ -587,11 +960,9 @@ function InvoiceForm({
       }
       try {
         setLoadingSettings(true);
-        const settingsQuery = query(
-          collection(db, "invoice-settings"),
-          where("teamId", "==", currentUserTeamId)
-        );
-        const settingsSnap = await getDocs(settingsQuery);
+        const settingsQuery = firestore().collection("invoice-settings")
+          .where("teamId", "==", currentUserTeamId);
+        const settingsSnap = await settingsQuery.get();
 
         if (!settingsSnap.empty) {
           const settingsDoc = settingsSnap.docs[0];
@@ -939,9 +1310,8 @@ function InvoiceForm({
       }
       setLoadingUserStock(true);
       try {
-        const usersCollectionRef = collection(db, "users");
-        const userQuery = query(usersCollectionRef, where("uid", "==", user.uid));
-        const querySnapshot = await getDocs(userQuery);
+        const userQuery = firestore().collection("users").where("uid", "==", user.uid);
+        const querySnapshot = await userQuery.get();
 
         let userNameFromDB;
         let foundStockItems: UserStockItem[] = [];
@@ -982,8 +1352,12 @@ function InvoiceForm({
         setLoadingUserStock(false);
       }
     }
-    fetchUserStock();
-  }, [user]);
+
+    // Only fetch if user object has a stable uid
+    if (user?.uid) {
+      fetchUserStock();
+    }
+  }, [user?.uid]); // Depend only on user.uid, not the entire user object
 
   const checkStockForItem = useCallback(
     (
@@ -1370,15 +1744,12 @@ function InvoiceForm({
       }
 
       if (stockTransactions.length > 0) {
-        const usersCollectionRef = collection(db, "users");
-        const userQueryRef = query(
-          usersCollectionRef,
-          where("uid", "==", user.uid)
-        );
-        const querySnapshot = await getDocs(userQueryRef);
+        const userQueryRef = firestore().collection("users")
+          .where("uid", "==", user.uid);
+        const querySnapshot = await userQueryRef.get();
 
         if (!querySnapshot.empty) {
-          await updateDoc(querySnapshot.docs[0].ref, {
+          await querySnapshot.docs[0].ref.update({
             stockItems: updatedStockItems,
             lastUpdated: timestamp,
           });
@@ -1389,7 +1760,7 @@ function InvoiceForm({
         }
 
         for (const transaction of stockTransactions) {
-          await setDoc(doc(db, "stockTransactions", transaction.id), transaction);
+          await firestore().collection("stockTransactions").doc(transaction.id).set(transaction);
         }
       }
 
@@ -1410,18 +1781,22 @@ function InvoiceForm({
   };
 
   useEffect(() => {
+    // Add guards to prevent unnecessary updates
     if (
       !invoiceSettings ||
       !currentItem ||
       currentItem.type !== "maintenance" ||
       currentItem.maintenanceType !== "connectorReplacement" ||
-      !Array.isArray(currentItem.connectorType)
+      !Array.isArray(currentItem.connectorType) ||
+      currentItem.connectorType.length === 0
     ) {
       return;
     }
 
     const connectorCount = currentItem.connectorType.length;
     let price = 0;
+
+    // Calculate price only if needed
     if (connectorCount > 0) {
       price = currentItem.connectorType.reduce((total, ctName) => {
         const connectorSetting = invoiceSettings.connectorTypes.find(
@@ -1431,12 +1806,20 @@ function InvoiceForm({
       }, 0);
     }
 
-    setCurrentItem((prev) => ({
-      ...prev,
-      unitPrice: price,
-      totalPrice: price * (prev.quantity || 1),
-    }));
-  }, [currentItem, invoiceSettings]);
+    // Only update if the price actually changed
+    if (currentItem.unitPrice !== price) {
+      setCurrentItem((prev) => ({
+        ...prev,
+        unitPrice: price,
+        totalPrice: price * (prev.quantity || 1),
+      }));
+    }
+  }, [
+    currentItem?.type,
+    currentItem?.maintenanceType,
+    currentItem?.connectorType?.length,
+    invoiceSettings
+  ]);
 
   const handleSaveInvoice = async () => {
     if (!db) {
@@ -1523,8 +1906,8 @@ function InvoiceForm({
         type: "invoice",
         teamId: currentUserTeamId || null,
         subscriberId:
-          typeof subscriberId === "string"
-            ? subscriberId
+          typeof propSubscriberId === "string"
+            ? propSubscriberId
             : serviceRequest?.subscriberId || serviceRequest?.customerId,
       };
 
@@ -1537,12 +1920,12 @@ function InvoiceForm({
         return;
       }
 
-      const invoiceRef = doc(db, "invoices", newInvoice.id);
-      await setDoc(invoiceRef, newInvoice);
+      const invoiceRef = firestore().collection("invoices").doc(newInvoice.id);
+      await invoiceRef.set(newInvoice);
 
-      const ticketRef = doc(db, ticketCollectionName, ticketId);
-      await updateDoc(ticketRef, {
-        invoiceIds: arrayUnion(newInvoice.id),
+      const ticketRef = firestore().collection(ticketCollectionName).doc(ticketId);
+      await ticketRef.update({
+        invoiceIds: firestore.FieldValue.arrayUnion(newInvoice.id),
         lastUpdated: new Date().toISOString(),
       });
 
@@ -1554,7 +1937,7 @@ function InvoiceForm({
         timestamp: new Date().toISOString(),
         isStatusChange: true
       };
-      await updateDoc(ticketRef, { comments: arrayUnion(comment) });
+      await ticketRef.update({ comments: firestore.FieldValue.arrayUnion(comment) });
 
       Toast.show({
         type: "success",
@@ -1863,11 +2246,8 @@ function InvoiceForm({
                 styles.buttonPrimary,
                 styles.buttonFullWidth,
                 pressed && styles.buttonPrimaryPressed,
-                missingItems.some((item) => item.type === "general") &&
-                styles.buttonDisabled,
               ]}
               onPress={closeMissingItemsDialog}
-              disabled={missingItems.some((item) => item.type === "general")}
             >
               <Text style={styles.buttonText}>فهمت</Text>
             </Pressable>
@@ -2243,7 +2623,7 @@ const getStyles = (theme: Theme, themeName: "light" | "dark") =>
   });
 
 interface InvoiceListProps {
-  invoiceIds: string[];
+  invoiceIds?: string[];
   ticketId: string;
   subscriberId?: string;
   onInvoiceAdded: () => void;
@@ -2282,23 +2662,20 @@ const getStatusStyle = (
   }
 };
 
-const InvoiceList: React.FC<InvoiceListProps> = ({
-  invoiceIds,
-  ticketId,
-  subscriberId,
-  onInvoiceAdded,
-}) => {
-  const { theme, themeName } = useTheme();
-  const styles = getStyles(theme, themeName);
+const InvoiceList: React.FC<InvoiceListProps> = ({ ticketId, subscriberId, onInvoiceAdded, invoiceIds = [] }) => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const { theme, themeName } = useTheme();
+  const styles = getStyles(theme, themeName);
+  const { userdoc } = usePermissions();
+  const router = useRouter(); // Add router hook
 
   useEffect(() => {
     const fetchInvoices = async () => {
-      if (!invoiceIds || invoiceIds.length === 0) {
+      const ids = invoiceIds || [];
+      if (ids.length === 0) {
         setInvoices([]);
         setLoading(false);
         return;
@@ -2306,12 +2683,12 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
       setLoading(true);
       setError(null);
       try {
-        const invoicePromises = invoiceIds.map((id) =>
-          getDoc(doc(db, "invoices", id))
+        const invoicePromises = ids.map((id) =>
+          firestore().collection("invoices").doc(id).get()
         );
         const invoiceSnaps = await Promise.all(invoicePromises);
         const invoicesData = invoiceSnaps
-          .filter((snap) => snap.exists())
+          .filter((snap) => snap.exists)
           .map((snap) => ({ id: snap.id, ...snap.data() } as Invoice));
         setInvoices(
           invoicesData.sort(
@@ -2328,23 +2705,6 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
     };
     fetchInvoices();
   }, [invoiceIds]);
-
-  if (selectedInvoice) {
-    return (
-      <Modal
-        visible={!!selectedInvoice}
-        animationType="slide"
-        onRequestClose={() => setSelectedInvoice(null)}
-        statusBarTranslucent={Platform.OS === 'android'}
-
-      >
-        <InvoiceDetails
-          invoice={selectedInvoice}
-          onClose={() => setSelectedInvoice(null)}
-        />
-      </Modal>
-    );
-  }
 
   if (showInvoiceForm) {
     return (
@@ -2438,7 +2798,8 @@ const InvoiceList: React.FC<InvoiceListProps> = ({
           return (
             <Pressable
               key={invoice.id}
-              onPress={() => setSelectedInvoice(invoice)}
+              // Update the onPress handler to navigate to the new invoice details page
+              onPress={() => router.push(`/invoices/${invoice.id}` as any)}
               style={({ pressed }) => [
                 styles.card,
                 pressed && { opacity: 0.8 },

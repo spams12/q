@@ -17,7 +17,6 @@ import {
 
 import { Theme, useTheme } from "@/context/ThemeContext";
 import { Invoice } from "@/lib/types";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 interface InvoiceDetailsProps {
   invoice: Invoice;
@@ -344,13 +343,8 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.headerBar}>
-        <Text style={styles.headerTitle}>تفاصيل الفاتورة</Text>
-        <Pressable onPress={onClose}>
-          <Feather name="x" size={24} color={theme.text} />
-        </Pressable>
-      </View>
+    <>
+
       <ScrollView contentContainerStyle={styles.invoiceContent}>
         {/* Invoice Header with Logo */}
         <View style={styles.invoiceHeader}>
@@ -508,7 +502,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
           <Text style={styles.buttonText}>تصدير كـ PDF</Text>
         </Pressable>
       </View>
-    </SafeAreaView>
+    </>
   );
 };
 
