@@ -223,14 +223,16 @@ const SearchHeader = ({ requestView, setRequestView, sortOrder, setSortOrder, on
     <View style={styles.headerContainer}>
       <View style={styles.titleSection}>
         <View style={styles.headerRow}>
-          <Text adjustsFontSizeToFit numberOfLines={1} style={styles.headerTitle}>الطلبات</Text>
+          <Text adjustsFontSizeToFit numberOfLines={1} style={styles.headerTitle}>
+            المهام
+          </Text>
           <View style={[styles.dataSourceIndicator, isRealtime ? styles.realtimeIndicator : styles.searchIndicator]}>
             <Text style={styles.dataSourceIndicatorText}>
               {isRealtime ? 'مباشر' : 'نتائج البحث'}
             </Text>
           </View>
         </View>
-        <Text adjustsFontSizeToFit numberOfLines={1} style={styles.headerSubtitle}>عرض وتصفية الطلبات المرسلة اليك.</Text>
+        <Text adjustsFontSizeToFit numberOfLines={1} style={styles.headerSubtitle}>عرض وتصفية المهام المسندة اليك من قبل قائد الفريق.</Text>
       </View>
       <View style={styles.controlsSection}>
         <View style={styles.controlsContainer}>

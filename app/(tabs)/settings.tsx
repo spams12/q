@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
+import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import React, { Children, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -436,6 +437,7 @@ const SettingsPage = () => {
 
   const handleToggleClock = useCallback(async () => {
     if (!realuserUid) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsActionLoading(true);
     const timeTrackingDocRef = db.collection('userTimeTracking').doc(realuserUid);
 
@@ -568,6 +570,10 @@ const SettingsPage = () => {
           </TouchableOpacity>
         </SettingsGroup>
 
+        <SettingsGroup styles={styles}>
+          <SettingRow styles={styles} icon="bag-outline" title="الحقيبة" onPress={goToBackpack} iconColor="#FF69B4" />
+        </SettingsGroup>
+
         <SettingsGroup title="المعلومات الشخصية" styles={styles}>
           <SettingRow styles={styles} icon="person-outline" title="الاسم الكامل" value={userdoc.name || ''} iconColor="#5856D6" />
           <SettingRow styles={styles} icon="mail-outline" title="البريد الإلكتروني" value={userdoc.email || ''} iconColor="#007AFF" />
@@ -586,7 +592,6 @@ const SettingsPage = () => {
         </SettingsGroup>
 
         <SettingsGroup styles={styles}>
-          <SettingRow styles={styles} icon="bag-outline" title="الحقيبة" onPress={goToBackpack} iconColor="#FF69B4" />
           <SettingRow styles={styles} icon="people-circle-outline" title="عائله القبس" onPress={goToFamily} iconColor="#FF69B4" />
 
           <SettingRow styles={styles} icon="information-circle-outline" title="حول التطبيق" onPress={goToAbout} iconColor="#00BCD4" />

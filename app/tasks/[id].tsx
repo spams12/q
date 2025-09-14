@@ -395,7 +395,7 @@ const TicketDetailPage = () => {
             if (attachmentsToSave.length > 0) {
                 for (const asset of attachmentsToSave) {
                     const attachmentId = `attachment_${timestamp}_${Math.random().toString(36).substring(2, 9)}`;
-                    const storageRef = storage().ref(`tickets/${id}/comment-attachments/${attachmentId}_${asset.name}`);
+                    const storageRef = storage.ref(`tickets/${id}/comment-attachments/${attachmentId}_${asset.name}`);
                     await storageRef.putFile(asset.uri);
                     const fileUrl = await storageRef.getDownloadURL();
 

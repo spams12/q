@@ -1,12 +1,12 @@
+import { Feather } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { Feather } from "@expo/vector-icons";
 
-import { db } from "@/lib/firebase";
 import InvoiceDetails from "@/components/InvoiceDetails";
-import { Invoice } from "@/lib/types";
 import { useTheme } from "@/context/ThemeContext";
+import { db } from "@/lib/firebase";
+import { Invoice } from "@/lib/types";
 import { Pressable } from "react-native";
 
 export default function InvoiceDetailPage() {
@@ -30,8 +30,8 @@ export default function InvoiceDetailPage() {
         // Use React Native Firebase syntax
         const invoiceRef = db.collection("invoices").doc(id);
         const invoiceSnap = await invoiceRef.get();
-        
-        if (invoiceSnap.exists) {
+
+        if (invoiceSnap.exists()) {
           setInvoice({ id: invoiceSnap.id, ...invoiceSnap.data() } as Invoice);
         } else {
           setError("Invoice not found");
@@ -51,7 +51,7 @@ export default function InvoiceDetailPage() {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.background }}>
         <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={{ marginTop: 10, color: theme.text }}>Loading invoice...</Text>
+        <Text style={{ marginTop: 10, color: theme.text }}>تحميل الفواتير...</Text>
       </View>
     );
   }
@@ -65,10 +65,10 @@ export default function InvoiceDetailPage() {
         </Text>
         <Pressable
           onPress={() => router.back()}
-          style={{ 
-            marginTop: 20, 
-            padding: 10, 
-            backgroundColor: theme.primary, 
+          style={{
+            marginTop: 20,
+            padding: 10,
+            backgroundColor: theme.primary,
             borderRadius: 8,
             flexDirection: 'row',
             alignItems: 'center'
@@ -82,9 +82,9 @@ export default function InvoiceDetailPage() {
   }
 
   return (
-    <InvoiceDetails 
-      invoice={invoice} 
-      onClose={() => router.back()} 
+    <InvoiceDetails
+      invoice={invoice}
+      onClose={() => router.back()}
     />
   );
 }

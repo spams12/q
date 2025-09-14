@@ -2,7 +2,7 @@ import { usePermissions } from '@/context/PermissionsContext';
 import { useTheme } from '@/context/ThemeContext';
 import { db } from '@/lib/firebase';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -48,7 +48,18 @@ export interface Invoice {
 
 // Helper to format date for display
 const formatDate = (date: FirebaseFirestoreTypes.Timestamp | Date | string) => {
-  const d = date instanceof firestore.Timestamp ? date.toDate() : new Date(date);
+  let d: Date;
+  
+  if (date instanceof Date) {
+    d = date;
+  } else if (typeof date === 'string') {
+    d = new Date(date);
+  } else {
+    // For Timestamp objects, we extract the milliseconds and create a new Date
+    // This avoids using the deprecated .toDate() method
+    d = new Date(date.toMillis());
+  }
+  
   return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
 };
 
@@ -230,13 +241,10 @@ const InvoicesScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
-
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-
-
         <View style={styles.filterSection}>
           <Text style={styles.sectionTitle}>تصفية حسب التاريخ</Text>
           <ScrollView
@@ -250,17 +258,17 @@ const InvoicesScreen = () => {
             >
               <Text style={[styles.filterText, selectedTime === "all" && styles.filterTextActive]}>الكل</Text>
             </TouchableOpacity>
-            {[...sortedClearTimes].reverse().map((time) => (
+            {sortedClearTimes.map((time) => (
               <TouchableOpacity
                 key={time.toMillis()}
                 style={[styles.filterButton, selectedTime === time.toMillis().toString() && styles.filterButtonActive]}
                 onPress={() => setSelectedTime(time.toMillis().toString())}
               >
                 <Text style={[styles.filterText, selectedTime === time.toMillis().toString() && styles.filterTextActive]}>
-                  حتى {formatDate(time.toDate())}
+                  حتى {formatDate(time)}
                 </Text>
               </TouchableOpacity>
-            ))}
+            )).reverse()}
           </ScrollView>
         </View>
 
@@ -410,7 +418,7 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
     marginBottom: 15,
   },
   customerInfo: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
@@ -420,6 +428,7 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
     color: theme === 'dark' ? '#e2e8f0' : '#2c3e50',
     marginRight: 10,
     flex: 1,
+    textAlign: 'right',
   },
   statusBadge: {
     paddingVertical: 6,
