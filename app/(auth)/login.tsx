@@ -156,12 +156,6 @@ const LoginScreen: React.FC = () => {
   const { showDialog } = UseDialog();
   const router = useRouter();
 
-  // --- NEW: State for the secure 2-Factor Authentication flow ---
-  const [loginStep, setLoginStep] = useState<'credentials' | 'f2a'>('credentials');
-  const [f2aCode, setF2aCode] = useState('');
-  // We only store the UID between steps, not the full login credential
-  const [tempUid, setTempUid] = useState<string | null>(null);
-
   // --- Animations ---
   const logoScale = useSharedValue(1);
   const emailInputScale = useSharedValue(1);
@@ -171,17 +165,8 @@ const LoginScreen: React.FC = () => {
     logoScale.value = withRepeat(withTiming(1.05, { duration: 2500, easing: Easing.bezier(0.4, 0, 0.6, 1) }), -1, true);
   }, [logoScale]);
 
-  // --- MODIFIED: Function to go back to the credentials screen ---
-  // This is simpler now because the user is never logged in during the process.
-  const handleBackToCredentials = () => {
-    setLoginStep('credentials');
-    setTempUid(null);
-    setF2aCode('');
-    setPassword(''); // Optional: clear password for security
-  };
-
-  // --- MODIFIED: Step 1 - Send credentials to backend for validation ---
-  const handleCredentialsSubmit = async () => {
+  // --- Simplified login function ---
+  const handleLogin = async () => {
     Keyboard.dismiss();
     if (!email || !password) {
       showDialog({ status: 'error', message: 'الرجاء إدخال البريد الإلكتروني وكلمة المرور.' });
@@ -190,66 +175,8 @@ const LoginScreen: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Call your backend to validate password and generate a code
-      const backendUrl = 'https://www.alqabas-ftth.com/api/auth';
-      const response = await fetch(backendUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        // Display the specific error message from the backend
-        showDialog({ status: 'error', message: data.message || 'فشلت المصادقة.' });
-        return;
-      }
-
-      setTempUid(data.uid);
-      setLoginStep('f2a');
-
-    } catch (error) {
-      console.error('Credential Submission Error:', error);
-      showDialog({ status: 'error', message: 'فشل الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت.' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // --- MODIFIED: Step 2 - Verify code and perform FINAL login with custom token ---
-  const handleF2aCodeSubmit = async () => {
-    Keyboard.dismiss();
-    if (!f2aCode || !tempUid) {
-      showDialog({ status: 'error', message: 'حدث خطأ غير متوقع، يرجى إعادة المحاولة.' });
-      handleBackToCredentials();
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      // Call backend to verify the code and get a custom login token
-      const backendUrl = 'https://www.alqabas-ftth.com/api/auth/verify-and-login';
-      const response = await fetch(backendUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid: tempUid, code: f2aCode }),
-      });
-
-      const data = await response.json();
-
-      // If code is wrong/expired, the backend will tell us.
-      if (!response.ok || !data.success || !data.token) {
-        showDialog({
-          status: 'error',
-          message: data.message || 'الكود غير صحيح أو انتهت صلاحيته.',
-        });
-        setF2aCode(''); // Clear the incorrect code from the input
-        return;
-      }
-
-      const userCredential = await auth().signInWithCustomToken(data.token);
+      // Sign in directly with email and password
+      const userCredential = await auth().signInWithEmailAndPassword(email.trim(), password);
 
       const usersCollectionRef = firestore().collection('users');
       const querySnapshot = await usersCollectionRef.where('uid', '==', userCredential.user.uid).get();
@@ -257,7 +184,6 @@ const LoginScreen: React.FC = () => {
       if (querySnapshot.empty) {
         await auth().signOut();
         showDialog({ status: 'error', message: 'لم يتم العثور على بيانات المستخدم. يرجى الاتصال بالدعم.' });
-        handleBackToCredentials();
         return;
       }
 
@@ -268,16 +194,25 @@ const LoginScreen: React.FC = () => {
           message: 'تم تسجيل الدخول بنجاح! جاري التوجيه...',
           duration: 1500,
         });
-        router.replace('/(tabs)/');
+        router.replace('/(tabs)');
       } else {
         await auth().signOut(); // Log out if role is not allowed
         showDialog({ status: 'error', message: 'ليس لديك الصلاحية للوصول إلى هذا التطبيق.' });
-        handleBackToCredentials();
       }
 
-    } catch (error) {
-      console.error('2FA Verification/Login Error:', error);
-      showDialog({ status: 'error', message: 'حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى.' });
+    } catch (error: any) {
+      console.error('Login Error:', error);
+      let errorMessage = 'حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى.';
+
+      if (error.code === 'auth/invalid-email') {
+        errorMessage = 'البريد الإلكتروني غير صحيح.';
+      } else if (error.code === 'auth/user-disabled') {
+        errorMessage = 'تم تعطيل هذا الحساب.';
+      } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        errorMessage = 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+      }
+
+      showDialog({ status: 'error', message: errorMessage });
     } finally {
       setIsLoading(false);
     }
@@ -312,88 +247,47 @@ const LoginScreen: React.FC = () => {
               <Ionicons name="logo-electron" size={width * 0.18} color={theme.primary} />
             </Animated.View>
 
-            {/* --- The conditional UI rendering logic is unchanged and works perfectly --- */}
-            {loginStep === 'credentials' ? (
-              <>
-                {/* --- CREDENTIALS INPUT VIEW --- */}
-                <Animated.View entering={FadeInDown.delay(400).duration(800)}>
-                  <ThemedText type="title">تطبيق الصيانة التقنية</ThemedText>
-                  <ThemedText type="subtitle">لشبكة الألياف البصرية</ThemedText>
-                </Animated.View>
+            {/* --- CREDENTIALS INPUT VIEW --- */}
+            <Animated.View entering={FadeInDown.delay(400).duration(800)}>
+              <ThemedText type="title">تطبيق الصيانة التقنية</ThemedText>
+              <ThemedText type="subtitle">لشبكة الألياف البصرية</ThemedText>
+            </Animated.View>
 
-                <Animated.View style={styles.inputContainer} entering={FadeInDown.delay(600).duration(800)}>
-                  <Animated.View style={emailInputAnimatedStyle}>
-                    <View style={styles.inputWrapper}>
-                      <Ionicons name="person-outline" size={22} color={theme.secondary} style={styles.inputIcon} />
-                      <TextInput style={styles.input} placeholder="البريد الإلكتروني" placeholderTextColor={theme.placeholder} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" onFocus={() => emailInputScale.value = withSpring(1.03)} onBlur={() => emailInputScale.value = withSpring(1)} />
-                    </View>
-                  </Animated.View>
-                  <Animated.View style={passwordInputAnimatedStyle}>
-                    <View style={styles.inputWrapper}>
-                      <Ionicons name="shield-checkmark-outline" size={22} color={theme.secondary} style={styles.inputIcon} />
-                      <TextInput style={styles.input} placeholder="كلمة المرور" placeholderTextColor={theme.placeholder} value={password} onChangeText={setPassword} secureTextEntry={!showPassword} onFocus={() => passwordInputScale.value = withSpring(1.03)} onBlur={() => passwordInputScale.value = withSpring(1)} />
-                      <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-                        <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={22} color={theme.secondary} />
-                      </TouchableOpacity>
-                    </View>
-                  </Animated.View>
-                </Animated.View>
-
-                <Animated.View entering={FadeInDown.delay(800).duration(800)}>
-                  <TouchableOpacity style={styles.loginButton} onPress={handleCredentialsSubmit} disabled={isLoading} activeOpacity={0.8}>
-                    <View style={styles.buttonGradient}>
-                      {isLoading ? (
-                        <View style={styles.buttonContent}>
-                          <Ionicons name="sync" size={24} color="black" />
-                          <ThemedText style={styles.buttonText}>جاري الاتصال...</ThemedText>
-                        </View>
-                      ) : (
-                        <View style={styles.buttonContent}>
-                          <Ionicons name="arrow-forward-outline" size={24} color="black" style={styles.buttonIcon} />
-                          <ThemedText style={styles.buttonText}>التالي</ThemedText>
-                        </View>
-                      )}
-                    </View>
+            <Animated.View style={styles.inputContainer} entering={FadeInDown.delay(600).duration(800)}>
+              <Animated.View style={emailInputAnimatedStyle}>
+                <View style={styles.inputWrapper}>
+                  <Ionicons name="person-outline" size={22} color={theme.secondary} style={styles.inputIcon} />
+                  <TextInput style={styles.input} placeholder="البريد الإلكتروني" placeholderTextColor={theme.placeholder} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" onFocus={() => emailInputScale.value = withSpring(1.03)} onBlur={() => emailInputScale.value = withSpring(1)} />
+                </View>
+              </Animated.View>
+              <Animated.View style={passwordInputAnimatedStyle}>
+                <View style={styles.inputWrapper}>
+                  <Ionicons name="shield-checkmark-outline" size={22} color={theme.secondary} style={styles.inputIcon} />
+                  <TextInput style={styles.input} placeholder="كلمة المرور" placeholderTextColor={theme.placeholder} value={password} onChangeText={setPassword} secureTextEntry={!showPassword} onFocus={() => passwordInputScale.value = withSpring(1.03)} onBlur={() => passwordInputScale.value = withSpring(1)} />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                    <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={22} color={theme.secondary} />
                   </TouchableOpacity>
-                </Animated.View>
-              </>
-            ) : (
-              <>
-                {/* --- 2FA CODE INPUT VIEW --- */}
-                <Animated.View entering={FadeInDown.delay(200).duration(800)}>
-                  <ThemedText type="title">التحقق بخطوتين</ThemedText>
-                  <ThemedText type="subtitle">الرجاء إدخال الكود الذي تم تزويدك به</ThemedText>
-                </Animated.View>
+                </View>
+              </Animated.View>
+            </Animated.View>
 
-                <Animated.View style={styles.inputContainer} entering={FadeInDown.delay(400).duration(800)}>
-                  <View style={styles.inputWrapper}>
-                    <Ionicons name="keypad-outline" size={22} color={theme.secondary} style={styles.inputIcon} />
-                    <TextInput style={styles.input} placeholder="ادخل الكود هنا" placeholderTextColor={theme.placeholder} value={f2aCode} onChangeText={setF2aCode} keyboardType="number-pad" maxLength={6} />
-                  </View>
-                </Animated.View>
-
-                <Animated.View entering={FadeInDown.delay(600).duration(800)}>
-                  <TouchableOpacity style={styles.loginButton} onPress={handleF2aCodeSubmit} disabled={isLoading} activeOpacity={0.8}>
-                    <View style={styles.buttonGradient}>
-                      {isLoading ? (
-                        <View style={styles.buttonContent}>
-                          <Ionicons name="sync" size={24} color="black" />
-                          <ThemedText style={styles.buttonText}>جاري التحقق...</ThemedText>
-                        </View>
-                      ) : (
-                        <View style={styles.buttonContent}>
-                          <Ionicons name="checkmark-done-outline" size={24} color="black" style={styles.buttonIcon} />
-                          <ThemedText style={styles.buttonText}>تأكيد الدخول</ThemedText>
-                        </View>
-                      )}
+            <Animated.View entering={FadeInDown.delay(800).duration(800)}>
+              <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={isLoading} activeOpacity={0.8}>
+                <View style={styles.buttonGradient}>
+                  {isLoading ? (
+                    <View style={styles.buttonContent}>
+                      <Ionicons name="sync" size={24} color="black" />
+                      <ThemedText style={styles.buttonText}>جاري تسجيل الدخول...</ThemedText>
                     </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.backButton} onPress={handleBackToCredentials} disabled={isLoading}>
-                    <ThemedText style={styles.backButtonText}>العودة</ThemedText>
-                  </TouchableOpacity>
-                </Animated.View>
-              </>
-            )}
+                  ) : (
+                    <View style={styles.buttonContent}>
+                      <Ionicons name="log-in-outline" size={24} color="black" style={styles.buttonIcon} />
+                      <ThemedText style={styles.buttonText}>تسجيل الدخول</ThemedText>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
 
             <Animated.View style={styles.footer} entering={FadeInUp.delay(1000).duration(800)}>
               <View style={styles.statusIndicator}>

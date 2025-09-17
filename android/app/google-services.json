@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "414535296697",
+    "firebase_url": "https://alqabs-store-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "alqabs-store",
+    "storage_bucket": "alqabs-store.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:414535296697:android:b9aebef7d589cdaa119d68",
+        "android_client_info": {
+          "package_name": "com.tmody.QLC"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD6w0cZgO4zVK4mwI3kBBELcB4Cd1jqenw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:414535296697:android:67813b4996cd889d119d68",
+        "android_client_info": {
+          "package_name": "com.tmody.QMC"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD6w0cZgO4zVK4mwI3kBBELcB4Cd1jqenw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:414535296697:android:91b6d27efea2b4c5119d68",
+        "android_client_info": {
+          "package_name": "com.tmody.QTM"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD6w0cZgO4zVK4mwI3kBBELcB4Cd1jqenw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
