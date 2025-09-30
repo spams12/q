@@ -1,14 +1,13 @@
-// src/screens/YourScreen.tsx
-
 import InfoCard from '@/components/InfoCard';
 import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
 import { ServiceRequest } from '@/lib/types';
 import { Ionicons } from '@expo/vector-icons';
-import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+// MODIFIED: Import firestore from @react-native-firebase
+import firestore from '@react-native-firebase/firestore';
 import { useScrollToTop } from '@react-navigation/native';
 import { liteClient as algoliasearch } from 'algoliasearch/lite';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   InstantSearch,
@@ -16,7 +15,7 @@ import {
   useConfigure,
   useCurrentRefinements,
   useInfiniteHits,
-  useSearchBox,
+  useSearchBox
 } from 'react-instantsearch-core';
 import {
   ActivityIndicator,
@@ -31,37 +30,32 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
-import { handleAcceptTask as acceptTask, handleRejectTask as rejectTask } from '@/hooks/taskar';
-import { db } from '../../lib/firebase';
+import { handleAcceptTask as handleAcceptTaskHook } from '../../hooks/taskar';
+// MODIFIED: Removed db import, as we will use firestore() directly
+// import { db } from '../../lib/firebase';
 import { Filters } from '../fliters';
 
-
+// --- Interfaces, Constants (No changes needed) ---
 interface User {
   id: string;
   uid: string;
   name: string;
 }
-
 interface Team {
   id: string;
   name: string;
 }
-
 interface StatusCounts {
   open: number;
   pending: number;
   closed: number;
 }
-
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SCREEN_WIDTH = Dimensions.get('window').width;
-
 const searchClient = algoliasearch(
   'NRMR6IJLJK',
   '36b7095707242f6be237f5e4e491d0a2'
 );
-
 
 // --- DynamicStatusCountsProvider (No changes needed) ---
 const DynamicStatusCountsProvider = ({ setStatusCounts, userUid, indexName }) => {
@@ -75,7 +69,7 @@ const DynamicStatusCountsProvider = ({ setStatusCounts, userUid, indexName }) =>
     debounceTimeoutRef.current = setTimeout(() => {
       const fetchCounts = async () => {
         if (!userUid) return;
-        const baseFilter = `assignedUsers:${userUid}`;
+        const baseFilter = `assignedUsers:${userUid} AND deleted:false`;
         const refinementFilters = refinements
           .map(refinement => {
             const attributeFilters = refinement.refinements
@@ -98,9 +92,8 @@ const DynamicStatusCountsProvider = ({ setStatusCounts, userUid, indexName }) =>
             },
           ]);
           const facets = results[0]?.facets || {};
-          console.log('facets', facets);
           const counts = facets.status || {};
-          const closedCount = (counts['مكتمل'] || 0)
+          const closedCount = (counts['مكتمل'] || 0) + (counts['مغلق'] || 0);
           setStatusCounts({
             open: counts['مفتوح'] || 0,
             pending: counts['قيد المعالجة'] || 0,
@@ -119,12 +112,10 @@ const DynamicStatusCountsProvider = ({ setStatusCounts, userUid, indexName }) =>
       }
     };
   }, [query, refinements, userUid, indexName, setStatusCounts]);
-
   return null;
 };
 
-
-// --- FilterPill and ActiveFilters (No changes needed) ---
+// --- FilterPill Component (No changes needed) ---
 const FilterPill = React.memo(({ label, onRemove }) => {
   const { theme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
@@ -137,22 +128,50 @@ const FilterPill = React.memo(({ label, onRemove }) => {
     </View>
   );
 });
-const ActiveFilters = () => {
+
+// --- ActiveFilters Component (No changes needed) ---
+const ActiveFilters = ({ users, teams }: { users: User[], teams: Team[] }) => {
   const { theme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
   const { items, refine } = useCurrentRefinements();
   const { canRefine: canClear, refine: clearAll } = useClearRefinements();
-  if (!items.length) return null;
+  const userMapByUid = useMemo(() => new Map(users.map(u => [u.uid, u.name])), [users]);
+  const userMapById = useMemo(() => new Map(users.map(u => [u.id, u.name])), [users]);
+  const teamMap = useMemo(() => new Map(teams.map(t => [t.id, t.name])), [teams]);
+  const flatRefinements = useMemo(() =>
+    items.flatMap(item =>
+      item.refinements.map(refinement => {
+        let displayName = refinement.label;
+        if (item.attribute === 'creatorId') {
+          displayName = userMapByUid.get(refinement.value) || refinement.label;
+        } else if (item.attribute === 'assignedUsers') {
+          displayName = userMapById.get(refinement.value) || refinement.label;
+        } else if (item.attribute === 'teamId') {
+          displayName = teamMap.get(refinement.value) || refinement.label;
+        }
+        return {
+          key: `${item.attribute}-${refinement.value}`,
+          label: `${item.label}: ${displayName}`,
+          onRemove: () => refine(refinement),
+        };
+      })
+    ),
+    [items, refine, userMapByUid, userMapById, teamMap]
+  );
+  if (flatRefinements.length === 0) return null;
   return (
     <View style={styles.activeFiltersWrapper}>
       <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
-        data={items}
-        keyExtractor={item => item.attribute}
-        renderItem={({ item }) => item.refinements.map(refinement => (
-          <FilterPill key={refinement.value} label={`${item.label}: ${refinement.label}`} onRemove={() => refine(refinement)} />
-        ))}
+        data={flatRefinements}
+        keyExtractor={item => item.key}
+        renderItem={({ item }) => (
+          <FilterPill
+            label={item.label}
+            onRemove={item.onRemove}
+          />
+        )}
         contentContainerStyle={styles.pillsScrollView}
         inverted
       />
@@ -161,78 +180,58 @@ const ActiveFilters = () => {
   );
 };
 
-// --- MODIFIED: SearchHeader with animation logic ---
-const SearchHeader = ({ requestView, setRequestView, sortOrder, setSortOrder, onOpenFilters, statusCounts, isLoading }) => {
+
+// --- SearchHeader Component (No changes needed) ---
+const SearchHeader = ({ requestView, setRequestView, sortOrder, setSortOrder, onOpenFilters, statusCounts, isLoading, users, teams }) => {
   const { theme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
   const { query, refine } = useSearchBox();
   const { items: refinements } = useCurrentRefinements();
   const { userUid } = usePermissions();
-
   const [inputValue, setInputValue] = useState(query);
   const hasActiveFilters = refinements.length > 0;
   const isRealtime = query === '' && refinements.length === 0;
-
-  // Animation state for the tab indicator
   const [tabLayouts, setTabLayouts] = useState({});
   const indicatorPosition = useRef(new Animated.Value(0)).current;
   const indicatorWidth = useRef(new Animated.Value(0)).current;
-
-  // Animate indicator when tab or layouts change
   useEffect(() => {
     const layout = tabLayouts[requestView];
     if (layout) {
-      Animated.spring(indicatorPosition, {
-        toValue: layout.x,
-        useNativeDriver: false,
-      }).start();
-      Animated.spring(indicatorWidth, {
-        toValue: layout.width,
-        useNativeDriver: false,
-      }).start();
+      Animated.spring(indicatorPosition, { toValue: layout.x, useNativeDriver: false }).start();
+      Animated.spring(indicatorWidth, { toValue: layout.width, useNativeDriver: false }).start();
     }
   }, [requestView, tabLayouts]);
-
   const toggleSortOrder = useCallback(() => setSortOrder(prev => (prev === 'desc' ? 'asc' : 'desc')), [setSortOrder]);
-
   const filters = useMemo(() => {
     if (!userUid) return 'status:__no_user__';
-    const baseFilter = `assignedUsers:${userUid}`;
+    const baseFilter = `assignedUsers:${userUid} AND deleted:false`;
     let statusFilter = '';
     if (requestView === "open") statusFilter = 'status:"مفتوح"';
     else if (requestView === "pending") statusFilter = 'status:"قيد المعالجة"';
     else if (requestView === "closed") statusFilter = '(status:"مكتمل")';
     return statusFilter ? `${baseFilter} AND ${statusFilter}` : baseFilter;
   }, [userUid, requestView]);
-
   useConfigure({ filters });
   useEffect(() => { setInputValue(query); }, [query]);
-
   useEffect(() => {
     const timerId = setTimeout(() => { refine(inputValue); }, 800);
     return () => clearTimeout(timerId);
   }, [inputValue, refine]);
-
   const TABS = {
     open: `مفتوح (${statusCounts.open})`,
     pending: `قيد المعالجة (${statusCounts.pending})`,
     closed: `مكتمل (${statusCounts.closed})`,
   };
-
   return (
     <View style={styles.headerContainer}>
       <View style={styles.titleSection}>
         <View style={styles.headerRow}>
-          <Text adjustsFontSizeToFit numberOfLines={1} style={styles.headerTitle}>
-            المهام
-          </Text>
+          <Text adjustsFontSizeToFit numberOfLines={1} style={styles.headerTitle}>المهام</Text>
           <View style={[styles.dataSourceIndicator, isRealtime ? styles.realtimeIndicator : styles.searchIndicator]}>
-            <Text style={styles.dataSourceIndicatorText}>
-              {isRealtime ? 'مباشر' : 'نتائج البحث'}
-            </Text>
+            <Text style={styles.dataSourceIndicatorText}>{isRealtime ? 'مباشر' : 'نتائج البحث'}</Text>
           </View>
         </View>
-        <Text adjustsFontSizeToFit numberOfLines={1} style={styles.headerSubtitle}>عرض وتصفية المهام المسندة اليك من قبل قائد الفريق.</Text>
+        <Text adjustsFontSizeToFit numberOfLines={1} style={styles.headerSubtitle}>عرض و تصفية المهام المسندة لك من قبل قائد الفريق.</Text>
       </View>
       <View style={styles.controlsSection}>
         <View style={styles.controlsContainer}>
@@ -257,7 +256,7 @@ const SearchHeader = ({ requestView, setRequestView, sortOrder, setSortOrder, on
             <Ionicons name={sortOrder === 'desc' ? 'arrow-down' : 'arrow-up'} size={22} color={theme.icon} />
           </TouchableOpacity>
         </View>
-        <ActiveFilters />
+        <ActiveFilters users={users} teams={teams} />
       </View>
       <View style={styles.switchContainer}>
         <Animated.View style={[styles.activeTabIndicator, { left: indicatorPosition, width: indicatorWidth }]} />
@@ -283,125 +282,57 @@ const SearchHeader = ({ requestView, setRequestView, sortOrder, setSortOrder, on
   );
 };
 
-// --- AlgoliaHitAdapter ---
-interface AlgoliaHitAdapterProps {
-  hit: any;
-  users: User[];
-  userUid: string;
-  loadingState: { id: string; action: 'accept' | 'reject' } | null;
-  handleAcceptTask: (ticketId: string) => Promise<void>;
-  handleRejectTask: (ticketId: string) => Promise<void>;
-}
-
-const AlgoliaHitAdapter: React.FC<AlgoliaHitAdapterProps> = ({ hit, users, userUid, loadingState, handleAcceptTask, handleRejectTask }) => {
+// --- MODIFIED: AlgoliaHitAdapter ---
+const AlgoliaHitAdapter = ({ hit, users, userUid, loadingItemId, handleAcceptTask }) => {
   const getTimestampFromMilliseconds = (ms) => {
     if (typeof ms !== 'number') return undefined;
+    // MODIFIED: Use firestore.Timestamp constructor
     return new firestore.Timestamp(Math.floor(ms / 1000), (ms % 1000) * 1000000);
   };
   const userResponses = (hit.userResponses || []);
   const hasResponded = userResponses.some(res => res.userId === userUid);
-  const transformedItem = {
-    ...hit,
-    id: hit.objectID,
-    createdAt: getTimestampFromMilliseconds(hit.createdAt),
-    title: hit.title,
-    type: hit.type,
-    status: hit.status,
-    customerName: hit.customerName,
-    userResponses: userResponses,
-  };
-  return (
-    <InfoCard
-      item={transformedItem}
-      users={users}
-      showActions={true}
-      hit={hit}
-      hasResponded={hasResponded}
-      loadingState={loadingState}
-      handleAcceptTask={handleAcceptTask}
-      handleRejectTask={handleRejectTask}
-    />
-  );
+  const transformedItem = { ...hit, id: hit.objectID, createdAt: getTimestampFromMilliseconds(hit.createdAt), title: hit.title, type: hit.type, status: hit.status, customerName: hit.customerName, userResponses: userResponses };
+  return (<InfoCard item={transformedItem} users={users} showActions={true} hit={hit} hasResponded={hasResponded} isActionLoading={loadingItemId === hit.objectID} handleAcceptTask={handleAcceptTask} />);
 };
 
-// --- MODIFIED: HybridList to handle tab switching state ---
+// --- MODIFIED: HybridList ---
 const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader, listRef }) => {
   const { theme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
   const [firebaseRequests, setFirebaseRequests] = useState<ServiceRequest[]>([]);
   const [isFirebaseLoading, setIsFirebaseLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
   const { userdoc, userUid } = usePermissions();
   const { query: algoliaQuery } = useSearchBox();
   const { items: refinements } = useCurrentRefinements();
   const { items: algoliaHits, isLastPage: isAlgoliaLastPage, showMore: showMoreAlgoliaHits } = useInfiniteHits();
   const [isAlgoliaLoadingMore, setIsAlgoliaLoadingMore] = useState(false);
-  const [loadingState, setLoadingState] = useState<{ id: string; action: 'accept' | 'reject' } | null>(null);
-
+  const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const shouldUseFirebase = algoliaQuery === '' && refinements.length === 0;
   const currentData = shouldUseFirebase ? firebaseRequests : algoliaHits;
   const isListLoading = shouldUseFirebase ? isFirebaseLoading : (algoliaHits.length === 0 && !isAlgoliaLastPage);
-  // If tab is switching, render an empty list to allow the loader to show
   const listData = isTabSwitching ? [] : currentData;
+  useEffect(() => { if (isAlgoliaLoadingMore) { setIsAlgoliaLoadingMore(false); } }, [algoliaHits]);
 
-  useEffect(() => {
-    if (isAlgoliaLoadingMore) { setIsAlgoliaLoadingMore(false); }
-  }, [algoliaHits]);
-
-  const router = useRouter();
-
-  const handleAcceptTask = async (ticketId: string) => {
-    if (loadingState || !userdoc) return;
-    setLoadingState({ id: ticketId, action: 'accept' });
-    try {
-      await acceptTask(
-        ticketId,
-        userdoc,
-        (action: 'accept' | null) => { },
-        (taskId: string) => router.push({
-          pathname: '/tasks/[id]' as const,
-          params: { id: taskId, showActions: 'true' }
-        })
-      );
-    } catch (error) {
-      console.error('Error accepting task:', error);
-    } finally {
-      setLoadingState(null);
-    }
+  // MODIFIED: handleAcceptTask updated to @react-native-firebase syntax
+  const handleAcceptTask = (ticketId: string) => {
+    if (loadingItemId || !userdoc) return;
+    const setActionLoading = (action: "accept" | null) => {
+      setLoadingItemId(action === "accept" ? ticketId : null);
+    };
+    const onSuccess = () => {
+      router.push({ pathname: '/tasks/[id]' as const, params: { id: ticketId, showActions: 'true' } });
+    };
+    handleAcceptTaskHook(ticketId, userdoc, setActionLoading, onSuccess);
   };
 
-  const handleRejectTask = async (ticketId: string) => {
-    if (loadingState || !userdoc) return;
-    setLoadingState({ id: ticketId, action: 'reject' });
-    try {
-      await rejectTask(
-        ticketId,
-        userdoc,
-        (action: 'reject' | null) => { }
-      );
-    } catch (error) {
-      console.error('Error rejecting task:', error);
-    } finally {
-      setLoadingState(null);
-    }
-  };
+  const handleAlgoliaLoadMore = useCallback(() => { if (!isAlgoliaLastPage && !isAlgoliaLoadingMore) { setIsAlgoliaLoadingMore(true); showMoreAlgoliaHits(); } }, [isAlgoliaLastPage, isAlgoliaLoadingMore, showMoreAlgoliaHits]);
+  const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => { setShowScrollToTop(event.nativeEvent.contentOffset.y > SCREEN_HEIGHT * 0.5); }, []);
+  const scrollToTop = useCallback(() => { listRef.current?.scrollToOffset({ offset: 0, animated: true }); }, []);
+  const handleRefresh = useCallback(() => { setIsRefreshing(true); setTimeout(() => setIsRefreshing(false), 1000); }, []);
 
-  const handleAlgoliaLoadMore = useCallback(() => {
-    if (!isAlgoliaLastPage && !isAlgoliaLoadingMore) {
-      setIsAlgoliaLoadingMore(true);
-      showMoreAlgoliaHits();
-    }
-  }, [isAlgoliaLastPage, isAlgoliaLoadingMore, showMoreAlgoliaHits]);
-
-  const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
-    setShowScrollToTop(event.nativeEvent.contentOffset.y > SCREEN_HEIGHT * 0.5);
-  }, []);
-
-  const scrollToTop = useCallback(() => {
-    listRef.current?.scrollToOffset({ offset: 0, animated: true });
-  }, []);
-
+  // MODIFIED: Firebase query updated to @react-native-firebase syntax
   useEffect(() => {
     if (!shouldUseFirebase || !userUid) {
       setFirebaseRequests([]);
@@ -409,101 +340,40 @@ const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader,
       return;
     }
     setIsFirebaseLoading(true);
-    let query: FirebaseFirestoreTypes.Query = db.collection('serviceRequests');
-    query = query.where('assignedUsers', 'array-contains', userUid);
-    if (requestView === 'open') {
-      query = query.where('status', '==', 'مفتوح');
-    } else if (requestView === 'pending') {
-      query = query.where('status', '==', 'قيد المعالجة');
-    } else if (requestView === 'closed') {
-      query = query.where('status', 'in', ['مكتمل']);
-    }
-    query = query.orderBy('createdAt', sortOrder);
 
-    const unsubscribe = query.onSnapshot((querySnapshot) => {
-      const requestsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
-      setFirebaseRequests(requestsData);
-      setIsFirebaseLoading(false);
-    }, (error) => {
-      console.error("Firebase listener error:", error);
-      setIsFirebaseLoading(false);
-    });
+    let serviceRequestsQuery = firestore()
+      .collection('serviceRequests')
+      .where('deleted', '==', false)
+      .where('assignedUsers', 'array-contains', userUid);
+
+    if (requestView === 'open') {
+      serviceRequestsQuery = serviceRequestsQuery.where('status', '==', 'مفتوح');
+    } else if (requestView === 'pending') {
+      serviceRequestsQuery = serviceRequestsQuery.where('status', '==', 'قيد المعالجة');
+    } else if (requestView === 'closed') {
+      serviceRequestsQuery = serviceRequestsQuery.where('status', 'in', ['مكتمل']);
+    }
+
+    serviceRequestsQuery = serviceRequestsQuery.orderBy('createdAt', sortOrder);
+
+    const unsubscribe = serviceRequestsQuery.onSnapshot(
+      querySnapshot => {
+        const requestsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
+        setFirebaseRequests(requestsData);
+        setIsFirebaseLoading(false);
+      },
+      error => {
+        console.error("Firebase listener error:", error);
+        setIsFirebaseLoading(false);
+      }
+    );
+
     return () => unsubscribe();
   }, [shouldUseFirebase, requestView, sortOrder, userUid]);
 
-  const renderItem = useCallback(({ item }) => {
-    if (shouldUseFirebase) {
-      const hasResponded = item.userResponses?.some(res => res.userId === userUid) || false;
-      return (
-        <View style={styles.item}>
-          <InfoCard item={item} users={users} showActions={true} hasResponded={hasResponded} loadingState={loadingState} handleAcceptTask={handleAcceptTask} handleRejectTask={handleRejectTask} />
-        </View>
-      );
-    }
-    return (
-      <View style={styles.item}>
-        <AlgoliaHitAdapter hit={item} users={users} userUid={userUid} loadingState={loadingState} handleAcceptTask={handleAcceptTask} handleRejectTask={handleRejectTask} />
-      </View>
-    );
-  }, [shouldUseFirebase, users, userUid, loadingState, handleAcceptTask]);
-
-  const ListEmptyComponent = useMemo(() => {
-    // Show a main loader when switching tabs or on initial load
-    if (isTabSwitching || (isListLoading && listData.length === 0)) {
-      return <ActivityIndicator color={theme.primary} style={{ marginVertical: 60 }} size="large" />;
-    }
-    const emptyIcon = shouldUseFirebase ? "document-text-outline" : "search-outline";
-    const emptyText = shouldUseFirebase ? "لا توجد تكتات لعرضها في هذا القسم" : "لا توجد نتائج تطابق بحثك";
-    return (
-      <View style={styles.emptyContainer}>
-        <Ionicons name={emptyIcon} size={48} color={theme.placeholder} />
-        <Text style={styles.emptyText}>{emptyText}</Text>
-      </View>
-    );
-  }, [isTabSwitching, isListLoading, listData.length, shouldUseFirebase, theme]);
-
-  const onRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      if (!shouldUseFirebase) {
-        // For Algolia search, we can trigger a new search
-        await showMoreAlgoliaHits();
-      }
-      // Firebase will automatically update through the snapshot listener
-    } catch (error) {
-      console.error('Error refreshing:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [shouldUseFirebase, showMoreAlgoliaHits]);
-
-  return (
-    <View style={{ flex: 1 }}>
-      <FlatList
-        ref={listRef}
-        data={listData}
-        ListHeaderComponent={listHeader}
-        keyExtractor={item => shouldUseFirebase ? item.id : item.objectID}
-        renderItem={renderItem}
-        ListEmptyComponent={ListEmptyComponent}
-        onEndReached={shouldUseFirebase ? undefined : handleAlgoliaLoadMore}
-        onEndReachedThreshold={0.5}
-        ListFooterComponent={!shouldUseFirebase && isAlgoliaLoadingMore ? <ActivityIndicator color={theme.primary} style={{ margin: 20 }} /> : null}
-        onScroll={handleScroll}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.listContentContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            colors={[theme.primary]}
-            tintColor={theme.primary}
-          />
-        }
-      />
-      {showScrollToTop && <TouchableOpacity style={styles.scrollToTopButton} onPress={scrollToTop} activeOpacity={0.7}><Ionicons name="chevron-up" size={36} color={theme.text} style={{ opacity: 0.7 }} /></TouchableOpacity>}
-    </View>
-  );
+  const renderItem = useCallback(({ item }) => { if (shouldUseFirebase) { const hasResponded = item.userResponses?.some(res => res.userId === userUid) || false; return (<View style={styles.item}><InfoCard item={item} users={users} showActions={true} hasResponded={hasResponded} isActionLoading={loadingItemId === item.id} handleAcceptTask={handleAcceptTask} /></View>); } return (<View style={styles.item}><AlgoliaHitAdapter hit={item} users={users} userUid={userUid} loadingItemId={loadingItemId} handleAcceptTask={handleAcceptTask} /></View>); }, [shouldUseFirebase, users, userUid, loadingItemId, handleAcceptTask]);
+  const ListEmptyComponent = useMemo(() => { if (isTabSwitching || (isListLoading && listData.length === 0)) { return <ActivityIndicator color={theme.primary} style={{ marginVertical: 60 }} size="large" />; } const emptyIcon = shouldUseFirebase ? "document-text-outline" : "search-outline"; const emptyText = shouldUseFirebase ? "لا توجد تكتات لعرضها في هذا القسم" : "لا توجد نتائج تطابق بحثك"; return (<View style={styles.emptyContainer}><Ionicons name={emptyIcon} size={48} color={theme.placeholder} /><Text style={styles.emptyText}>{emptyText}</Text></View>); }, [isTabSwitching, isListLoading, listData.length, shouldUseFirebase, theme]);
+  return (<View style={{ flex: 1 }}><FlatList ref={listRef} data={listData} refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.primary} colors={[theme.primary]} />} ListHeaderComponent={listHeader} keyExtractor={item => shouldUseFirebase ? item.id : item.objectID} renderItem={renderItem} ListEmptyComponent={ListEmptyComponent} onEndReached={shouldUseFirebase ? undefined : handleAlgoliaLoadMore} onEndReachedThreshold={0.5} ListFooterComponent={!shouldUseFirebase && isAlgoliaLoadingMore ? <ActivityIndicator color={theme.primary} style={{ margin: 20 }} /> : null} onScroll={handleScroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.listContentContainer} />{showScrollToTop && <TouchableOpacity style={styles.scrollToTopButton} onPress={scrollToTop} activeOpacity={0.7}><Ionicons name="chevron-up" size={36} color={theme.text} style={{ opacity: 0.7 }} /></TouchableOpacity>}</View>);
 };
 
 const ConnectedFilters = (props) => {
@@ -519,43 +389,45 @@ export default function Taskscreen() {
   const [isFilterModalOpen, setFilterModalOpen] = useState(false);
   const [requestView, setRequestView] = useState('open');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const indexName = sortOrder === 'asc' ? 'hello_asc' : 'hello';
   const [users, setUsers] = useState<User[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [isUsersLoading, setIsUsersLoading] = useState(true);
   const [isTeamsLoading, setIsTeamsLoading] = useState(true);
   const [statusCounts, setStatusCounts] = useState<StatusCounts>({ open: 0, pending: 0, closed: 0 });
-  const indexName = sortOrder === 'asc' ? 'hello_asc' : 'hello';
-
-  // State and handler for tab switching
   const [isTabSwitching, setIsTabSwitching] = useState(false);
   const handleRequestViewChange = useCallback((newView: 'open' | 'pending' | 'closed') => {
     if (newView === requestView || isTabSwitching) return;
     setRequestView(newView);
     setIsTabSwitching(true);
-    setTimeout(() => setIsTabSwitching(false), 400); // Duration for loading state
+    setTimeout(() => setIsTabSwitching(false), 400);
   }, [requestView, isTabSwitching]);
 
-  // Ref for FlatList to support scroll-to-top on tab press
   const listRef = useRef<FlatList | null>(null);
   useScrollToTop(listRef);
 
+  // MODIFIED: Users listener updated to @react-native-firebase syntax
   useEffect(() => {
-    const unsubscribe = db.collection('users').onSnapshot(snapshot => {
-      setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
-      setIsUsersLoading(false);
-    });
+    const unsubscribe = firestore()
+      .collection('users')
+      .onSnapshot(snapshot => {
+        setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
+        setIsUsersLoading(false);
+      });
     return () => unsubscribe();
   }, []);
 
+  // MODIFIED: Teams listener updated to @react-native-firebase syntax
   useEffect(() => {
-    const unsubscribe = db.collection('teams').onSnapshot(snapshot => {
-      setTeams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team)));
-      setIsTeamsLoading(false);
-    });
+    const unsubscribe = firestore()
+      .collection('teams')
+      .onSnapshot(snapshot => {
+        setTeams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team)));
+        setIsTeamsLoading(false);
+      });
     return () => unsubscribe();
   }, []);
 
-  // Memoize the header to preserve its state (like animations) during re-renders
   const headerComponent = useMemo(() => (
     <SearchHeader
       requestView={requestView}
@@ -565,8 +437,10 @@ export default function Taskscreen() {
       onOpenFilters={() => setFilterModalOpen(true)}
       statusCounts={statusCounts}
       isLoading={isTabSwitching}
+      users={users}
+      teams={teams}
     />
-  ), [requestView, handleRequestViewChange, sortOrder, statusCounts, isTabSwitching]);
+  ), [requestView, handleRequestViewChange, sortOrder, statusCounts, isTabSwitching, users, teams]);
 
   if (isUsersLoading || isTeamsLoading || !userUid) {
     return <SafeAreaView style={styles.safeArea}><View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator size="large" color={theme.primary} /></View></SafeAreaView>;
@@ -596,7 +470,7 @@ export default function Taskscreen() {
   );
 }
 
-// --- MODIFIED: Stylesheet with animation styles ---
+// --- Stylesheet (No changes needed) ---
 const getStyles = (theme: Theme) => {
   const placeholderFontSize = Math.max(12, Math.min(16, SCREEN_WIDTH * 0.035));
   return StyleSheet.create({
@@ -615,7 +489,6 @@ const getStyles = (theme: Theme) => {
     dataSourceIndicatorText: { color: theme.contrastText, fontFamily: 'Cairo', fontWeight: 'bold', fontSize: 12 },
     realtimeIndicator: { backgroundColor: '#34C759' },
     searchIndicator: { backgroundColor: theme.primary },
-    // Styles for animated tabs
     switchContainer: {
       flexDirection: 'row-reverse',
       borderRadius: 12,
@@ -624,7 +497,7 @@ const getStyles = (theme: Theme) => {
       backgroundColor: theme.iconBackground,
       padding: 4,
       marginVertical: 12,
-      position: 'relative', // <-- Important for indicator positioning
+      position: 'relative',
     },
     activeTabIndicator: {
       position: 'absolute',
@@ -639,14 +512,13 @@ const getStyles = (theme: Theme) => {
       borderRadius: 8,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'transparent', // Tab itself is transparent
-      zIndex: 1, // Text sits above the animated indicator
+      backgroundColor: 'transparent',
+      zIndex: 1,
     },
     switchTabActive: {
     },
     switchText: { fontFamily: 'Cairo', fontSize: 15, fontWeight: '600', color: theme.text },
     switchTextActive: {},
-    // End of tab styles
     controlsSection: {},
     controlsContainer: { flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 8, gap: 8 },
     searchContainer: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', borderRadius: 12, paddingHorizontal: 12, height: 48, borderWidth: 1, backgroundColor: theme.inputBackground, borderColor: theme.border },

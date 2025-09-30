@@ -157,9 +157,10 @@ const SearchHeader = ({
   }, [setSortOrder, sortOrder]);
 
   const { realuserUid } = usePermissions();
-  // Always filter by the current user's ID for Algolia search
-  const filters = realuserUid ? `creatorId:${realuserUid}` : '';
-  useConfigure({ filters });
+  // Always filter by the current user's ID and deleted:false for Algolia search
+  const filters = realuserUid
+    ? `creatorId:${realuserUid} AND deleted:false`
+    : `deleted:false`; useConfigure({ filters });
 
   return (
     <View style={styles.headerContainer}>
@@ -306,7 +307,8 @@ const HybridList = ({ sortOrder, setSortOrder, onOpenFilters, users }: HybridLis
     }
 
     setIsFirebaseLoading(true);
-    let query: FirebaseFirestoreTypes.Query = db.collection('serviceRequests');
+    let query: FirebaseFirestoreTypes.Query = db.collection('serviceRequests')
+      .where('deleted', '==', false);
 
     // Always filter by creatorId for the Firebase real-time listener
     if (realuserUid) {
@@ -422,7 +424,6 @@ const HybridList = ({ sortOrder, setSortOrder, onOpenFilters, users }: HybridLis
 export default function App() {
   const { theme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
-  console.log("index")
   const [isFilterModalOpen, setFilterModalOpen] = useState(false);
   // Removed requestView state
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
