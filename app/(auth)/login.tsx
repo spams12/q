@@ -32,9 +32,6 @@ import Animated, {
 import { UseDialog } from '@/context/DialogContext';
 import { auth } from '@/lib/firebase';
 
-// Define the roles that are allowed to access this app.
-const ALLOWED_ROLES = ['فني', 'تسويق', 'Developer', 'مدير'];
-
 const theme = {
   background: ['#0a0e1a', '#1a1f2e', '#0f1419'],
   primary: '#00ff7f', // Hacker green
@@ -188,15 +185,10 @@ const LoginScreen: React.FC = () => {
       }
 
       const userData = querySnapshot.docs[0].data();
-      if (ALLOWED_ROLES.includes(userData.role)) {
-        showDialog({
-          status: 'success',
-          message: 'تم تسجيل الدخول بنجاح! جاري التوجيه...',
-          duration: 1500,
-        });
+      if (userData.permissions && userData.permissions.appTasksAccess === true) {
         router.replace('/(tabs)');
       } else {
-        await auth().signOut(); // Log out if role is not allowed
+        await auth().signOut(); // Log out if permission is not allowed
         showDialog({ status: 'error', message: 'ليس لديك الصلاحية للوصول إلى هذا التطبيق.' });
       }
 
@@ -246,7 +238,6 @@ const LoginScreen: React.FC = () => {
             <Animated.View style={[styles.logoContainer, logoAnimatedStyle]} entering={FadeInDown.delay(200).duration(800)}>
               <Ionicons name="logo-electron" size={width * 0.18} color={theme.primary} />
             </Animated.View>
-
             {/* --- CREDENTIALS INPUT VIEW --- */}
             <Animated.View entering={FadeInDown.delay(400).duration(800)}>
               <ThemedText type="title">تطبيق الصيانة التقنية</ThemedText>

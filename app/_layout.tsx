@@ -195,7 +195,7 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseAuthTypes.
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <Stack
-        initialRouteName='(tabs)'
+        initialRouteName='(auth)'
         screenOptions={{
           headerStyle: {
             backgroundColor: theme.background,

@@ -1,9 +1,8 @@
 // hooks/useProtectedRoute.ts
+import { auth } from "@/lib/firebase";
 import { useRouter, useSegments } from "expo-router";
 import { useEffect } from "react";
 
-// Assuming you create an AuthContext to provide these values
-// For now, we'll pass them as arguments
 export function useProtectedRoute(
   user: any,
   profile: any,
@@ -22,15 +21,35 @@ export function useProtectedRoute(
     const inCompleteProfile = segments.includes("complete-profile");
 
     if (user) {
+      // Check if user has app access permission
+      const hasAppAccess = profile?.permissions?.appTasksAccess === true;
+
+      // If user doesn't have permission, sign them out and redirect to login
+      if (profile && !hasAppAccess && !inAuthGroup) {
+        auth().signOut().catch(console.error);
+        router.replace("/login");
+        return;
+      }
+
       // If the user is authenticated but the profile is incomplete,
       // redirect them to the complete-profile screen.
-      if (profile && (!profile.phone || !profile.photoURL) && !inCompleteProfile) {
+      if (
+        profile &&
+        (!profile.phone || !profile.photoURL) &&
+        !inCompleteProfile
+      ) {
         router.replace("/complete-profile");
-      } 
-      // If the user is authenticated and has completed profile, and is in auth flow,
-      // redirect them to the main app (tabs).
-      else if (profile && profile.phone && profile.photoURL && inAuthGroup) {
-        router.replace("/(tabs)/");
+      }
+      // If the user is authenticated, has app access, and has completed profile,
+      // and is in auth flow, redirect them to the main app (tabs).
+      else if (
+        profile &&
+        profile.phone &&
+        profile.photoURL &&
+        hasAppAccess &&
+        inAuthGroup
+      ) {
+        router.replace("/(tabs)");
       }
     } else {
       // If the user is not authenticated and is not in the auth flow,
@@ -39,8 +58,5 @@ export function useProtectedRoute(
         router.replace("/login");
       }
     }
-    // This effect should only run when auth state changes, not on every navigation.
-    // Removing 'segments' and 'router' from the dependency array is key.
-    // The logic inside only depends on the user's auth/profile state.
   }, [user, profile, authLoaded]);
 }
