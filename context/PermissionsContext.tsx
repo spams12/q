@@ -1,4 +1,5 @@
 import { User } from "@/lib/types"; // Assuming this type definition is still valid
+import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import {
   createContext,
@@ -319,13 +320,20 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
             const userDocSnapshot = querySnapshot.docs[0];
             const userDocData = userDocSnapshot.data();
             const docId = userDocSnapshot.id;
+
+            // Check if user is inactive and sign them out
+            if (userDocData.status === "غير نشط") {
+              auth().signOut();
+              return;
+            }
+
             setUserName((userDocData.name as string) || user.displayName || null);
             setUserDoc({ ...userDocData, id: docId } as User);
-            
+
             // Update other state variables as needed
             setUserUid(docId || user.uid);
             setrealuserUid(user.uid);
-            
+
             const teamId = userDocData.teamId as string | null;
             setCurrentUserTeamId(teamId);
           }
@@ -334,7 +342,7 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
           console.error("Error subscribing to user document:", error);
         }
       );
-      
+
     return unsubscribeListener;
   };
 
@@ -350,15 +358,15 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
       setIsCurrentUserTeamLeader(false);
       return;
     }
-    
+
     // Clean up previous subscription
     if (unsubscribe) {
       unsubscribe();
       setUnsubscribe(null);
     }
-    
+
     fetchUserPermissionsAndInfo();
-    
+
     // Set up real-time listener
     const newUnsubscribe = subscribeToUserDocument();
     if (newUnsubscribe) {
