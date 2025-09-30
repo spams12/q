@@ -1,19 +1,29 @@
-import { usePermissions } from '@/context/PermissionsContext';
-import { useTheme } from '@/context/ThemeContext';
-import { db } from '@/lib/firebase';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
-import { router } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import firestore, { FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
+import { useRouter } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  RefreshControl,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+  View,
+} from "react-native";
+
+import { usePermissions } from "@/context/PermissionsContext";
+import { useTheme } from "@/context/ThemeContext";
+
+type InvoiceStatus =
+  | "draft"
+  | "submitted"
+  | "approved"
+  | "paid"
+  | "pending"
+  | "cancelled"
+  | "rejected";
 
 interface InvoiceItem {
   name: string;
@@ -21,519 +31,605 @@ interface InvoiceItem {
   quantity: number;
 }
 
-// Your Invoice Interface
-export interface Invoice {
+interface Invoice {
   id: string;
-  linkedServiceRequestId: string;
+  linkedServiceRequestId?: string | null;
   createdBy: string;
-  createdAt: FirebaseFirestoreTypes.Timestamp;
-  lastUpdated: FirebaseFirestoreTypes.Timestamp;
+  createdAt: FirebaseFirestoreTypes.Timestamp | Date | string | null;
+  lastUpdated?: FirebaseFirestoreTypes.Timestamp | Date | string | null;
   items: InvoiceItem[];
   totalAmount: number;
-  status: 'draft' | 'submitted' | 'approved' | 'paid';
+  status: InvoiceStatus;
   notes?: string;
   customerName?: string;
   customerPhone?: string;
-  creatorName?: string;
   customerEmail?: string;
-  type: string;
+  creatorName?: string;
+  type?: string;
   statusLastChangedBy?: string;
-  statusLastChangedAt?: FirebaseFirestoreTypes.Timestamp;
-  teamId: string | null;
-  teamCreatorId: string | null;
+  statusLastChangedAt?: FirebaseFirestoreTypes.Timestamp | Date | string | null;
+  teamId?: string | null;
+  teamCreatorId?: string | null;
   isSubscriptionInvoice?: boolean;
-  parentInvoiceName?: string;
-  subscriberId?: string;
+  parentInvoiceName?: string | null;
+  subscriberId?: string | null;
 }
 
-// Helper to format date for display
-const formatDate = (date: FirebaseFirestoreTypes.Timestamp | Date | string) => {
-  let d: Date;
-  
-  if (date instanceof Date) {
-    d = date;
-  } else if (typeof date === 'string') {
-    d = new Date(date);
-  } else {
-    // For Timestamp objects, we extract the milliseconds and create a new Date
-    // This avoids using the deprecated .toDate() method
-    d = new Date(date.toMillis());
+interface DisplayInvoice extends Invoice {
+  createdAtDate: Date | null;
+  lastUpdatedDate: Date | null;
+  statusLastChangedAtDate: Date | null;
+}
+
+const formatCurrency = (value?: number): string => {
+  if (value == null || Number.isNaN(value)) {
+    return `IQD`;
   }
-  
-  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-};
 
-// Helper to format currency with commas for thousands
-const formatCurrency = (amount: number) => {
-  return amount.toLocaleString('en-US', {
-
-  });
-};
-
-
-// Helper for status badge styling and text
-const getStatusDetails = (status: Invoice['status']) => {
-  switch (status) {
-    case 'paid':
-      return { text: 'مدفوعة', color: '#28a745', backgroundColor: '#e9f7eb' };
-    case 'approved':
-      return { text: 'مقبولة', color: '#007bff', backgroundColor: '#e6f2ff' };
-    case 'submitted':
-      return { text: 'قيد المراجعة', color: '#ffc107', backgroundColor: '#fff8e1' };
-    case 'draft':
-    default:
-      return { text: 'مسودة', color: '#6c757d', backgroundColor: '#f8f9fa' };
+  try {
+    return `${value.toLocaleString("en-GB", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    })} IQD`;
+  } catch {
+    return `${value.toLocaleString()} IQD`;
   }
 };
 
-const InvoicesScreen = () => {
-  const { themeName } = useTheme();
-  const styles = getStyles(themeName);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [invoicesLoading, setInvoicesLoading] = useState(true);
+const convertToDate = (
+  value: FirebaseFirestoreTypes.Timestamp | Date | string | number | null | undefined
+): Date | null => {
+  if (!value) return null;
+
+  if (typeof (value as FirebaseFirestoreTypes.Timestamp).toDate === "function") {
+    try {
+      return (value as FirebaseFirestoreTypes.Timestamp).toDate();
+    } catch {
+      return null;
+    }
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  return null;
+};
+
+const formatDateTime = (date: Date | null): string => {
+  if (!date) return "—";
+
+  try {
+    return date.toLocaleString("en-GB", {
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return date.toLocaleString("en-GB");
+  }
+};
+
+
+const itemsSummary = (items: InvoiceItem[] | undefined): string => {
+  if (!items?.length) return "لا توجد عناصر";
+
+  const [first, ...rest] = items;
+  if (!first?.name) {
+    return `${items.length} عنصر`;
+  }
+
+  return rest.length
+    ? `${first.name} + ${rest.length} عنصر`
+    : first.name;
+};
+
+const statusDisplay = (
+  status: InvoiceStatus,
+  themeColors: ReturnType<typeof useTheme>["theme"]
+) => {
+  const map: Record<InvoiceStatus, { label: string; background: string; text: string }> = {
+    draft: {
+      label: "مسودة",
+      background: themeColors.lightGray,
+      text: themeColors.text,
+    },
+    submitted: {
+      label: "مقدمة",
+      background: themeColors.blueTint,
+      text: themeColors.primary,
+    },
+    approved: {
+      label: "معتمدة",
+      background: themeColors.primary,
+      text: themeColors.white,
+    },
+    paid: {
+      label: "مدفوعة",
+      background: themeColors.success,
+      text: themeColors.white,
+    },
+    pending: {
+      label: "قيد الانتظار",
+      background: themeColors.lightGray,
+      text: themeColors.text,
+    },
+    cancelled: {
+      label: "ملغاة",
+      background: themeColors.redTint,
+      text: themeColors.destructive,
+    },
+    rejected: {
+      label: "مرفوضة",
+      background: themeColors.redTint,
+      text: themeColors.destructive,
+    },
+  };
+
+  return map[status] ?? {
+    label: status,
+    background: themeColors.card,
+    text: themeColors.text,
+  };
+};
+
+export default function InvoicesPage() {
+  const router = useRouter();
+  const { theme } = useTheme();
+  const { userdoc, loading: permissionsLoading, realuserUid } = usePermissions();
+
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { userdoc } = usePermissions()
-  const [selectedTime, setSelectedTime] = useState<string>("all");
-
-  const sortedClearTimes = useMemo(() => {
-    if (!userdoc?.lastClearTimes) return [];
-    return [...userdoc.lastClearTimes].sort((a, b) => a.toMillis() - b.toMillis());
-  }, [userdoc?.lastClearTimes]);
-
+  const [invoices, setInvoices] = useState<DisplayInvoice[]>([]);
+  const [currentPeriodTotals, setCurrentPeriodTotals] = useState({ total: 0, count: 0 });
   useEffect(() => {
-    if (!userdoc?.uid) return;
-
-    setInvoicesLoading(true);
-    setError(null); // Reset error on new fetch
-
-    let invoicesQuery: FirebaseFirestoreTypes.Query = db.collection("invoices")
-      .where("createdBy", "==", userdoc.uid)
-      .orderBy("createdAt", "desc");
-
-    if (selectedTime !== "all" && userdoc.lastClearTimes && userdoc.lastClearTimes.length > 0) {
-      const sortedTimestamps = [...userdoc.lastClearTimes].sort((a, b) => a.toMillis() - b.toMillis());
-      const selectedIndex = sortedTimestamps.findIndex(t => t.toMillis().toString() === selectedTime);
-
-      if (selectedIndex !== -1) {
-        const selectedTimestamp = sortedTimestamps[selectedIndex];
-
-        // Fetch invoices created up to the selected clear date.
-        let baseQuery = db.collection("invoices")
-          .where("createdBy", "==", userdoc.uid)
-          .where("createdAt", "<=", selectedTimestamp); // Use Timestamp object directly
-
-        // If there's a previous clear date, create a range.
-        if (selectedIndex > 0) {
-          const previousTimestamp = sortedTimestamps[selectedIndex - 1];
-          baseQuery = baseQuery.where("createdAt", ">", previousTimestamp);
-        }
-
-        // Apply final ordering
-        invoicesQuery = baseQuery.orderBy("createdAt", "desc");
-      }
+    if (permissionsLoading) {
+      return;
     }
 
-    // onSnapshot provides real-time updates
-    const unsubscribe = invoicesQuery.onSnapshot(
+    if (!userdoc?.uid) {
+      setInvoices([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const unsubscribe = firestore()
+      .collection("invoices")
+      .where("createdBy", "==", userdoc.uid)
+      .where("status", "in", ["draft", "pending"])
+      .orderBy("createdAt", "desc")
+      .onSnapshot(
+        (snapshot) => {
+          const parsed = snapshot.docs.map((doc) => {
+            const data = doc.data() as Invoice;
+            const createdAtDate = convertToDate(data.createdAt);
+            const lastUpdatedDate = convertToDate(data.lastUpdated ?? null);
+            const statusLastChangedAtDate = convertToDate(
+              data.statusLastChangedAt ?? null
+            );
+
+            const items: InvoiceItem[] = Array.isArray(data.items)
+              ? data.items.map((item) => ({
+                name: (item as any)?.name ?? (item as any)?.description ?? "عنصر",
+                price: Number((item as any)?.price ?? (item as any)?.unitPrice ?? 0),
+                quantity: Number((item as any)?.quantity ?? 1),
+              }))
+              : [];
+
+            const totalAmount = Number(data.totalAmount ?? 0);
+            return {
+              ...data,
+              id: doc.id,
+              items,
+              totalAmount,
+              createdAtDate,
+              lastUpdatedDate,
+              statusLastChangedAtDate,
+            } as DisplayInvoice;
+          });
+
+          setInvoices(parsed);
+          setLoading(false);
+        },
+        (err) => {
+          console.error("Failed to subscribe to invoices:", err);
+          setError("تعذّر تحميل الفواتير. يرجى المحاولة لاحقًا.");
+          setLoading(false);
+        }
+      );
+
+    return () => unsubscribe();
+  }, [permissionsLoading, userdoc?.uid]);
+
+  useEffect(() => {
+    if (!realuserUid) {
+      setCurrentPeriodTotals({ total: 0, count: 0 });
+      return;
+    }
+
+    const queryRef = firestore()
+      .collection("invoices")
+      .where("createdBy", "==", realuserUid)
+      .where("status", "in", ["draft", "pending"]);
+
+    const unsubscribe = queryRef.onSnapshot(
       (snapshot) => {
-        const fetchedInvoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
-        setInvoices(fetchedInvoices);
-        setInvoicesLoading(false);
+        let total = 0;
+        snapshot.forEach((doc) => {
+          const data = doc.data() as Invoice;
+          const amount = Number(data.totalAmount ?? 0);
+          if (!Number.isNaN(amount)) {
+            total += amount;
+          }
+        });
+        setCurrentPeriodTotals({ total, count: snapshot.size });
       },
-      (err) => {
-        console.error("Error fetching invoices in real-time:", err);
-        setError("فشل في تحديث الفواتير: " + err.message);
-        setInvoicesLoading(false);
+      (error) => {
+        console.error("Failed to subscribe to current period invoices:", error);
       }
     );
 
-    // Cleanup subscription on component unmount or when dependencies change
     return () => unsubscribe();
-  }, [userdoc?.uid, selectedTime, userdoc?.lastClearTimes]);
+  }, [realuserUid]);
 
+  const summary = useMemo(() => {
+    const totalInvoices = invoices.length;
+    const totalAmount = invoices.reduce(
+      (sum, invoice) => sum + (invoice.totalAmount ?? 0),
+      0
+    );
+    const pendingCount = invoices.filter((invoice) => invoice.status === "pending").length;
+    const draftCount = invoices.filter((invoice) => invoice.status === "draft").length;
+    const pendingAmount = invoices.reduce((sum, invoice) => {
+      return invoice.status === "pending" ? sum + (invoice.totalAmount ?? 0) : sum;
+    }, 0);
+    const draftAmount = invoices.reduce((sum, invoice) => {
+      return invoice.status === "draft" ? sum + (invoice.totalAmount ?? 0) : sum;
+    }, 0);
 
-  const invoiceStats = useMemo(() => {
     return {
-      count: invoices.length,
-      total: invoices.reduce((acc, inv) => acc + inv.totalAmount, 0),
+      totalInvoices,
+      totalAmount,
+      pendingCount,
+      draftCount,
+      pendingAmount,
+      draftAmount,
     };
   }, [invoices]);
 
-  const renderInvoiceItem = ({ item }: { item: Invoice }) => {
-    const status = getStatusDetails(item.status);
-    return (
-      <TouchableOpacity
-        style={styles.card}
-        activeOpacity={0.8}
-        onPress={() => item.linkedServiceRequestId ? router.push(`/tasks/${item.linkedServiceRequestId}`) : null}
-      >
-        <View style={styles.cardTopRow}>
-          <View style={styles.customerInfo}>
-            <Feather name="user" size={16} color="#555" />
-            <Text style={styles.customerName} numberOfLines={1}>{item.customerName || 'عميل غير محدد'}</Text>
-          </View>
-          <View style={[styles.statusBadge, { backgroundColor: status.backgroundColor }]}>
-            <Text style={[styles.statusText, { color: status.color }]}>{status.text}</Text>
-          </View>
-        </View>
-
-        {/* Invoice ID Display */}
-        <View style={styles.invoiceIdContainer}>
-          <Text style={styles.invoiceIdLabel}>رقم الفاتورة:</Text>
-          <Text style={styles.invoiceIdText} numberOfLines={1}>{item.id}</Text>
-        </View>
-
-        <View style={styles.cardBody}>
-          <View style={styles.detailItem}>
-            <MaterialCommunityIcons name="cash" size={20} color="#16a085" />
-            <Text style={styles.amountText}>{formatCurrency(item.totalAmount)} د.ع</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Feather name="calendar" size={16} color="#888" />
-            <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 600);
   };
 
-  const renderContent = () => {
-    if (invoicesLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007bff" />
-          <Text style={styles.loadingText}>جاري تحميل الفواتير...</Text>
-        </View>
-      );
-    }
-    if (error) {
-      return (
-        <View style={styles.errorContainer}>
-          <MaterialCommunityIcons name="alert-circle-outline" size={50} color="#ff6b6b" />
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => window.location.reload()}>
-            <Text style={styles.retryButtonText}>إعادة المحاولة</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-    if (invoices.length === 0) {
-      return (
-        <View style={styles.emptyContainer}>
-          <MaterialCommunityIcons name="file-document-outline" size={80} color="#ccc" />
-          <Text style={styles.infoText}>لا توجد فواتير لعرضها</Text>
-          <Text style={styles.infoSubText}>جرّب تغيير فلتر التاريخ أو قم بإنشاء فاتورة جديدة.</Text>
-        </View>
-      );
-    }
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        safeArea: { flex: 1, backgroundColor: theme.background },
+        scrollContent: { paddingBottom: 32 },
+        container: {
+          paddingHorizontal: 18,
+          paddingTop: 24,
+          direction: "rtl" as const,
+        },
+        header: { marginBottom: 20 },
+        title: {
+          fontSize: 26,
+          fontWeight: "700",
+          color: theme.text,
+          textAlign: "left" as const,
+        },
+        subtitle: {
+          fontSize: 14,
+          color: theme.textSecondary,
+          textAlign: "left" as const,
+          marginTop: 6,
+        },
+        statsGrid: {
+          flexDirection: "row" as const,
+          flexWrap: "wrap" as const,
+          justifyContent: "space-between" as const,
+          gap: 14,
+          marginBottom: 24,
+        },
+        statCard: {
+          flexBasis: "48%",
+          backgroundColor: theme.card,
+          borderRadius: 18,
+          padding: 16,
+          borderWidth: 1,
+          borderColor: theme.border,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 6,
+          elevation: 3,
+        },
+        statLabel: {
+          fontSize: 14,
+          color: theme.textSecondary,
+          textAlign: "left" as const,
+        },
+        statValue: {
+          fontSize: 22,
+          fontWeight: "700",
+          color: theme.text,
+          textAlign: "left" as const,
+          marginTop: 6,
+        },
+        statHelper: {
+          fontSize: 12,
+          color: theme.textSecondary,
+          textAlign: "left" as const,
+          marginTop: 4,
+        },
+        sectionTitle: {
+          fontSize: 18,
+          fontWeight: "700",
+          color: theme.text,
+          textAlign: "left" as const,
+          marginBottom: 16,
+        },
+        emptyState: {
+          alignItems: "center" as const,
+          paddingVertical: 48,
+          gap: 12,
+        },
+        emptyText: {
+          fontSize: 16,
+          color: theme.textSecondary,
+          textAlign: "center" as const,
+        },
+        errorText: {
+          fontSize: 16,
+          color: theme.destructive,
+          textAlign: "center" as const,
+          marginBottom: 16,
+        },
+        invoiceCard: {
+          backgroundColor: theme.card,
+          borderRadius: 18,
+          padding: 18,
+          marginBottom: 14,
+          borderWidth: 1,
+          borderColor: theme.border,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 6,
+          elevation: 3,
+        },
+        invoiceHeader: {
+          flexDirection: "row" as const,
+          justifyContent: "space-between" as const,
+          alignItems: "center" as const,
+          marginBottom: 12,
+        },
+        invoiceTitle: {
+          fontSize: 16,
+          fontWeight: "700",
+          color: theme.text,
+          textAlign: "left" as const,
+        },
+        invoiceCustomer: {
+          fontSize: 14,
+          color: theme.textSecondary,
+          textAlign: "left" as const,
+        },
+        badge: {
+          paddingVertical: 6,
+          paddingHorizontal: 14,
+          borderRadius: 20,
+          alignSelf: "flex-start" as const,
+        },
+        badgeText: {
+          fontSize: 13,
+          fontWeight: "600",
+        },
+        invoiceAmount: {
+          fontSize: 22,
+          fontWeight: "700",
+          color: theme.text,
+          textAlign: "left" as const,
+          marginBottom: 10,
+          flexShrink: 1,
+        },
+        invoiceMetaRow: {
+          flexDirection: "row-reverse" as const,
+          alignItems: "center" as const,
+          gap: 6,
+          marginBottom: 6,
+        },
+        metaText: {
+          fontSize: 13,
+          color: theme.textSecondary,
+        },
+        itemsText: {
+          fontSize: 14,
+          color: theme.text,
+          textAlign: "left" as const,
+          marginTop: 4,
+        },
+        notesText: {
+          fontSize: 13,
+          color: theme.textSecondary,
+          textAlign: "left" as const,
+          marginTop: 6,
+        },
+        divider: {
+          height: 1,
+          backgroundColor: theme.border,
+          marginVertical: 12,
+        },
+        detailsButton: {
+          flexDirection: "row-reverse" as const,
+          alignItems: "center" as const,
+          gap: 6,
+        },
+        detailsText: {
+          fontSize: 14,
+          fontWeight: "600",
+          color: theme.primary,
+        },
+        loadingWrapper: {
+          paddingVertical: 60,
+          alignItems: "center" as const,
+          gap: 12,
+        },
+      }),
+    [theme]
+  );
+
+  const renderInvoiceCard = (invoice: DisplayInvoice) => {
+    const statusStyles = statusDisplay(invoice.status, theme);
 
     return (
-      <View style={styles.listContainer}>
-        {invoices.map((invoice) => (
-          <View key={invoice.id} style={styles.invoiceItemWrapper}>
-            {renderInvoiceItem({ item: invoice })}
+      <View key={invoice.id} style={styles.invoiceCard}>
+        <View style={styles.invoiceHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.invoiceTitle}>{invoice.customerName ?? "فاتورة بدون اسم"}</Text>
+            <Text style={styles.invoiceCustomer}>
+              {invoice.creatorName ? `أنشأها: ${invoice.creatorName}` : `رقم: ${invoice.id}`}
+            </Text>
           </View>
-        ))}
+          <View
+            style={[
+              styles.badge,
+              { backgroundColor: statusStyles.background },
+            ]}
+          >
+            <Text style={[styles.badgeText, { color: statusStyles.text }]}>
+              {statusStyles.label}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.invoiceAmount} numberOfLines={1} ellipsizeMode="tail">
+          {formatCurrency(invoice.totalAmount)}
+        </Text>
+
+        <View style={styles.invoiceMetaRow}>
+          <Ionicons name="calendar-outline" size={16} color={theme.textSecondary} />
+          <Text style={styles.metaText}>{formatDateTime(invoice.createdAtDate)}</Text>
+        </View>
+
+        {invoice.customerPhone ? (
+          <View style={styles.invoiceMetaRow}>
+            <Ionicons name="call-outline" size={16} color={theme.textSecondary} />
+            <Text style={styles.metaText}>{invoice.customerPhone}</Text>
+          </View>
+        ) : null}
+
+        {invoice.customerEmail ? (
+          <View style={styles.invoiceMetaRow}>
+            <Ionicons name="mail-outline" size={16} color={theme.textSecondary} />
+            <Text style={styles.metaText}>{invoice.customerEmail}</Text>
+          </View>
+        ) : null}
+
+        <Text style={styles.itemsText}>{itemsSummary(invoice.items)}</Text>
+
+        {invoice.notes ? (
+          <Text style={styles.notesText}>{invoice.notes}</Text>
+        ) : null}
+
+        <View style={styles.divider} />
+
+        <TouchableOpacity
+          onPress={() => {
+            if (invoice.linkedServiceRequestId) {
+              router.push(`/tasks/${invoice.linkedServiceRequestId}`);
+            } else {
+              router.push(`/invoices/${invoice.id}`);
+            }
+          }}
+          style={styles.detailsButton}
+        >
+          <Ionicons name="open-outline" size={18} color={theme.primary} />
+          <Text style={styles.detailsText}>عرض التفاصيل</Text>
+        </TouchableOpacity>
       </View>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.safeArea}>
       <ScrollView
-        style={styles.scrollContainer}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.filterSection}>
-          <Text style={styles.sectionTitle}>تصفية حسب التاريخ</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterContainer}
-          >
-            <TouchableOpacity
-              style={[styles.filterButton, selectedTime === "all" && styles.filterButtonActive]}
-              onPress={() => setSelectedTime("all")}
-            >
-              <Text style={[styles.filterText, selectedTime === "all" && styles.filterTextActive]}>الكل</Text>
-            </TouchableOpacity>
-            {sortedClearTimes.map((time) => (
-              <TouchableOpacity
-                key={time.toMillis()}
-                style={[styles.filterButton, selectedTime === time.toMillis().toString() && styles.filterButtonActive]}
-                onPress={() => setSelectedTime(time.toMillis().toString())}
-              >
-                <Text style={[styles.filterText, selectedTime === time.toMillis().toString() && styles.filterTextActive]}>
-                  حتى {formatDate(time)}
-                </Text>
-              </TouchableOpacity>
-            )).reverse()}
-          </ScrollView>
-        </View>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <Text style={styles.title}>فواتيري</Text>
+            <Text style={styles.subtitle}>
+              يعرض هذا القسم الفواتير التي قمت بإنشائها وما زالت في حالة مسودة أو قيد الانتظار.
+            </Text>
+          </View>
 
-        {/* Summary Section */}
-        {invoices.length > 0 && !invoicesLoading && (
-          <View style={styles.summarySection}>
-            <Text style={styles.sectionTitle}>ملخص الفواتير</Text>
-            <View style={styles.summaryContainer}>
-              <View style={styles.summaryBox}>
-                <MaterialCommunityIcons name="file-document-multiple" size={24} color={themeName === 'dark' ? '#a0aec0' : '#6c757d'} />
-                <Text style={styles.summaryLabel}>إجمالي الفواتير</Text>
-                <Text style={styles.summaryValue}>{invoiceStats.count}</Text>
-              </View>
-              <View style={styles.summaryBox}>
-                <MaterialCommunityIcons name="cash-multiple" size={24} color="#16a085" />
-                <Text style={styles.summaryLabel}>المبلغ الإجمالي</Text>
-                <Text style={styles.summaryValue}>{formatCurrency(invoiceStats.total)} د.ع</Text>
-              </View>
+          <View style={styles.statsGrid}>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>إجمالي الفواتير</Text>
+              <Text style={styles.statValue}>{summary.totalInvoices}</Text>
+              <Text style={styles.statHelper}>مسودة + قيد الانتظار</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>فواتير الفترة الحالية</Text>
+              <Text adjustsFontSizeToFit numberOfLines={1} style={styles.statValue}>
+                {formatCurrency(currentPeriodTotals.total)}
+              </Text>
+              <Text style={styles.statHelper}>
+                عدد الفواتير: {currentPeriodTotals.count}
+              </Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>فواتير قيد الانتظار</Text>
+              <Text style={styles.statValue}>{summary.pendingCount}</Text>
+              <Text style={styles.statHelper}>
+                قيمة إجمالية: {formatCurrency(summary.pendingAmount)}
+              </Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>فواتير مسودة</Text>
+              <Text style={styles.statValue}>{summary.draftCount}</Text>
+              <Text style={styles.statHelper}>
+                قيمة إجمالية: {formatCurrency(summary.draftAmount)}
+              </Text>
             </View>
           </View>
-        )}
 
-        <View style={styles.contentSection}>
-          <Text style={styles.sectionTitle}>قائمة الفواتير</Text>
-          {renderContent()}
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          {loading ? (
+            <View style={styles.loadingWrapper}>
+              <ActivityIndicator size="large" color={theme.primary} />
+              <Text style={styles.metaText}>جاري تحميل الفواتير...</Text>
+            </View>
+          ) : invoices.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="document-text-outline" size={42} color={theme.textSecondary} />
+              <Text style={styles.emptyText}>لا توجد فواتير في حالة مسودة أو قيد الانتظار.</Text>
+            </View>
+          ) : (
+            <View>
+              <Text style={styles.sectionTitle}>قائمة الفواتير</Text>
+              {invoices.map(renderInvoiceCard)}
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
   );
-};
-
-const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme === 'dark' ? '#1a202c' : '#f4f6f8',
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 30,
-  },
-  headerContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: theme === 'dark' ? '#2d3748' : '#e2e8f0',
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: theme === 'dark' ? '#e2e8f0' : '#1a2533',
-    textAlign: 'center',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: theme === 'dark' ? '#e2e8f0' : '#1a2533',
-    marginBottom: 15,
-    textAlign: 'right'
-  },
-  filterSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    alignItems: 'flex-end',
-  },
-  filterContainer: {
-    flexDirection: 'row-reverse',
-  },
-  filterButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    backgroundColor: theme === 'dark' ? '#2d3748' : '#fff',
-    borderRadius: 25,
-    marginHorizontal: 5,
-    borderWidth: 1,
-    borderColor: theme === 'dark' ? '#4a5568' : '#e0e0e0',
-  },
-  filterButtonActive: {
-    backgroundColor: '#007bff',
-    borderColor: '#007bff',
-  },
-  filterText: {
-    fontSize: 14,
-    color: theme === 'dark' ? '#cbd5e0' : '#333',
-    fontWeight: '500',
-  },
-  filterTextActive: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  summarySection: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-  },
-  summaryContainer: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-around',
-    padding: 20,
-    backgroundColor: theme === 'dark' ? '#2d3748' : '#fff',
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: theme === 'dark' ? 0.25 : 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  summaryBox: {
-    alignItems: 'center',
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: theme === 'dark' ? '#a0aec0' : '#6c757d',
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  summaryValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: theme === 'dark' ? '#e2e8f0' : '#1a2533',
-    marginTop: 4,
-  },
-  contentSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  listContainer: {
-    paddingBottom: 20,
-  },
-  invoiceItemWrapper: {
-    marginBottom: 15,
-  },
-  card: {
-    backgroundColor: theme === 'dark' ? '#2d3748' : '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: theme === 'dark' ? 0.25 : 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  cardTopRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  customerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  customerName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme === 'dark' ? '#e2e8f0' : '#2c3e50',
-    marginRight: 10,
-    flex: 1,
-    textAlign: 'right',
-  },
-  statusBadge: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-  },
-  statusText: {
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  invoiceIdContainer: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    marginBottom: 15,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: theme === 'dark' ? '#4a5568' : '#f0f0f0',
-  },
-  invoiceIdLabel: {
-    fontSize: 15,
-    color: theme === 'dark' ? '#a0aec0' : '#6c757d',
-    fontWeight: '600',
-    marginRight: 10,
-  },
-  invoiceIdText: {
-    fontSize: 15,
-    color: theme === 'dark' ? '#cbd5e0' : '#333',
-    flex: 1,
-    textAlign: 'left',
-  },
-  cardBody: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  detailItem: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-  },
-  amountText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#16a085',
-    marginRight: 10,
-  },
-  dateText: {
-    fontSize: 15,
-    color: theme === 'dark' ? '#a0aec0' : '#888',
-    marginRight: 10,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 50,
-  },
-  loadingText: {
-    marginTop: 15,
-    fontSize: 16,
-    color: theme === 'dark' ? '#a0aec0' : '#6c757d',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 50,
-    paddingHorizontal: 20,
-  },
-  errorText: {
-    textAlign: 'center',
-    marginTop: 15,
-    fontSize: 16,
-    color: theme === 'dark' ? '#a0aec0' : '#6c757d',
-  },
-  retryButton: {
-    marginTop: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    backgroundColor: '#007bff',
-    borderRadius: 25,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  infoText: {
-    textAlign: 'center',
-    marginTop: 20,
-    fontSize: 18,
-    color: theme === 'dark' ? '#a0aec0' : '#6c757d',
-  },
-  infoSubText: {
-    textAlign: 'center',
-    marginTop: 10,
-    fontSize: 15,
-    color: theme === 'dark' ? '#718096' : '#aab5c0',
-    lineHeight: 22,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 50,
-  },
-});
-
-export default InvoicesScreen;
+}
