@@ -237,7 +237,7 @@ const MediaRenderer = ({ item, index, activeIndex, modalPlayer, setScrollEnabled
                 styles.mediaViewerElement,
                 { resizeMode: 'cover' }, // animatedStyle was removed from here
               ]}
-              onLoad={(event) => {
+              onLoad={(event: any) => {
                 const { width, height } = event.nativeEvent.source;
                 if (height > 0) {
                   setImageAspectRatio(width / height);
@@ -375,9 +375,20 @@ const CommentSection: React.FC<CommentSectionProps> = ({
     [comments]
   );
 
+  // Filter out comments with specific commentType values
+  const filteredComments = useMemo(() => {
+    const excludedTypes = ['statusChange', 'priorityChange', 'assignment', 'invoiceCreation', 'taskAcceptance'];
+    return sortedComments.filter(comment => {
+      // If comment doesn't have commentType, include it
+      if (!comment.commentType) return true;
+      // Exclude comments with the specified types
+      return !excludedTypes.includes(comment.commentType);
+    });
+  }, [sortedComments]);
+
   const allMedia: MediaItem[] = useMemo(() => {
     const media: MediaItem[] = [];
-    sortedComments.forEach(comment => {
+    filteredComments.forEach(comment => {
       comment.attachments?.forEach(att => {
         const isImage = att.fileType === 'image' || (/\.(jpg|jpeg|png|gif|webp)$/i.test(att.fileName));
         const isVideo = att.fileType === 'video' || (/\.(mp4|mov|avi|mkv)$/i.test(att.fileName));
@@ -391,7 +402,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
       });
     });
     return media;
-  }, [sortedComments]);
+  }, [filteredComments]);
 
   const selectedMediaIndexRef = useRef<number | null>(null);
   useEffect(() => {
@@ -673,7 +684,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                   <Ionicons name="close" size={32} color="white" />
                 </TouchableOpacity>
                 {selectedCommentInfo && (
-                  <View style={styles.storyUserInfo}>
+                  <View style={styles.storyHeaderLeft}>
                     {selectedCommentInfo.userPhoto ? (
                       <Image source={{ uri: selectedCommentInfo.userPhoto }} style={styles.storyAvatar} />
                     ) : (
@@ -711,14 +722,14 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 
       {/* Comment list */}
       <View style={styles.commentsList}>
-        {sortedComments.length === 0 ? (
+        {filteredComments.length === 0 ? (
           <View style={styles.emptyCommentsContainer}>
             <Ionicons name="chatbubbles-outline" size={48} color={theme.textSecondary} style={{ opacity: 0.5 }} />
             <Text style={styles.emptyCommentsText}>لا توجد تعليقات بعد</Text>
             <Text style={styles.emptyCommentsSubText}>كن أول من يضيف تعليقًا!</Text>
           </View>
         ) : (
-          sortedComments.map((comment, index) => {
+          filteredComments.map((comment, index) => {
             const user = getUser(comment.userId);
             if (!user) {
               console.warn(`User data not found for userId: "${comment.userId}". Comment ID: ${comment.id}. Displaying fallback name.`);
@@ -728,7 +739,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             const commentDate = getCommentDate(comment.timestamp);
 
             let dateHeader = null;
-            const previousComment = index > 0 ? sortedComments[index - 1] : null;
+            const previousComment = index > 0 ? filteredComments[index - 1] : null;
             const previousCommentDate = previousComment ? getCommentDate(previousComment.timestamp) : null;
 
             if (!previousCommentDate || !isSameDay(commentDate, previousCommentDate)) {

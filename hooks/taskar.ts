@@ -64,8 +64,8 @@ export const handleAcceptTask = async (
       await Location.requestForegroundPermissionsAsync();
     if (foregroundStatus !== "granted") {
       Alert.alert(
-        "Permission Denied",
-        "Foreground location permission is required to accept the task."
+        "طلب إذن الموقع",
+        "يجب تفعيل إذن الوصول إلى الموقع لقبول المهمة. يرجى تفعيله من إعدادات الجهاز."
       );
       setActionLoading(null);
       return;
@@ -75,8 +75,8 @@ export const handleAcceptTask = async (
       await Location.requestBackgroundPermissionsAsync();
     if (backgroundStatus !== "granted") {
       Alert.alert(
-        "Permission Denied",
-        "Background location permission is required to track your progress."
+        "طلب إذن الموقع في الخلفية",
+        "يجب تفعيل إذن الوصول إلى الموقع في الخلفية لتتبع تقدملك. يرجى تفعيله من إعدادات الجهاز."
       );
       setActionLoading(null);
       return;
@@ -148,8 +148,8 @@ export const handleAcceptTask = async (
         distanceInterval: 50,
         showsBackgroundLocationIndicator: true,
         foregroundService: {
-          notificationTitle: "يتم تتبع موقعك",
-          notificationBody: " يتم تتبع موقعك للمهمة الحالية",
+          notificationTitle: "تتبع الموقع قيد التشغيل",
+          notificationBody: "جهازك يقوم بتتبع موقعك للمهمة الحالية",
         },
       });
     }
@@ -161,8 +161,8 @@ export const handleAcceptTask = async (
   } catch (e) {
     console.error("Failed to handle accept action: ", e);
     Alert.alert(
-      "Error",
-      `Failed to accept the task: ${e instanceof Error ? e.message : String(e)}`
+      "خطأ في قبول المهمة",
+      `حدث خطأ أثناء قبول المهمة: ${e instanceof Error ? e.message : String(e)}\nيرجى المحاولة مرة أخرى أو التواصل مع الدعم الفني.`
     );
   } finally {
     setActionLoading(null);
@@ -228,10 +228,10 @@ export const handleRejectTask = async (
         assignedUsers: newAssignedUsers,
       });
     });
-    Alert.alert("تم", "تم تسجيل رفضك للمهمة.");
+    Alert.alert("تم رفض المهمة", "تم تسجيل رفضك للمهمة بنجاح.");
   } catch (e) {
     console.error("Failed to handle reject action: ", e);
-    Alert.alert("Error", "Failed to record your rejection.");
+    Alert.alert("خطأ", "فشل تسجيل رفضك للمهمة. يرجى المحاولة مرة أخرى.");
   } finally {
     setActionLoading(null);
   }
@@ -280,14 +280,14 @@ export const handleLogArrival = async (
       comments: firestore.FieldValue.arrayUnion(arrivalComment),
       lastUpdated: new Date(),
     });
-    Alert.alert("نجاح", "تم تسجيل الوصول بنجاح.");
+    Alert.alert("تسجيل الوصول", "تم تسجيل وصولك إلى موقع المهمة بنجاح.");
   } catch (error) {
     console.error("Error logging arrival:", error);
     Alert.alert(
-      "خطأ",
-      `فشل تسجيل الوصول: ${
+      "خطأ في تسجيل الوصول",
+      `فشل تسجيل الوصول إلى موقع المهمة: ${
         error instanceof Error ? error.message : String(error)
-      }`
+      }\nيرجى التأكد من اتصالك بالإنترنت والمحاولة مرة أخرى.`
     );
   } finally {
     setActionLoading(null);
@@ -372,12 +372,12 @@ export const handleMarkAsDone = async (
       transaction.update(docRef, updatePayload);
     });
 
-    Alert.alert("نجاح", "تم تحديث حالة مهمتك بنجاح.");
+    Alert.alert("تحديث الحالة", "تم تحديث حالة مهمتك إلى 'مكتمل' بنجاح.");
   } catch (e) {
     console.error("Transaction failed: ", e);
     Alert.alert(
-      "خطأ",
-      `فشل تحديث الحالة: ${e instanceof Error ? e.message : String(e)}`
+      "خطأ في تحديث الحالة",
+      `فشل تحديث حالة المهمة: ${e instanceof Error ? e.message : String(e)}\nيرجى المحاولة مرة أخرى أو التواصل مع الإدارة.`
     );
   } finally {
     setActionLoading(null);

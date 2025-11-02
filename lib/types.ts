@@ -133,6 +133,7 @@ export interface Comment {
     latitude: number;
     longitude: number;
   };
+  commentType?: 'statusChange' | 'priorityChange' | 'assignment' | 'invoiceCreation' | 'taskAcceptance' | string;
 }
 
 export interface ServiceRequest {
