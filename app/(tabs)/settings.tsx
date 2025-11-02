@@ -1,13 +1,15 @@
+
 // src/app/(tabs)/settings.tsx (or your path to the settings page)
 
 import { UseDialog } from '@/context/DialogContext';
 import { usePermissions } from '@/context/PermissionsContext';
 import { Theme, useTheme } from '@/context/ThemeContext';
+import useFirebaseAuth from '@/hooks/use-firebase-auth';
 import { Ionicons } from '@expo/vector-icons';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
-import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import React, { Children, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -43,6 +45,53 @@ const formatDuration = (seconds: number) => {
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
   return [h, m, s].map(v => v.toString().padStart(2, '0')).join(':');
+};
+
+interface ExtendedUser extends User {
+  isAdmin?: boolean;
+  apiUsername?: string;
+}
+
+/**
+ * Gets the total amount and count of 'paid' invoices.
+ */
+export const getPaidInvoicesTotal = async (user: User | null): Promise<{ total: number; count: number; }> => {
+  let query = db.collection('subinvoices').where('status', '==', 'paid');
+
+  // Add owner filter for non-admin users
+  const extendedUser = user as ExtendedUser;
+  if (!extendedUser?.isAdmin && extendedUser?.apiUsername) {
+    query = query.where('owner', '==', extendedUser.apiUsername);
+  }
+
+  const querySnapshot = await query.get();
+  let total = 0;
+  querySnapshot.forEach((doc) => {
+    const data = doc.data();
+    total += data?.price || 0;
+  });
+  return { total, count: querySnapshot.size };
+};
+
+/**
+ * Gets the total amount and count of 'unpaid' invoices.
+ */
+export const getUnpaidInvoicesTotal = async (user: User | null): Promise<{ total: number; count: number; }> => {
+  let query = db.collection('subinvoices').where('status', '==', 'unpaid');
+
+  // Add owner filter for non-admin users
+  const extendedUser = user as ExtendedUser;
+  if (!extendedUser?.isAdmin && extendedUser?.apiUsername) {
+    query = query.where('owner', '==', extendedUser.apiUsername);
+  }
+
+  const querySnapshot = await query.get();
+  let total = 0;
+  querySnapshot.forEach((doc) => {
+    const data = doc.data();
+    total += data?.price || 0;
+  });
+  return { total, count: querySnapshot.size };
 };
 
 
@@ -180,6 +229,7 @@ const SettingsPage = () => {
 
   const styles = useMemo(() => getStyles(theme), [theme]);
   const [invoiceData, setInvoiceData] = useState({ total: 0, count: 0 });
+  const [paidInvoicesData, setPaidInvoicesData] = useState({ total: 0, count: 0 });
   const { userdoc, setUserdoc, realuserUid } = usePermissions();
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [isImageUploading, setIsImageUploading] = useState(false);
@@ -187,40 +237,34 @@ const SettingsPage = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPhoneModalVisible, setPhoneModalVisible] = useState(false);
   const [isLogoutDialogVisible, setLogoutDialogVisible] = useState(false);
+  const [teamName, setTeamName] = useState('جاري التحميل...');
+  const [transactionsCount, setTransactionsCount] = useState(0);
   const router = useRouter();
+  const { user } = useFirebaseAuth();
 
+  // State for Time Tracking
   const [timeTrackingData, setTimeTrackingData] = useState<{ sessions: any[], totalDurationSeconds: number }>({ sessions: [], totalDurationSeconds: 0 });
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const { latestClearTimeString, formattedDate } = useMemo(() => {
+  const { latestClearTimeString } = useMemo(() => {
     const latestClearTime = (userdoc?.lastClearTimes && userdoc.lastClearTimes.length > 0)
       ? userdoc.lastClearTimes.reduce((latest, current) => (current.seconds > latest.seconds ? current : latest))
       : null;
-
-    // Fixed date handling for iOS compatibility
     let timeString = new Date(0).toISOString();
-    let dateString = 'لا توجد تصفية سابقة';
-
     if (latestClearTime) {
       try {
-        // Convert Firebase Timestamp to JavaScript Date properly for iOS
         const date = new Date(latestClearTime.seconds * 1000 + latestClearTime.nanoseconds / 1000000);
         timeString = date.toISOString();
-        dateString = new Intl.DateTimeFormat('ar-IQ', { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
       } catch (error) {
         console.error('Error converting timestamp:', error);
-        timeString = new Date(0).toISOString();
-        dateString = 'لا توجد تصفية سابقة';
       }
     }
-
-    return { latestClearTimeString: timeString, formattedDate: dateString };
+    return { latestClearTimeString: timeString };
   }, [userdoc]);
 
   useEffect(() => {
     if (!userdoc?.id) return;
-
     const userDocRef = db.collection('users').doc(userdoc.id);
     const unsubscribe = userDocRef.onSnapshot((snapshot) => {
       if (snapshot.exists()) {
@@ -231,36 +275,38 @@ const SettingsPage = () => {
     }, (error) => {
       console.error("Error fetching user document:", error);
     });
-
     return () => unsubscribe();
   }, [userdoc?.id, setUserdoc]);
 
   useEffect(() => {
-    if (!realuserUid) return;
-
-    const timeTrackingDocRef = db.collection('userTimeTracking').doc(realuserUid);
-    const unsubscribe = timeTrackingDocRef.onSnapshot((snapshot) => {
-      if (snapshot.exists()) {
-        setTimeTrackingData(snapshot.data() as { sessions: any[], totalDurationSeconds: number });
-      } else {
-        setTimeTrackingData({ sessions: [], totalDurationSeconds: 0 });
-        console.log("Time tracking document doesn't exist for this user yet.");
-      }
-    }, (error) => {
-      console.error("Error fetching time tracking data:", error);
-      showDialog({ status: 'error', message: 'فشل في جلب بيانات الدوام.' });
-    });
-
-    return () => unsubscribe();
-  }, [realuserUid, showDialog]);
-
+    if (userdoc?.teamId) {
+      const fetchTeamName = async () => {
+        try {
+          const teamDoc = await db.collection('teams').doc(userdoc.teamId).get();
+          if (teamDoc.exists()) {
+            setTeamName(teamDoc.data()?.name || 'فريق غير معروف');
+          } else {
+            setTeamName('فريق غير محدد');
+          }
+        } catch (error) {
+          console.error("Error fetching team name:", error);
+          setTeamName('خطأ في جلب اسم الفريق');
+        }
+      };
+      fetchTeamName();
+    } else if (userdoc) {
+      setTeamName('غير منضم لفريق');
+    }
+  }, [userdoc?.teamId]);
 
   useEffect(() => {
     if (!realuserUid) {
       setInvoiceData({ total: 0, count: 0 });
       return;
     }
-    const q = db.collection('invoices').where('createdBy', '==', realuserUid).where('createdAt', '>=', latestClearTimeString);
+    const q = db.collection("invoices")
+      .where("createdBy", "==", realuserUid)
+      .where("status", "in", ["draft", "pending"]);
     const unsubscribe = q.onSnapshot((snapshot) => {
       let total = 0;
       snapshot.forEach((doc) => {
@@ -272,7 +318,56 @@ const SettingsPage = () => {
       showDialog({ status: 'error', message: 'فشل في جلب بيانات الفواتير.' });
     });
     return () => unsubscribe();
-  }, [realuserUid, latestClearTimeString, showDialog]);
+  }, [realuserUid, showDialog]);
+
+  useEffect(() => {
+    if (!userdoc?.id) {
+      setTransactionsCount(0);
+      return;
+    }
+    const unsubscribe = db
+      .collection('transactions')
+      .where('assineduser', '==', userdoc.id)
+      .onSnapshot(
+        (snapshot) => setTransactionsCount(snapshot.size),
+        (error) => {
+          console.error('Error fetching transactions count:', error);
+          showDialog({ status: 'error', message: 'فشل في جلب عدد المعاملات.' });
+        }
+      );
+    return () => unsubscribe();
+  }, [userdoc?.id, showDialog]);
+
+  useEffect(() => {
+    if (!realuserUid) return;
+    const timeTrackingDocRef = db.collection('userTimeTracking').doc(realuserUid);
+    const unsubscribe = timeTrackingDocRef.onSnapshot((snapshot) => {
+      if (snapshot.exists()) {
+        setTimeTrackingData(snapshot.data() as { sessions: any[], totalDurationSeconds: number });
+      } else {
+        setTimeTrackingData({ sessions: [], totalDurationSeconds: 0 });
+      }
+    }, (error) => {
+      console.error("Error fetching time tracking data:", error);
+      showDialog({ status: 'error', message: 'فشل في جلب بيانات الدوام.' });
+    });
+    return () => unsubscribe();
+  }, [realuserUid, showDialog]);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchPaidInvoices = async () => {
+      if (!user) return;
+      try {
+        const data = await getPaidInvoicesTotal(userdoc);
+        setPaidInvoicesData(data);
+      } catch (error) {
+        console.error('Error fetching paid invoices:', error);
+        showDialog({ status: 'error', message: 'فشل في جلب بيانات الفواتير المدفوعة.' });
+      }
+    };
+    fetchPaidInvoices();
+  }, [user, userdoc, showDialog]);
 
   const isClockedIn = useMemo(() => {
     return timeTrackingData.sessions.some(session => session.logInTime && !session.logOutTime);
@@ -285,14 +380,11 @@ const SettingsPage = () => {
         timerIntervalRef.current = null;
       }
     };
-
     const activeSession = timeTrackingData.sessions.find(session => session.logInTime && !session.logOutTime);
-
     if (activeSession) {
       cleanupTimer();
       timerIntervalRef.current = setInterval(() => {
         try {
-          // Fixed date handling for iOS compatibility
           const now = new Date();
           const start = new Date(activeSession.logInTime.seconds * 1000 + activeSession.logInTime.nanoseconds / 1000000);
           const secondsElapsed = Math.floor((now.getTime() - start.getTime()) / 1000);
@@ -306,7 +398,6 @@ const SettingsPage = () => {
       setElapsedTime('00:00:00');
       cleanupTimer();
     }
-
     return cleanupTimer;
   }, [timeTrackingData]);
 
@@ -364,8 +455,7 @@ const SettingsPage = () => {
       await storageRef.putFile(imageUri);
       const downloadURL = await storageRef.getDownloadURL();
 
-      const userDocRef = db.collection('users').doc(userdoc.id);
-      await userDocRef.update({ photoURL: downloadURL });
+      await db.collection('users').doc(userdoc.id).update({ photoURL: downloadURL });
       showDialog({ status: 'success', message: 'تم تحديث الصورة الشخصية بنجاح.' });
     } catch (error) {
       console.error('Error uploading image: ', error);
@@ -376,11 +466,7 @@ const SettingsPage = () => {
   }, [userdoc?.id, showDialog]);
 
   const showLogoutDialog = useCallback(() => setLogoutDialogVisible(true), []);
-
-  const cancelLogout = useCallback(() => {
-    if (isLoggingOut) return;
-    setLogoutDialogVisible(false);
-  }, [isLoggingOut]);
+  const cancelLogout = useCallback(() => !isLoggingOut && setLogoutDialogVisible(false), [isLoggingOut]);
 
   const confirmLogout = useCallback(async () => {
     setIsLoggingOut(true);
@@ -388,19 +474,14 @@ const SettingsPage = () => {
       if (userdoc) {
         const userDocRef = db.collection('users').doc(userdoc.id);
         const { data: currentToken } = await Notifications.getExpoPushTokenAsync();
-
         if (currentToken) {
           const userDocSnap = await userDocRef.get();
           if (userDocSnap.exists()) {
             const userData = userDocSnap.data();
-            if (userData) {
-              const existingTokens = userData.expoPushTokens?.QTM || [];
-              const newTokens = existingTokens.filter((t: string) => t !== currentToken);
-              if (newTokens.length < existingTokens.length) {
-                await userDocRef.update({
-                  'expoPushTokens.QTM': newTokens,
-                });
-              }
+            const existingTokens = userData?.expoPushTokens?.QTM || [];
+            const newTokens = existingTokens.filter((t: string) => t !== currentToken);
+            if (newTokens.length < existingTokens.length) {
+              await userDocRef.update({ 'expoPushTokens.QTM': newTokens });
             }
           }
         }
@@ -409,11 +490,10 @@ const SettingsPage = () => {
     } catch (error) {
       console.error("Failed to log out:", error);
       showDialog({ status: 'error', message: 'فشل تسجيل الخروج. يرجى المحاولة مرة أخرى.' });
-      setIsLoggingOut(false); // Only reset on error
+      setIsLoggingOut(false);
       setLogoutDialogVisible(false);
     }
   }, [userdoc, showDialog]);
-
 
   const handlePhoneUpdate = useCallback(async (newPhone: string) => {
     if (!userdoc?.id || !newPhone) {
@@ -422,8 +502,7 @@ const SettingsPage = () => {
     }
     setIsActionLoading(true);
     try {
-      const userDocRef = db.collection('users').doc(userdoc.id);
-      await userDocRef.update({ phone: newPhone });
+      await db.collection('users').doc(userdoc.id).update({ phone: newPhone });
       showDialog({ status: 'success', message: 'تم تحديث رقم الهاتف بنجاح.' });
     } catch (error) {
       console.error('Error updating phone number: ', error);
@@ -433,7 +512,6 @@ const SettingsPage = () => {
       setPhoneModalVisible(false);
     }
   }, [userdoc?.id, showDialog]);
-
 
   const handleToggleClock = useCallback(async () => {
     if (!realuserUid) return;
@@ -445,10 +523,8 @@ const SettingsPage = () => {
       const currentSessions = [...(timeTrackingData.sessions || [])];
       const activeSessionIndex = currentSessions.findIndex(s => !s.logOutTime);
 
-      if (activeSessionIndex !== -1) {
-        // CLOCKING OUT
+      if (activeSessionIndex !== -1) { // Clocking out
         currentSessions[activeSessionIndex].logOutTime = firestore.Timestamp.now();
-
         const totalSeconds = currentSessions.reduce((acc, session) => {
           if (session.logInTime && session.logOutTime) {
             const duration = session.logOutTime.seconds - session.logInTime.seconds;
@@ -456,19 +532,12 @@ const SettingsPage = () => {
           }
           return acc;
         }, 0);
-
-        await timeTrackingDocRef.update({
-          sessions: currentSessions,
-          totalDurationSeconds: totalSeconds,
-        });
-      } else {
-        // CLOCKING IN
+        await timeTrackingDocRef.update({ sessions: currentSessions, totalDurationSeconds: totalSeconds });
+      } else { // Clocking in
         const newSession = { logInTime: firestore.Timestamp.now(), logOutTime: null };
-        const updatedSessions = [...currentSessions, newSession];
-
         await timeTrackingDocRef.set({
           userId: realuserUid,
-          sessions: updatedSessions,
+          sessions: [...currentSessions, newSession],
           totalDurationSeconds: timeTrackingData.totalDurationSeconds || 0,
         }, { merge: true });
       }
@@ -479,14 +548,13 @@ const SettingsPage = () => {
     }
   }, [realuserUid, timeTrackingData]);
 
-
   const openPhoneModal = useCallback(() => setPhoneModalVisible(true), []);
   const closePhoneModal = useCallback(() => setPhoneModalVisible(false), []);
   const goToInvoices = useCallback(() => router.push('/invoices'), [router]);
-  const goToFamily = useCallback(() => router.push('/family'), [router]);
   const goToAbout = useCallback(() => router.push('/about'), [router]);
   const goToBackpack = useCallback(() => router.push('/backpack'), [router]);
-
+  const goToTechnicianDashboard = useCallback(() => router.push('/TechnicianDashboardScreen'), [router]);
+  const goToTransaction = useCallback(() => router.push('/transaction'), [router]);
 
   if (!userdoc) {
     return (
@@ -514,7 +582,6 @@ const SettingsPage = () => {
       >
         <ProfileHeader user={userdoc} onImagePick={handleImagePick} loading={isImageUploading} styles={styles} />
 
-        {/* --- MODIFIED TIME TRACKING SECTION --- */}
         <SettingsGroup title="تسجيل الدوام" styles={styles}>
           <View style={styles.attendanceCard}>
             <View style={styles.statusContainer}>
@@ -523,51 +590,45 @@ const SettingsPage = () => {
               </Text>
               <View style={[styles.statusDot, { backgroundColor: isClockedIn ? theme.success : theme.textSecondary }]} />
             </View>
-
             <View style={styles.timersSection}>
               <Text style={styles.currentSessionTimerLabel}>الجلسة الحالية</Text>
               <Text style={styles.currentSessionTimer}>{elapsedTime}</Text>
-
               <View style={styles.totalDurationContainer}>
                 <Text style={styles.totalDurationLabel}>مجموع الساعات:</Text>
                 <Text style={styles.totalDurationText}>{formatDuration(timeTrackingData.totalDurationSeconds)}</Text>
               </View>
             </View>
-
             <TouchableOpacity
-              style={[
-                styles.attendanceButton,
-                isClockedIn ? styles.attendanceButtonClockOut : styles.attendanceButtonClockIn,
-              ]}
+              style={[styles.attendanceButton, isClockedIn ? styles.attendanceButtonClockOut : styles.attendanceButtonClockIn]}
               onPress={handleToggleClock}
               disabled={isActionLoading}
             >
-              {isActionLoading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <Text style={styles.attendanceButtonText}>
-                  {isClockedIn ? 'إنهاء الدوام' : 'بدء الدوام'}
-                </Text>
-              )}
+              {isActionLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.attendanceButtonText}>{isClockedIn ? 'إنهاء الدوام' : 'بدء الدوام'}</Text>}
             </TouchableOpacity>
           </View>
         </SettingsGroup>
-        {/* --- END OF MODIFIED SECTION --- */}
 
         <SettingsGroup title="المحفظة" styles={styles}>
-          <TouchableOpacity style={styles.invoiceCard} onPress={goToInvoices}>
-            <View style={styles.invoiceCardContent}>
-              <Ionicons name="receipt-outline" size={32} style={styles.invoiceIcon} />
-              <View style={styles.invoiceCardText}>
-                <Text style={styles.invoiceCardTitle}>فواتير الفترة الحالية</Text>
-                <Text style={styles.invoiceCardSubtitle}>{`${invoiceData.count} فاتورة`} • آخر تصفية: {formattedDate}</Text>
-              </View>
+          <View style={styles.walletContainer}>
+            <View style={styles.walletGrid}>
+              <TouchableOpacity style={styles.walletGridCard} onPress={goToInvoices}>
+                <View style={[styles.walletIconContainer, { backgroundColor: '#007AFF' }]}>
+                  <Ionicons name="receipt-outline" size={24} color="#FFF" />
+                </View>
+                <Text style={styles.walletGridTitle}>فواتير التكتات</Text>
+                <Text style={styles.walletGridAmount}>{`${invoiceData.total.toLocaleString("en")}`}</Text>
+                <Text style={styles.walletGridCurrency}>IQD</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.walletGridCard} onPress={goToTransaction}>
+                <View style={[styles.walletIconContainer, { backgroundColor: '#34C759' }]}>
+                  <Ionicons name="swap-horizontal-outline" size={24} color="#FFF" />
+                </View>
+                <Text style={styles.walletGridTitle}> عوائد العمليات</Text>
+                <Text style={styles.walletGridAmount}>{transactionsCount}</Text>
+                <Text style={styles.walletGridCurrency}>عملية</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.invoiceCardAmountContainer}>
-              <Text style={styles.invoiceCardAmount}>{`${invoiceData.total.toLocaleString()} IQD`}</Text>
-              <Ionicons name="chevron-back" size={24} style={styles.chevron} />
-            </View>
-          </TouchableOpacity>
+          </View>
         </SettingsGroup>
 
         <SettingsGroup styles={styles}>
@@ -578,7 +639,7 @@ const SettingsPage = () => {
           <SettingRow styles={styles} icon="person-outline" title="الاسم الكامل" value={userdoc.name || ''} iconColor="#5856D6" />
           <SettingRow styles={styles} icon="mail-outline" title="البريد الإلكتروني" value={userdoc.email || ''} iconColor="#007AFF" />
           <SettingRow styles={styles} icon="call-outline" title="رقم الهاتف" value={userdoc.phone || 'غير محدد'} onPress={openPhoneModal} iconColor="#34C759" />
-          <SettingRow styles={styles} icon="people-outline" title="معرف الفريق" value={userdoc.teamId || 'غير محدد'} iconColor="#FF9500" />
+          <SettingRow styles={styles} icon="people-outline" title="اسم الفريق" value={teamName} iconColor="#FF9500" />
         </SettingsGroup>
 
         <SettingsGroup title="إعدادات التطبيق" styles={styles}>
@@ -592,8 +653,6 @@ const SettingsPage = () => {
         </SettingsGroup>
 
         <SettingsGroup styles={styles}>
-          <SettingRow styles={styles} icon="people-circle-outline" title="عائله القبس" onPress={goToFamily} iconColor="#FF69B4" />
-
           <SettingRow styles={styles} icon="information-circle-outline" title="حول التطبيق" onPress={goToAbout} iconColor="#00BCD4" />
           <TouchableOpacity onPress={showLogoutDialog} style={styles.logoutButtonRow}>
             <View style={[styles.iconContainer, { backgroundColor: theme.destructive }]}>
@@ -627,9 +686,8 @@ const SettingsPage = () => {
   );
 };
 
-// Styles have been updated for the new Time Tracking UI
 const getStyles = (theme: Theme) => StyleSheet.create({
-  // --- NEW STYLES for Time Tracking ---
+  // Time Tracking Styles
   attendanceCard: {
     padding: SPACING.m,
   },
@@ -705,8 +763,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
   },
-  // --- END OF NEW STYLES ---
-
+  // General Styles
   container: {
     flex: 1,
     backgroundColor: theme.background,
@@ -806,11 +863,6 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     backgroundColor: theme.card,
     borderRadius: 12,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
   },
   separator: {
     height: 1,
@@ -847,49 +899,6 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     color: theme.textSecondary,
     textAlign: 'right',
     marginTop: 2,
-  },
-  invoiceCard: {
-    padding: SPACING.m,
-    backgroundColor: 'transparent',
-  },
-  invoiceCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  invoiceIcon: {
-    color: theme.primary,
-  },
-  invoiceCardText: {
-    marginHorizontal: SPACING.m,
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  invoiceCardTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: theme.text,
-    textAlign: 'right',
-  },
-  invoiceCardSubtitle: {
-    fontSize: 13,
-    color: theme.textSecondary,
-    textAlign: 'right',
-    marginTop: 4,
-  },
-  invoiceCardAmountContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginTop: SPACING.m,
-    paddingTop: SPACING.m,
-    borderTopWidth: 1,
-    borderTopColor: theme.separator,
-  },
-  invoiceCardAmount: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.primary,
-    marginLeft: SPACING.s,
   },
   logoutButtonRow: {
     flexDirection: 'row',
@@ -965,6 +974,59 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
   destructiveButtonText: {
     color: '#FFF',
+  },
+  // Wallet Styles
+  walletContainer: {
+    backgroundColor: theme.card,
+    padding: SPACING.m,
+  },
+  walletGrid: {
+    flexDirection: 'row',
+    gap: SPACING.m,
+    marginBottom: SPACING.m,
+  },
+  walletGridCard: {
+    flex: 1,
+    backgroundColor: theme.background,
+    borderRadius: 16,
+    padding: SPACING.m,
+    alignItems: 'center',
+    minHeight: 140,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  walletIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.m,
+  },
+  walletGridTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.textSecondary,
+    textAlign: 'center',
+    marginBottom: SPACING.s,
+    lineHeight: 18,
+  },
+  walletGridAmount: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: theme.text,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  walletGridCurrency: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: theme.textSecondary,
+    textAlign: 'center',
   },
 });
 

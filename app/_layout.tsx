@@ -238,6 +238,8 @@ function RootLayoutNav({ user, profile, authLoaded }: { user: FirebaseAuthTypes.
         <Stack.Screen name="about" options={{ headerBackTitle: "رجوع", }} />
         <Stack.Screen name="create-post" options={{ headerShown: false }} />
         <Stack.Screen name="post-detail" options={{ headerShown: false }} />
+        <Stack.Screen name="transaction" options={{ headerShown: false }} />
+
         <Stack.Screen name="backpack" options={{
           headerBackTitle: "رجوع",
           headerTitle: "الحقيبة"
