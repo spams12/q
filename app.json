@@ -13,13 +13,16 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location in the background to track your progress on assigned tasks.",
         "NSLocationAlwaysUsageDescription": "This app uses your location in the background to track your progress on assigned tasks.",
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["location", "location"]
+        "UIBackgroundModes": [
+          "location",
+          "location"
+        ]
       },
       "runtimeVersion": {
         "policy": "appVersion"
       },
       "bundleIdentifier": "com.tmody.QTM",
-      "buildNumber": "26",
+      "buildNumber": "28",
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "splash": {
@@ -55,7 +58,7 @@
         "android.permission.ACCESS_MEDIA_LOCATION",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
-      "versionCode": 23,
+      "versionCode": 24,
       "runtimeVersion": "1.0.0"
     },
     "web": {

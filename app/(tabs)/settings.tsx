@@ -555,6 +555,7 @@ const SettingsPage = () => {
   const goToBackpack = useCallback(() => router.push('/backpack'), [router]);
   const goToTechnicianDashboard = useCallback(() => router.push('/TechnicianDashboardScreen'), [router]);
   const goToTransaction = useCallback(() => router.push('/transaction'), [router]);
+  const goToFamily = useCallback(() => router.push('/family'), [router]);
 
   if (!userdoc) {
     return (
@@ -609,25 +610,23 @@ const SettingsPage = () => {
         </SettingsGroup>
 
         <SettingsGroup title="المحفظة" styles={styles}>
-          <View style={styles.walletContainer}>
-            <View style={styles.walletGrid}>
-              <TouchableOpacity style={styles.walletGridCard} onPress={goToInvoices}>
-                <View style={[styles.walletIconContainer, { backgroundColor: '#007AFF' }]}>
-                  <Ionicons name="receipt-outline" size={24} color="#FFF" />
-                </View>
-                <Text style={styles.walletGridTitle}>فواتير التكتات</Text>
-                <Text style={styles.walletGridAmount}>{`${invoiceData.total.toLocaleString("en")}`}</Text>
-                <Text style={styles.walletGridCurrency}>IQD</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.walletGridCard} onPress={goToTransaction}>
-                <View style={[styles.walletIconContainer, { backgroundColor: '#34C759' }]}>
-                  <Ionicons name="swap-horizontal-outline" size={24} color="#FFF" />
-                </View>
-                <Text style={styles.walletGridTitle}> عوائد العمليات</Text>
-                <Text style={styles.walletGridAmount}>{transactionsCount}</Text>
-                <Text style={styles.walletGridCurrency}>عملية</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.walletGrid}>
+            <TouchableOpacity style={styles.walletGridCard} onPress={goToInvoices}>
+              <View style={[styles.walletIconContainer, { backgroundColor: '#007AFF' }]}>
+                <Ionicons name="receipt-outline" size={24} color="#FFF" />
+              </View>
+              <Text style={styles.walletGridTitle}>فواتير التكتات</Text>
+              <Text style={styles.walletGridAmount}>{`${invoiceData.total.toLocaleString("en")}`}</Text>
+              <Text style={styles.walletGridCurrency}>IQD</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.walletGridCard} onPress={goToTransaction}>
+              <View style={[styles.walletIconContainer, { backgroundColor: '#34C759' }]}>
+                <Ionicons name="swap-horizontal-outline" size={24} color="#FFF" />
+              </View>
+              <Text style={styles.walletGridTitle}> عوائد العمليات</Text>
+              <Text style={styles.walletGridAmount}>{transactionsCount}</Text>
+              <Text style={styles.walletGridCurrency}>عملية</Text>
+            </TouchableOpacity>
           </View>
         </SettingsGroup>
 
@@ -654,6 +653,8 @@ const SettingsPage = () => {
 
         <SettingsGroup styles={styles}>
           <SettingRow styles={styles} icon="information-circle-outline" title="حول التطبيق" onPress={goToAbout} iconColor="#00BCD4" />
+          <SettingRow styles={styles} icon="people-circle-outline" title="عائله القبس" onPress={goToFamily} iconColor="#FF69B4" />
+
           <TouchableOpacity onPress={showLogoutDialog} style={styles.logoutButtonRow}>
             <View style={[styles.iconContainer, { backgroundColor: theme.destructive }]}>
               <Ionicons name="log-out-outline" size={20} color="#FFF" />
@@ -687,7 +688,6 @@ const SettingsPage = () => {
 };
 
 const getStyles = (theme: Theme) => StyleSheet.create({
-  // Time Tracking Styles
   attendanceCard: {
     padding: SPACING.m,
   },
@@ -978,16 +978,15 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   // Wallet Styles
   walletContainer: {
     backgroundColor: theme.card,
-    padding: SPACING.m,
   },
   walletGrid: {
     flexDirection: 'row',
     gap: SPACING.m,
-    marginBottom: SPACING.m,
+    backgroundColor: theme.background,
   },
   walletGridCard: {
     flex: 1,
-    backgroundColor: theme.background,
+    backgroundColor: theme.card,
     borderRadius: 16,
     padding: SPACING.m,
     alignItems: 'center',

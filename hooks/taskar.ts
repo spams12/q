@@ -14,6 +14,7 @@ const LOCATION_TASK_NAME = "background-location-task";
  */
 // Store the current user document for the background task
 let currentUserDoc: User | null = null;
+let locationUpdateInterval: ReturnType<typeof setInterval> | null = null;
 
 export const setBackgroundTaskUser = (user: User) => {
   currentUserDoc = user;
@@ -22,31 +23,67 @@ export const setBackgroundTaskUser = (user: User) => {
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
     console.error("Background location task error:", error);
+    // Log error to Firebase for debugging
+    try {
+      await rtdb.ref(`locationErrors/${currentUserDoc?.id || 'unknown'}/${Date.now()}`).set({
+        error: error.message || 'Unknown error',
+        timestamp: Date.now(),
+      });
+    } catch (logError) {
+      console.error("Failed to log error to RTDB:", logError);
+    }
     return;
   }
-  if (data && currentUserDoc) {
+  
+  // Check if we have a valid user document
+  if (!currentUserDoc) {
+    console.warn("Background location task running without user document");
+    return;
+  }
+  
+  if (data) {
     const { locations } = data as { locations: Location.LocationObject[] };
     if (locations.length > 0) {
       const location = locations[0];
       const { latitude, longitude, speed, heading, accuracy } = location.coords;
+      
+      // Validate location data
+      if (latitude === undefined || longitude === undefined) {
+        console.warn("Invalid location data received:", location);
+        return;
+      }
+      
       const locationData = {
         latitude,
         longitude,
-        speed,
-        heading,
-        accuracy,
+        speed: speed !== null ? speed : undefined,
+        heading: heading !== null ? heading : undefined,
+        accuracy: accuracy !== null ? accuracy : undefined,
         timestamp: location.timestamp,
       };
+      
       try {
         // Update the activeTechnicians branch in RTDB for live tracking
         await rtdb.ref(`activeTechnicians/${currentUserDoc.id}/location`).set(locationData);
         console.log(`RTDB Location updated for user: ${currentUserDoc.id}`);
-      } catch (e) {
+      } catch (e: unknown) {
         console.error(
           "Failed to write location to RTDB from background task:",
           e
         );
+        // Log error to Firebase for debugging
+        try {
+          await rtdb.ref(`locationErrors/${currentUserDoc.id}/${Date.now()}`).set({
+            error: e instanceof Error ? e.message : String(e),
+            timestamp: Date.now(),
+            locationData,
+          });
+        } catch (logError) {
+          console.error("Failed to log error to RTDB:", logError);
+        }
       }
+    } else {
+      console.warn("No locations received in background task");
     }
   }
 });
@@ -60,6 +97,17 @@ export const handleAcceptTask = async (
   if (!userdoc) return;
   setActionLoading("accept");
   try {
+    // Check if location services are enabled
+    const isLocationEnabled = await Location.hasServicesEnabledAsync();
+    if (!isLocationEnabled) {
+      Alert.alert(
+        "خدمة الموقع غير مفعلة",
+        "يجب تفعيل خدمة الموقع في الجهاز لقبول المهمة. يرجى تفعيلها من إعدادات الجهاز."
+      );
+      setActionLoading(null);
+      return;
+    }
+
     const { status: foregroundStatus } =
       await Location.requestForegroundPermissionsAsync();
     if (foregroundStatus !== "granted") {
@@ -142,17 +190,62 @@ export const handleAcceptTask = async (
       // Set the user document for background task
       setBackgroundTaskUser(userdoc);
 
-      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: 500,
-        distanceInterval: 50,
-        showsBackgroundLocationIndicator: true,
-        foregroundService: {
-          notificationTitle: "تتبع الموقع قيد التشغيل",
-          notificationBody: "جهازك يقوم بتتبع موقعك للمهمة الحالية",
-        },
-      });
+      // Check if we have proper permissions before starting tracking
+      const hasPermission = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+      if (!hasPermission) {
+        console.warn("Location permission not granted, attempting to request again");
+        const { status } = await Location.requestBackgroundPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert(
+            "خطأ في الإذن",
+            "لم يتم منح إذن الموقع في الخلفية. سيتم محاولة تتبع الموقع بشكل محدود."
+          );
+        }
+      }
+
+      try {
+        await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+          accuracy: Location.Accuracy.Balanced, // Reduced from Highest for better battery
+          timeInterval: 5000, // Increased from 500ms to 5 seconds to reduce battery drain
+          distanceInterval: 10, // Reduced from 50m to 10m for more frequent updates
+          showsBackgroundLocationIndicator: true,
+          foregroundService: {
+            notificationTitle: "تتبع الموقع قيد التشغيل",
+            notificationBody: "جهازك يقوم بتتبع موقعك للمهمة الحالية",
+          },
+          pausesUpdatesAutomatically: false, // Ensure updates continue even when app is in background
+        });
+        console.log("Location tracking started successfully");
+      } catch (startError: unknown) {
+        console.error("Failed to start location tracking:", startError);
+        Alert.alert(
+          "خطأ في تتبع الموقع",
+          `فشل في بدء تتبع الموقع: ${startError instanceof Error ? startError.message : String(startError)}. سيتم محاولة إعادة البدء تلقائيًا.`
+        );
+        // Try to start with less aggressive settings
+        try {
+          await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 10000, // 10 seconds
+            distanceInterval: 20, // 20 meters
+            showsBackgroundLocationIndicator: true,
+            foregroundService: {
+              notificationTitle: "تتبع الموقع قيد التشغيل",
+              notificationBody: "جهازك يقوم بتتبع موقعك للمهمة الحالية",
+            },
+          });
+        } catch (fallbackError: unknown) {
+          console.error("Failed to start location tracking with fallback settings:", fallbackError);
+          Alert.alert(
+            "خطأ في تتبع الموقع",
+            `غير قادر على بدء تتبع الموقع: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}. يرجى التحقق من إعدادات الموقع في الجهاز.`
+          );
+        }
+      }
     }
+    
+    // Start periodic location updates as a fallback
+    startPeriodicLocationUpdates(userdoc);
 
     // Call the success callback to trigger navigation
     if (onSuccess) {
@@ -228,6 +321,17 @@ export const handleRejectTask = async (
         assignedUsers: newAssignedUsers,
       });
     });
+    
+    // Check if user has any remaining active tasks, if not stop periodic updates
+    try {
+      const snapshot = await rtdb.ref(`activeTechnicians/${userdoc.id}/activeTasks`).once('value');
+      if (!snapshot.exists() || !snapshot.hasChildren()) {
+        stopPeriodicLocationUpdates();
+      }
+    } catch (error) {
+      console.error("Error checking for remaining tasks:", error);
+    }
+    
     Alert.alert("تم رفض المهمة", "تم تسجيل رفضك للمهمة بنجاح.");
   } catch (e) {
     console.error("Failed to handle reject action: ", e);
@@ -309,6 +413,9 @@ export const handleMarkAsDone = async (
   try {
     // Step 1: Clean up the task from Realtime Database. This also stops tracking if it's the last task.
     await cleanupTaskFromRtdb(userdoc.id, id);
+    
+    // Stop periodic location updates
+    stopPeriodicLocationUpdates();
 
     // Step 2: Run Firestore transaction to update the task state.
     await db.runTransaction(async (transaction) => {
@@ -385,30 +492,209 @@ export const handleMarkAsDone = async (
 };
 
 /**
+ * Helper function to check if location tracking is active and restart if needed
+ */
+export const checkAndRestartLocationTracking = async (userdoc: User) => {
+  if (!userdoc) return;
+  
+  try {
+    const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+    
+    if (!isTracking) {
+      console.log("Location tracking not active, attempting to restart...");
+      
+      // Set the user document for background task
+      setBackgroundTaskUser(userdoc);
+      
+      // Check permissions first
+      const { status: foregroundStatus } = await Location.getForegroundPermissionsAsync();
+      const { status: backgroundStatus } = await Location.getBackgroundPermissionsAsync();
+      
+      if (foregroundStatus !== "granted" || backgroundStatus !== "granted") {
+        console.warn("Location permissions not granted, cannot restart tracking");
+        return false;
+      }
+      
+      // Restart location tracking with optimized settings
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: 5000,
+        distanceInterval: 10,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: "تتبع الموقع قيد التشغيل",
+          notificationBody: "جهازك يقوم بتتبع موقعك للمهمة الحالية",
+        },
+        pausesUpdatesAutomatically: false,
+      });
+      
+      console.log("Location tracking restarted successfully");
+      return true;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("Failed to check/restart location tracking:", error);
+    return false;
+  }
+};
+
+/**
+ * Function to send periodic location updates to ensure data consistency
+ */
+export const startPeriodicLocationUpdates = async (userdoc: User) => {
+  if (!userdoc) return;
+  
+  // Clear any existing interval
+  if (locationUpdateInterval) {
+    clearInterval(locationUpdateInterval);
+  }
+  
+  // Set up periodic location updates every 30 seconds
+  locationUpdateInterval = setInterval(async () => {
+    try {
+      // Check if we still have proper permissions
+      const { status: foregroundStatus } = await Location.getForegroundPermissionsAsync();
+      if (foregroundStatus !== "granted") {
+        console.warn("Foreground location permission not granted, skipping periodic update");
+        return;
+      }
+      
+      // Get current location
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      
+      const { latitude, longitude, speed, heading, accuracy } = location.coords;
+      
+      // Validate location data
+      if (latitude === undefined || longitude === undefined) {
+        console.warn("Invalid location data received for periodic update");
+        return;
+      }
+      
+      const locationData = {
+        latitude,
+        longitude,
+        speed: speed !== null ? speed : undefined,
+        heading: heading !== null ? heading : undefined,
+        accuracy: accuracy !== null ? accuracy : undefined,
+        timestamp: location.timestamp,
+        updateType: "periodic",
+      };
+      
+      // Update the activeTechnicians branch in RTDB
+      await rtdb.ref(`activeTechnicians/${userdoc.id}/location`).set(locationData);
+      console.log(`Periodic location update sent for user: ${userdoc.id}`);
+    } catch (error) {
+      console.error("Failed to send periodic location update:", error);
+      // Don't clear the interval on error, just log and continue
+    }
+  }, 30000); // 30 seconds
+};
+
+/**
+ * Function to stop periodic location updates
+ */
+export const stopPeriodicLocationUpdates = () => {
+  if (locationUpdateInterval) {
+    clearInterval(locationUpdateInterval);
+    locationUpdateInterval = null;
+  }
+};
+
+/**
+ * Function to verify location permissions and restart tracking if needed
+ */
+export const verifyAndMaintainLocationTracking = async (userdoc: User) => {
+  if (!userdoc) return;
+  
+  try {
+    // Check if location services are enabled
+    const isLocationEnabled = await Location.hasServicesEnabledAsync();
+    if (!isLocationEnabled) {
+      console.warn("Location services are disabled");
+      return false;
+    }
+    
+    // Check foreground permissions
+    const { status: foregroundStatus } = await Location.getForegroundPermissionsAsync();
+    if (foregroundStatus !== "granted") {
+      console.warn("Foreground location permission not granted");
+      return false;
+    }
+    
+    // Check background permissions
+    const { status: backgroundStatus } = await Location.getBackgroundPermissionsAsync();
+    if (backgroundStatus !== "granted") {
+      console.warn("Background location permission not granted");
+      return false;
+    }
+    
+    // Check if background location tracking is active
+    const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+    if (!isTracking) {
+      console.log("Location tracking not active, restarting...");
+      
+      // Set the user document for background task
+      setBackgroundTaskUser(userdoc);
+      
+      // Restart location tracking
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: 5000,
+        distanceInterval: 10,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: "تتبع الموقع قيد التشغيل",
+          notificationBody: "جهازك يقوم بتتبع موقعك للمهمة الحالية",
+        },
+        pausesUpdatesAutomatically: false,
+      });
+      
+      console.log("Location tracking restarted successfully");
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("Error verifying location tracking:", error);
+    return false;
+  }
+};
+
+/**
  * Helper function to remove a task from a user's active list in RTDB.
  * If it's the last task, it stops location tracking and removes the user's record.
  */
 const cleanupTaskFromRtdb = async (userUid: string, taskId: string) => {
   if (!userUid || !taskId) return;
 
-  await rtdb.ref(`activeTechnicians/${userUid}/activeTasks/${taskId}`).remove();
-  console.log(`Removed task ${taskId} from RTDB for user ${userUid}.`);
+  try {
+    await rtdb.ref(`activeTechnicians/${userUid}/activeTasks/${taskId}`).remove();
+    console.log(`Removed task ${taskId} from RTDB for user ${userUid}.`);
+  } catch (error: unknown) {
+    console.error(`Failed to remove task ${taskId} from RTDB for user ${userUid}:`, error);
+  }
 
-  const snapshot = await rtdb.ref(`activeTechnicians/${userUid}/activeTasks`).once('value');
+  try {
+    const snapshot = await rtdb.ref(`activeTechnicians/${userUid}/activeTasks`).once('value');
 
-  const isTracking = await Location.hasStartedLocationUpdatesAsync(
-    LOCATION_TASK_NAME
-  );
+    const isTracking = await Location.hasStartedLocationUpdatesAsync(
+      LOCATION_TASK_NAME
+    );
 
-  if (!snapshot.exists() || !snapshot.hasChildren()) {
-    console.log(`No active tasks left for user ${userUid}. Stopping tracking.`);
-    if (isTracking) {
-      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
-      // Also remove the technician's top-level node from RTDB to keep it clean
-      await rtdb.ref(`activeTechnicians/${userUid}`).remove();
-      console.log(
-        `Stopped tracking and removed RTDB record for user ${userUid}.`
-      );
+    if (!snapshot.exists() || !snapshot.hasChildren()) {
+      console.log(`No active tasks left for user ${userUid}. Stopping tracking.`);
+      if (isTracking) {
+        await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+        // Also remove the technician's top-level node from RTDB to keep it clean
+        await rtdb.ref(`activeTechnicians/${userUid}`).remove();
+        console.log(
+          `Stopped tracking and removed RTDB record for user ${userUid}.`
+        );
+      }
     }
+  } catch (error: unknown) {
+    console.error(`Error during cleanup for user ${userUid}:`, error);
   }
 };
