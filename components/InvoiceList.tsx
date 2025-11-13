@@ -970,6 +970,8 @@ function InvoiceForm({
     [currentUserTeamId]
   );
 
+  
+
   // useEffects for data fetching and setup remain largely unchanged
   useEffect(() => {
     async function fetchServiceRequest() {
