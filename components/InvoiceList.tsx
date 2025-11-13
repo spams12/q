@@ -52,7 +52,73 @@ interface RenderItemSpecificFieldsProps {
   handleCableLengthChange: (value: string) => void;
   handleDeviceModelChange: (value: string) => void;
   handleMaintenanceTypeChange: (value: string) => void;
-  styles: ReturnType<typeof getStyles>;
+  // Use the same style shape as InvoiceForm's getStyles (no cableInfo here)
+  styles: {
+    container: any;
+    contentContainer: any;
+    centered: any;
+    footer: any;
+    header: any;
+    headerTitle: any;
+    headerSubtitle: any;
+    card: any;
+    itemFormCard: any;
+    cardHeader: any;
+    cardTitle: any;
+    button: any;
+    buttonLarge: any;
+    buttonFullWidth: any;
+    buttonText: any;
+    buttonPrimary: any;
+    buttonPrimaryPressed: any;
+    buttonSecondary: any;
+    buttonSecondaryPressed: any;
+    buttonDisabled: any;
+    cancelButton: any;
+    deleteButton: any;
+    label: any;
+    input: any;
+    textArea: any;
+    pickerContainer: any;
+    picker: any;
+    pickerItem: any;
+    pickerIcon: any;
+    inlineInputContainer: any;
+    inlineInput: any;
+    checkboxGroupContainer: any;
+    checkboxWrapper: any;
+    checkboxBase: any;
+    checkboxLabel: any;
+    formActions: any;
+    itemListContainer: any;
+    itemRow: any;
+    itemRowLast: any;
+    itemRowDetails: any;
+    itemDescription: any;
+    itemMeta: any;
+    itemDetail: any;
+    itemTotal: any;
+    itemContainer: any;
+    totalContainer: any;
+    totalLabel: any;
+    totalValue: any;
+    emptyStateContainer: any;
+    emptyStateText: any;
+    emptyStateSubText: any;
+    loadingText: any;
+    errorText: any;
+    errorSubText: any;
+    modalBackdrop: any;
+    modalView: any;
+    modalHeader: any;
+    modalTitle: any;
+    modalText: any;
+    missingItemsScroll: any;
+    missingItemCard: any;
+    missingItemName: any;
+    missingItemDetails: any;
+    missingItemDetail: any;
+  };
   theme: Theme;
 }
 
@@ -187,6 +253,7 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
         case "maintenance":
           return (
             <>
+              {/* Primary maintenance kind (simple vs connector/device/cable/custom list) */}
               <Text style={styles.label}>نوع الصيانة</Text>
               <CustomDropdown
                 selectedValue={currentItem.maintenanceType}
@@ -196,8 +263,46 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                   { label: "استبدال كابل", value: "cableReplacement" },
                   { label: "استبدال كونيكتر", value: "connectorReplacement" },
                   { label: "استبدال جهاز", value: "deviceReplacement" },
+                  { label: "صيانة مخصصة من القائمة", value: "customMaintenanceFromList" },
+                  { label: "صيانة مخصصة يدوية", value: "customMaintenanceManual" },
                 ]}
               />
+
+              {/* When selecting from predefined maintenanceTypes list */}
+              {currentItem.maintenanceType === "customMaintenanceFromList" && (
+                <>
+                  <Text style={styles.label}>اختر نوع الصيانة المخصصة</Text>
+                  <CustomDropdown
+                    selectedValue={currentItem.customMaintenanceId as any}
+                    onValueChange={(value) => {
+                      if (!invoiceSettings) return;
+                      const mt = invoiceSettings.maintenanceTypes.find(
+                        (m) => m.id === value
+                      );
+                      const price = mt?.basePrice || 0;
+                      const description =
+                        mt?.name || currentItem.description || "صيانة مخصصة";
+
+                      setCurrentItem((prev) => ({
+                        ...prev,
+                        customMaintenanceId: value,
+                        description,
+                        unitPrice: price,
+                        totalPrice: price * (prev.quantity || 1),
+                      }));
+                    }}
+                    placeholder="اختر من أنواع الصيانة المضافة في الإعدادات..."
+                    items={invoiceSettings.maintenanceTypes
+                      .filter((mt) => mt.isActive)
+                      .map((mt) => ({
+                        label: `${mt.name} (${mt.basePrice.toLocaleString()} د.ع)`,
+                        value: mt.id,
+                      }))}
+                  />
+                </>
+              )}
+
+              {/* Existing built-in behaviors */}
 
               {currentItem.maintenanceType === "cableReplacement" && (
                 <>
@@ -277,7 +382,8 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                 </>
               )}
 
-              {currentItem.maintenanceType === "customMaintenance" && (
+              {/* Manual custom maintenance: free text + price */}
+              {currentItem.maintenanceType === "customMaintenanceManual" && (
                 <>
                   <Text style={styles.label}>وصف الصيانة</Text>
                   <TextInput
@@ -296,11 +402,11 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                     value={currentItem.unitPrice?.toString() || "0"}
                     onChangeText={(text) => {
                       const price = parseFloat(text) || 0;
-                      setCurrentItem({
-                        ...currentItem,
+                      setCurrentItem((prev) => ({
+                        ...prev,
                         unitPrice: price,
-                        totalPrice: price * (currentItem.quantity || 1),
-                      });
+                        totalPrice: price * (prev.quantity || 1),
+                      }));
                     }}
                     placeholder="0"
                     placeholderTextColor={theme.placeholder}
@@ -758,7 +864,9 @@ function InvoiceForm({
     usePermissions();
 
   const [items, setItems] = useState<InvoiceItem[]>([]);
-  const [currentItem, setCurrentItem] = useState<Partial<InvoiceItem>>({
+  const [currentItem, setCurrentItem] = useState<
+    Partial<InvoiceItem> & { customMaintenanceId?: string }
+  >({
     type: "maintenance",
     description: "",
     quantity: 1,
@@ -766,6 +874,7 @@ function InvoiceForm({
     totalPrice: 0,
     connectorType: [],
     maintenanceType: undefined,
+    customMaintenanceId: undefined,
   });
 
   const [invoiceSettings, setInvoiceSettings] =
@@ -994,7 +1103,7 @@ function InvoiceForm({
   ]);
 
   const resetItemForm = useCallback(() => {
-    let initialItemState: Partial<InvoiceItem> = {
+    let initialItemState: Partial<InvoiceItem> & { customMaintenanceId?: string } = {
       type: "maintenance",
       description: "",
       quantity: 1,
@@ -1002,6 +1111,7 @@ function InvoiceForm({
       totalPrice: 0,
       connectorType: [],
       maintenanceType: undefined,
+      customMaintenanceId: undefined,
     };
 
     if (invoiceSettings) {
@@ -1159,16 +1269,53 @@ function InvoiceForm({
   };
 
   const handleMaintenanceTypeChange = (value: string) => {
-    if (!invoiceSettings) return;
+    if (!invoiceSettings) {
+      setCurrentItem((prev) => ({ ...prev, maintenanceType: value }));
+      return;
+    }
+
+    // For manual custom, clear auto values and let user type
+    if (value === "customMaintenanceManual") {
+      setCurrentItem((prev) => ({
+        ...prev,
+        maintenanceType: value,
+        customMaintenanceId: undefined,
+        description: "",
+        unitPrice: 0,
+        totalPrice: 0,
+      }));
+      return;
+    }
+
+    // For list-based custom, do not resolve here; handled by second dropdown
+    if (value === "customMaintenanceFromList") {
+      setCurrentItem((prev) => ({
+        ...prev,
+        maintenanceType: value,
+        // keep existing description/price until user chooses specific maintenance item
+      }));
+      return;
+    }
+
+    // For other maintenance types (including when you directly select an id from older data)
     const maintenanceTypeSetting = invoiceSettings.maintenanceTypes.find(
       (mt) => mt.id === value
     );
-    let price = maintenanceTypeSetting?.basePrice || 0;
-    let description = currentItem.description || "صيانة مشترك";
+    const price = maintenanceTypeSetting?.basePrice || 0;
+    const description =
+      maintenanceTypeSetting?.name ||
+      currentItem.description ||
+      "صيانة مشترك";
 
     setCurrentItem((prev) => ({
       ...prev,
       maintenanceType: value,
+      customMaintenanceId:
+        value === "cableReplacement" ||
+        value === "connectorReplacement" ||
+        value === "deviceReplacement"
+          ? undefined
+          : prev.customMaintenanceId,
       description,
       unitPrice: price,
       totalPrice: price * (prev.quantity || 1),
@@ -2134,7 +2281,7 @@ function InvoiceForm({
                       </Text>
                       {/* Display cable info by name if present */}
                       {item.cableLength && (
-                        <Text style={styles.cableInfo}>
+                        <Text>
                           {item.cableLength}
                         </Text>
                       )}
