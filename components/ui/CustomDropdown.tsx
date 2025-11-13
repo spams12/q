@@ -35,7 +35,7 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
   const [modalVisible, setModalVisible] = useState(false);
 
   const selectedItem = items.find((item) => item.value === selectedValue);
-
+  console.log(items , selectedValue)
   const handleSelect = (item: DropdownItem) => {
     onValueChange(item.value);
     setModalVisible(false);
@@ -72,7 +72,9 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
           <View style={styles.modalView}>
             <FlatList
               data={items}
-              keyExtractor={(item) => item.value.toString()}
+              keyExtractor={(item, index) =>
+                `${String(item.value)}-${String(item.label)}-${index}`
+              }
               renderItem={({ item }) => (
                 <Pressable
                   style={styles.optionButton}

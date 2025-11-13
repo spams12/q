@@ -204,7 +204,8 @@ const AccountBalanceScreen = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback((refresh = false) => {
+  // NEW: Separate function to fetch initial data with pagination support
+  const fetchInitialData = useCallback(async (refresh = false) => {
     if (!userdoc?.id) {
       setLoading(false);
       return;
@@ -214,15 +215,16 @@ const AccountBalanceScreen = () => {
     else setLoading(true);
     setError(null);
 
-    // UPDATED: Query using the native SDK's chained-method syntax
-    const query = firestore()
-      .collection("transactions")
-      .where("assineduser", "==", userdoc.id)
-      .orderBy("createdAt", "desc")
-      .limit(PAGE_SIZE);
+    try {
+      // UPDATED: Query using the native SDK's chained-method syntax
+      const query = firestore()
+        .collection("transactions")
+        .where("assineduser", "==", userdoc.id)
+        .orderBy("createdAt", "desc")
+        .limit(PAGE_SIZE);
 
-    // UPDATED: Call onSnapshot directly on the query object
-    const unsubscribe = query.onSnapshot(async (snapshot) => {
+      const snapshot = await query.get();
+      
       const fetchedTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
       const enrichedTransactions = await fetchServiceRequestDetails(fetchedTransactions);
 
@@ -232,27 +234,47 @@ const AccountBalanceScreen = () => {
       setLastVisible(lastDoc || null);
       setHasMore(snapshot.docs.length === PAGE_SIZE);
 
+    } catch (err: any) {
+      console.error("Error fetching transactions:", err);
+      setError("فشل في تحميل الحركات المالية.");
+    } finally {
       setLoading(false);
       if (refresh) setIsRefreshing(false);
-    },
-      (err) => {
-        console.error("Error with real-time listener:", err);
-        setError("فشل في تحديث الحركات المالية.");
-        setLoading(false);
-        if (refresh) setIsRefreshing(false);
-      }
-    );
+    }
+  }, [userdoc?.id]);
+
+  // NEW: Real-time listener for updates to existing transactions
+  const subscribeToUpdates = useCallback(() => {
+    if (!userdoc?.id) return () => {};
+
+    const query = firestore()
+      .collection("transactions")
+      .where("assineduser", "==", userdoc.id)
+      .orderBy("createdAt", "desc")
+      .limit(PAGE_SIZE);
+
+    // Listen for real-time updates
+    const unsubscribe = query.onSnapshot(async (snapshot) => {
+      const fetchedTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+      const enrichedTransactions = await fetchServiceRequestDetails(fetchedTransactions);
+      setTransactions(prev => {
+        // Merge new data with existing data, avoiding duplicates
+        const existingIds = new Set(prev.map(t => t.id));
+        const newTransactions = enrichedTransactions.filter(t => !existingIds.has(t.id));
+        return [...newTransactions, ...prev];
+      });
+    }, (err) => {
+      console.error("Error with real-time listener:", err);
+    });
 
     return unsubscribe;
   }, [userdoc?.id]);
 
   useEffect(() => {
-    const unsubscribe = fetchData(false);
-    // The unsubscribe function returned by the native SDK works the same way
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [fetchData]);
+    fetchInitialData(false);
+    const unsubscribe = subscribeToUpdates();
+    return () => unsubscribe();
+  }, [fetchInitialData, subscribeToUpdates]);
 
   const fetchMoreTransactions = async () => {
     if (loadingMore || !hasMore || !lastVisible || !userdoc?.id) return;
@@ -280,14 +302,15 @@ const AccountBalanceScreen = () => {
 
     } catch (err: any) {
       console.error("Error fetching more transactions:", err);
+      setError("فشل في تحميل المزيد من الحركات المالية.");
     } finally {
       setLoadingMore(false);
     }
   };
 
   const handleRefresh = useCallback(() => {
-    fetchData(true);
-  }, [fetchData]);
+    fetchInitialData(true);
+  }, [fetchInitialData]);
 
   // Logic for calculations remains the same
   const { totalIncome, totalExpenses, accountBalance } = useMemo(() => {
@@ -299,7 +322,7 @@ const AccountBalanceScreen = () => {
         } else {
           acc.totalIncome += trans.totalAmount;
         }
-        acc.accountBalance = acc.totalIncome - acc.totalExpenses;
+        acc.accountBalance = acc.totalIncome + acc.totalExpenses; // Fixed calculation
         return acc;
       },
       { totalIncome: 0, totalExpenses: 0, accountBalance: 0 }

@@ -46,8 +46,8 @@ interface RenderItemSpecificFieldsProps {
   currentItem: Partial<InvoiceItem>;
   setCurrentItem: React.Dispatch<React.SetStateAction<Partial<InvoiceItem>>>;
   invoiceSettings: InvoiceSettings;
-  customCableLength: string;
-  handleCustomCableLengthInputChange: (text: string) => void;
+  // customCableLength removed
+  // handleCustomCableLengthInputChange removed
   handlePackageTypeChange: (value: string) => void;
   handleCableLengthChange: (value: string) => void;
   handleDeviceModelChange: (value: string) => void;
@@ -62,8 +62,6 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
       currentItem,
       setCurrentItem,
       invoiceSettings,
-      customCableLength,
-      handleCustomCableLengthInputChange,
       handlePackageTypeChange,
       handleCableLengthChange,
       handleDeviceModelChange,
@@ -90,36 +88,26 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                   }))}
               />
 
-              <Text style={styles.label}>طول الكيبل المستخدم</Text>
+              <Text style={styles.label}>نوع الكيبل المستخدم</Text>
               <CustomDropdown
-                selectedValue={currentItem.cableLength?.toString()}
+                selectedValue={
+                  typeof currentItem.cableLength === "string"
+                    ? currentItem.cableLength
+                    : undefined
+                }
                 onValueChange={handleCableLengthChange}
-                placeholder="اختر طول الكيبل..."
+                placeholder="اختر نوع الكيبل..."
                 items={[
                   ...invoiceSettings.cableLengths
                     .filter((cl: CableLength) => cl.isActive && !cl.isCustom)
                     .map((cl: CableLength) => ({
-                      label: `${cl.length} متر`,
-                      value: cl.length.toString(),
+                      label: cl.name || `${cl.length} متر`,
+                      value: cl.name || `${cl.length} متر`,
                     })),
-                  ...(invoiceSettings.cableLengths.some(
-                    (cl: CableLength) => cl.isCustom && cl.isActive
-                  )
-                    ? [{ label: "طول مخصص", value: "custom" }]
-                    : []),
                 ]}
               />
-              {currentItem.cableLength === "custom" && (
-                <TextInput
-                  style={styles.input}
-                  keyboardType="numeric"
-                  placeholder="أدخل الطول بالمتر"
-                  value={customCableLength}
-                  onChangeText={handleCustomCableLengthInputChange}
-                  placeholderTextColor={theme.placeholder}
-                />
-              )}
-
+              {/* Custom cable length input removed */}
+ 
               <Text style={styles.label}>جهاز الاستقبال</Text>
               <CustomDropdown
                 selectedValue={currentItem.deviceModel}
@@ -213,36 +201,27 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
 
               {currentItem.maintenanceType === "cableReplacement" && (
                 <>
-                  <Text style={styles.label}>طول الكيبل</Text>
+                  <Text style={styles.label}>نوع الكيبل</Text>
                   <CustomDropdown
-                    selectedValue={currentItem.cableLength?.toString()}
+                    selectedValue={
+                      typeof currentItem.cableLength === "string"
+                        ? currentItem.cableLength
+                        : undefined
+                    }
                     onValueChange={handleCableLengthChange}
-                    placeholder="اختر طول الكيبل..."
+                    placeholder="اختر نوع الكيبل..."
                     items={[
                       ...invoiceSettings.cableLengths
                         .filter((cl: CableLength) => cl.isActive && !cl.isCustom)
                         .map((cl: CableLength) => ({
-                          label: `${cl.length
-                            } متر (${cl.price.toLocaleString()} د.ع)`,
-                          value: cl.length.toString(),
+                          label:
+                            cl.name ||
+                            `${cl.length} متر (${cl.price.toLocaleString()} د.ع)`,
+                          value: cl.name || `${cl.length} متر`,
                         })),
-                      ...(invoiceSettings.cableLengths.some(
-                        (cl: CableLength) => cl.isCustom && cl.isActive
-                      )
-                        ? [{ label: "طول مخصص", value: "custom" }]
-                        : []),
                     ]}
                   />
-                  {currentItem.cableLength === "custom" && (
-                    <TextInput
-                      style={styles.input}
-                      keyboardType="numeric"
-                      placeholder="أدخل الطول بالمتر"
-                      value={customCableLength}
-                      onChangeText={handleCustomCableLengthInputChange}
-                      placeholderTextColor={theme.placeholder}
-                    />
-                  )}
+                  {/* Custom cable length input removed */}
                 </>
               )}
 
@@ -804,7 +783,7 @@ function InvoiceForm({
   const [notes, setNotes] = useState("");
   const [showItemForm, setShowItemForm] = useState(false);
 
-  const [customCableLength, setCustomCableLength] = useState("");
+  // const [customCableLength, setCustomCableLength] = useState(""); // Removed custom cable length
   const [userStock, setUserStock] = useState<UserStock | null>(null);
   const [loadingUserStock, setLoadingUserStock] = useState(false);
 
@@ -824,9 +803,9 @@ function InvoiceForm({
         { id: "pkg2", name: "National Fiber 50", price: 45000, isActive: true },
       ],
       cableLengths: [
-        { id: "cl1", length: 30, price: 10000, isActive: true },
-        { id: "cl2", length: 50, price: 10000, isActive: true },
-        { id: "cl14", length: 0, price: 16000, isCustom: true, isActive: true },
+        { id: "cl1", name: "كيبل 30 متر", length: 30, price: 10000, isActive: true },
+        { id: "cl2", name: "كيبل 50 متر", length: 50, price: 10000, isActive: true },
+        { id: "cl14", name: "كيبل مخصص", length: 0, price: 16000, isCustom: true, isActive: true },
       ],
       connectorTypes: [
         { id: "ct1", name: "Green", price: 3000, isActive: true },
@@ -1033,43 +1012,18 @@ function InvoiceForm({
       if (maintenanceTypeSetting) {
         initialItemState = {
           ...initialItemState,
-          description: "صيانة مشترك",
           maintenanceType: defaultMaintenanceId,
+          description: "صيانة مشترك",
           unitPrice: maintenanceTypeSetting.basePrice,
-          totalPrice:
-            maintenanceTypeSetting.basePrice * (initialItemState.quantity || 1),
+          totalPrice: maintenanceTypeSetting.basePrice,
         };
       }
     }
+
     setCurrentItem(initialItemState);
-    setCustomCableLength("");
   }, [invoiceSettings]);
 
-  const handleCustomCableLengthInputChange = (inputValue: string) => {
-    if (!invoiceSettings) return;
-    if (currentItem.type === "newCustomerInstallation") {
-      setCustomCableLength(inputValue);
-      setCurrentItem({
-        ...currentItem,
-        cableLength: "custom",
-      });
-      return;
-    }
-    let price = 0;
-    const customCableSetting = invoiceSettings.cableLengths.find(
-      (cl) => cl.isCustom
-    );
-    if (customCableSetting) {
-      price = customCableSetting.price;
-    }
-    setCustomCableLength(inputValue);
-    setCurrentItem({
-      ...currentItem,
-      cableLength: "custom",
-      unitPrice: price,
-      totalPrice: price * (currentItem.quantity || 1),
-    });
-  };
+  // Custom cable length input handler removed
 
   const handleItemTypeChange = (value: InvoiceItem["type"]) => {
     if (!invoiceSettings) return;
@@ -1105,8 +1059,6 @@ function InvoiceForm({
         newDescription = "تجديد اشتراك";
         break;
     }
-
-    setCustomCableLength("");
 
     setCurrentItem((prev) => ({
       ...prev,
@@ -1148,33 +1100,46 @@ function InvoiceForm({
 
   const handleCableLengthChange = (value: string) => {
     if (!invoiceSettings) return;
+
+    // We now treat cableLength as a NAME/label string, not numeric length.
+    const cable = invoiceSettings.cableLengths.find(
+      (cl) => cl.name === value
+    );
+
+    // For new customer installation:
+    // - Store the selected cable NAME only (no price logic here).
     if (currentItem.type === "newCustomerInstallation") {
-      setCurrentItem({ ...currentItem, cableLength: value });
+      setCurrentItem((prev) => ({
+        ...prev,
+        cableLength: cable?.name || value,
+      }));
       return;
     }
-    let price = 0;
-    if (value === "custom") {
-      setCurrentItem({ ...currentItem, cableLength: value });
-      const customCableSetting = invoiceSettings.cableLengths.find(
-        (cl) => cl.isCustom
-      );
-      price = customCableSetting?.price || 0;
-    } else {
-      const cableLengthSetting = invoiceSettings.cableLengths.find(
-        (cl) => cl.length.toString() === value
-      );
-      if (cableLengthSetting) {
-        price = cableLengthSetting.price;
-      }
-    }
-    setCurrentItem({
-      ...currentItem,
-      cableLength: value,
-      unitPrice: price,
-      totalPrice: price * (currentItem.quantity || 1),
-    });
-  };
 
+    // For maintenance cable replacement:
+    // - Use cable NAME for cableLength (for display/record),
+    // - Use cable.basePrice (if available) for unitPrice/totalPrice.
+    if (currentItem.type === "maintenance") {
+      let unitPrice = currentItem.unitPrice || 0;
+      if (cable) {
+        unitPrice = cable.price || 0;
+      }
+
+      setCurrentItem((prev) => ({
+        ...prev,
+        cableLength: cable?.name || value,
+        unitPrice,
+        totalPrice: unitPrice * (prev.quantity || 1),
+      }));
+      return;
+    }
+
+    // Default fallback (other types should not normally use cable):
+    setCurrentItem((prev) => ({
+      ...prev,
+      cableLength: cable?.name || value,
+    }));
+  };
   const handleDeviceModelChange = (value: string) => {
     if (!invoiceSettings) return;
     if (currentItem.type === "newCustomerInstallation") {
@@ -1211,6 +1176,8 @@ function InvoiceForm({
   };
 
   const addItem = () => {
+    console.log("DEBUG: Adding item to invoice...");
+
     if (!invoiceSettings) {
       Toast.show({ type: "error", text1: "الإعدادات غير محملة" });
       return;
@@ -1220,6 +1187,9 @@ function InvoiceForm({
         Alert.alert("خطأ", "الرجاء إدخال نوع العنصر والوصف");
         return;
       }
+
+      console.log("DEBUG: Current item to add:", currentItem);
+
       let unitPrice = currentItem.unitPrice || 0;
       let totalPrice = currentItem.totalPrice || 0;
 
@@ -1253,13 +1223,7 @@ function InvoiceForm({
       }
 
       let finalCableLength: number | string | undefined = currentItem.cableLength;
-      if (currentItem.cableLength === "custom" && customCableLength) {
-        const numValue = parseInt(customCableLength);
-        finalCableLength = isNaN(numValue) ? customCableLength : numValue;
-      } else if (
-        typeof currentItem.cableLength === "string" &&
-        currentItem.cableLength !== "custom"
-      ) {
+      if (typeof currentItem.cableLength === "string") {
         const numValue = parseInt(currentItem.cableLength);
         finalCableLength = isNaN(numValue)
           ? currentItem.cableLength
@@ -1284,9 +1248,13 @@ function InvoiceForm({
         deviceModel: currentItem.deviceModel,
         additionalNotes: currentItem.additionalNotes,
       };
+
+      console.log("DEBUG: Created new invoice item:", newItem);
       setItems([...items, newItem]);
       resetItemForm();
       setShowItemForm(false);
+
+      console.log("DEBUG: Item added successfully. Current items:", [...items, newItem]);
     } catch (error) {
       console.error("Error adding item:", error);
       Alert.alert("خطأ", "حدث خطأ أثناء إضافة العنصر");
@@ -1303,11 +1271,15 @@ function InvoiceForm({
 
   useEffect(() => {
     async function fetchUserStock() {
+      console.log("DEBUG: Fetching user stock...");
+
       if (!user?.uid || !db) {
+        console.log("DEBUG: No user or db instance, setting userStock to null");
         setUserStock(null);
         setLoadingUserStock(false);
         return;
       }
+
       setLoadingUserStock(true);
       try {
         const userQuery = firestore().collection("users").where("uid", "==", user.uid);
@@ -1325,7 +1297,11 @@ function InvoiceForm({
             foundStockItems = userData.stockItems as UserStockItem[];
             lastUpdated = userData.lastUpdated || lastUpdated;
           }
+          console.log("DEBUG: Found user stock items:", foundStockItems);
+        } else {
+          console.log("DEBUG: No user document found for UID:", user.uid);
         }
+
         setUserStock({
           id: user.uid,
           userId: user.uid,
@@ -1365,6 +1341,9 @@ function InvoiceForm({
     ): { type: string; name: string; required: number; available: number }[] => {
       if (!userStock || !invoiceSettings) return [];
       if (!item) return [];
+
+      console.log("DEBUG: Checking stock for item:", item);
+      console.log("DEBUG: Current user stock items:", userStock.items);
 
       let requiredStockItems: {
         type: string;
@@ -1422,22 +1401,20 @@ function InvoiceForm({
           typeof item.cableLength === "number" &&
           item.cableLength > 0
         ) {
+          // Find the cable length setting to get its name
+          let cableName = "كيبل فايبر";
+          const cableLengthSetting = invoiceSettings.cableLengths.find(
+            (cl) => cl.length === item.cableLength
+          );
+          if (cableLengthSetting && cableLengthSetting.name) {
+            cableName = cableLengthSetting.name;
+          }
           requiredStockItems.push({
             type: "cable",
             id: "FIBER_CABLE_METERS",
-            name: `كيبل فايبر`,
+            name: cableName,
             quantity: item.cableLength * itemQty,
           });
-        } else if (item.cableLength === "custom" && customCableLength) {
-          const length = parseInt(customCableLength);
-          if (!isNaN(length) && length > 0) {
-            requiredStockItems.push({
-              type: "cable",
-              id: "FIBER_CABLE_METERS",
-              name: `كيبل فايبر (مخصص)`,
-              quantity: length * itemQty,
-            });
-          }
         }
       } else if (item.type === "maintenance") {
         if (
@@ -1479,30 +1456,29 @@ function InvoiceForm({
           typeof item.cableLength === "number" &&
           item.cableLength > 0
         ) {
+          // Find the cable length setting to get its name
+          let cableName = "كيبل فايبر";
+          const cableLengthSetting = invoiceSettings.cableLengths.find(
+            (cl) => cl.length === item.cableLength
+          );
+          if (cableLengthSetting && cableLengthSetting.name) {
+            cableName = cableLengthSetting.name;
+          }
           requiredStockItems.push({
             type: "cable",
             id: "FIBER_CABLE_METERS",
-            name: `كيبل فايبر`,
+            name: cableName,
             quantity: item.cableLength * itemQty,
           });
-        } else if (
-          item.maintenanceType === "cableReplacement" &&
-          item.cableLength === "custom" &&
-          customCableLength
-        ) {
-          const length = parseInt(customCableLength);
-          if (!isNaN(length) && length > 0) {
-            requiredStockItems.push({
-              type: "cable",
-              id: "FIBER_CABLE_METERS",
-              name: `كيبل فايبر (مخصص)`,
-              quantity: length * itemQty,
-            });
-          }
         }
       }
 
-      if (requiredStockItems.length === 0) return [];
+      if (requiredStockItems.length === 0) {
+        console.log("DEBUG: No required stock items for this item");
+        return [];
+      }
+
+      console.log("DEBUG: Required stock items for comparison:", requiredStockItems);
 
       const currentMissing: {
         type: string;
@@ -1510,11 +1486,15 @@ function InvoiceForm({
         required: number;
         available: number;
       }[] = [];
+
       for (const required of requiredStockItems) {
         const stockItem = userStock.items.find(
           (si) => si.itemType === required.type && si.itemId === required.id
         );
         const available = stockItem ? stockItem.quantity : 0;
+
+        console.log(`DEBUG: Comparing ${required.name} - Required: ${required.quantity}, Available: ${available}`);
+
         if (available < required.quantity) {
           currentMissing.push({
             type: required.type,
@@ -1527,7 +1507,7 @@ function InvoiceForm({
 
       return currentMissing;
     },
-    [userStock, invoiceSettings, customCableLength]
+    [userStock, invoiceSettings]
   );
 
   const validateUserStock = useCallback((): {
@@ -1536,7 +1516,11 @@ function InvoiceForm({
     required: number;
     available: number;
   }[] => {
+    console.log("DEBUG: Validating user stock...");
+
     if (!userStock || userStock.items.length === 0) {
+      console.log("DEBUG: No user stock found or user stock is empty");
+
       if (!loadingUserStock) {
         return [
           {
@@ -1550,24 +1534,39 @@ function InvoiceForm({
       return [];
     }
 
+    console.log("DEBUG: User stock found, validating items...");
+    console.log("DEBUG: Current invoice items:", items);
+
     const allMissingItems: {
       type: string;
       name: string;
       required: number;
       available: number;
     }[] = [];
+
     for (const item of items) {
+      console.log("DEBUG: Validating item:", item);
       const missingForThisItem = checkStockForItem(item);
+      console.log("DEBUG: Missing items for this item:", missingForThisItem);
+
       if (missingForThisItem.length > 0) {
         allMissingItems.push(...missingForThisItem);
       }
     }
 
+    console.log("DEBUG: All missing items:", allMissingItems);
     return allMissingItems;
   }, [items, userStock, checkStockForItem, loadingUserStock]);
 
   const reduceUserStock = async (invoice: Invoice): Promise<boolean> => {
-    if (!userStock || !user?.uid || !invoiceSettings || !db) return false;
+    console.log("DEBUG: Reducing user stock for invoice:", invoice);
+
+    if (!userStock || !user?.uid || !invoiceSettings || !db) {
+      console.log("DEBUG: Missing required data for stock reduction");
+      console.log("DEBUG: userStock:", !!userStock, "user?.uid:", !!user?.uid, "invoiceSettings:", !!invoiceSettings, "db:", !!db);
+      return false;
+    }
+
     try {
       const updatedStockItems: UserStockItem[] = JSON.parse(
         JSON.stringify(userStock.items)
@@ -1575,7 +1574,11 @@ function InvoiceForm({
       const stockTransactions: StockTransaction[] = [];
       const timestamp = new Date().toISOString();
 
+      console.log("DEBUG: Current stock items before reduction:", updatedStockItems);
+
       for (const item of invoice.items) {
+        console.log("DEBUG: Processing invoice item for stock reduction:", item);
+
         if (
           [
             "transportationFee",
@@ -1584,6 +1587,7 @@ function InvoiceForm({
             "subscriptionRenewal",
           ].includes(item.type)
         ) {
+          console.log("DEBUG: Skipping stock reduction for item type:", item.type);
           continue;
         }
 
@@ -1639,15 +1643,26 @@ function InvoiceForm({
             });
           }
           let cableLengthToReduce = 0;
-          if (typeof item.cableLength === "number")
+          if (typeof item.cableLength === "number") {
             cableLengthToReduce = item.cableLength;
-          else if (item.cableLength === "custom" && customCableLength)
-            cableLengthToReduce = parseInt(customCableLength) || 0;
+          }
           if (cableLengthToReduce > 0) {
+            // Find the cable length setting to get its name
+            let cableName = "كيبل فايبر";
+            if (item.cableLength === "custom") {
+              cableName = "كيبل مخصص";
+            } else {
+              const cableLengthSetting = invoiceSettings.cableLengths.find(
+                (cl) => cl.length === cableLengthToReduce
+              );
+              if (cableLengthSetting && cableLengthSetting.name) {
+                cableName = cableLengthSetting.name;
+              }
+            }
             requiredStockDetails.push({
               type: "cable",
               id: "FIBER_CABLE_METERS",
-              name: "كيبل فايبر",
+              name: cableName,
               quantity: cableLengthToReduce * invoiceItemQuantity,
             });
           }
@@ -1684,32 +1699,39 @@ function InvoiceForm({
                 quantity: invoiceItemQuantity,
               });
           }
-          if (item.maintenanceType === "cableReplacement") {
-            let cableLengthToReduce = 0;
-            if (typeof item.cableLength === "number")
-              cableLengthToReduce = item.cableLength;
-            else if (item.cableLength === "custom" && customCableLength)
-              cableLengthToReduce = parseInt(customCableLength) || 0;
-
-            if (cableLengthToReduce > 0) {
+          if (
+            item.maintenanceType === "cableReplacement" &&
+            item.cableLength &&
+            typeof item.cableLength === "string"
+          ) {
+            const cableByName = invoiceSettings.cableLengths.find(
+              (cl) => cl.name === item.cableLength
+            );
+            if (cableByName) {
               requiredStockDetails.push({
                 type: "cable",
                 id: "FIBER_CABLE_METERS",
-                name: "كيبل فايبر",
-                quantity: cableLengthToReduce * invoiceItemQuantity,
+                name: cableByName.name || "كيبل",
+                // No reliable numeric length: reduce stock as 1 unit per invoice item by convention
+                quantity: invoiceItemQuantity,
               });
             }
           }
         }
 
         for (const required of requiredStockDetails) {
+          console.log("DEBUG: Reducing stock for:", required);
+
           const existingItemIndex = updatedStockItems.findIndex(
             (si) =>
               si.itemType === required.type && si.itemId === required.id
           );
+
           if (existingItemIndex !== -1) {
+            console.log(`DEBUG: Found item in stock. Current quantity: ${updatedStockItems[existingItemIndex].quantity}`);
             updatedStockItems[existingItemIndex].quantity -= required.quantity;
             updatedStockItems[existingItemIndex].lastUpdated = timestamp;
+            console.log(`DEBUG: New quantity: ${updatedStockItems[existingItemIndex].quantity}`);
           } else {
             // This case should ideally not happen if stock validation passed,
             // but if it does, it implies an item not in stock is being "reduced"
@@ -1724,6 +1746,7 @@ function InvoiceForm({
             //     quantity: -required.quantity, lastUpdated: timestamp
             // });
           }
+
           stockTransactions.push({
             id: uuidv4(),
             userId: user.uid,
@@ -1743,6 +1766,9 @@ function InvoiceForm({
         }
       }
 
+      console.log("DEBUG: Updated stock items after reduction:", updatedStockItems);
+      console.log("DEBUG: Stock transactions to be created:", stockTransactions);
+
       if (stockTransactions.length > 0) {
         const userQueryRef = firestore().collection("users")
           .where("uid", "==", user.uid);
@@ -1753,6 +1779,7 @@ function InvoiceForm({
             stockItems: updatedStockItems,
             lastUpdated: timestamp,
           });
+          console.log("DEBUG: Successfully updated user stock in database");
         } else {
           console.warn(
             `User document not found for UID: ${user.uid}. Stock not updated.`
@@ -1762,6 +1789,7 @@ function InvoiceForm({
         for (const transaction of stockTransactions) {
           await firestore().collection("stockTransactions").doc(transaction.id).set(transaction);
         }
+        console.log("DEBUG: Successfully created stock transactions");
       }
 
       setUserStock(
@@ -1822,6 +1850,8 @@ function InvoiceForm({
   ]);
 
   const handleSaveInvoice = async () => {
+    console.log("DEBUG: Saving invoice...");
+
     if (!db) {
       Toast.show({ type: "error", text1: "Database not configured" });
       return;
@@ -1835,7 +1865,9 @@ function InvoiceForm({
       return;
     }
 
+    console.log("DEBUG: Validating user stock...");
     const missingStockItems = validateUserStock();
+    console.log("DEBUG: Stock validation result:", missingStockItems);
 
     if (missingStockItems.length > 0) {
       setMissingItems(missingStockItems);
@@ -1844,19 +1876,26 @@ function InvoiceForm({
       const isFatalError = missingStockItems.some(
         (item) => item.type === "general"
       );
+
       if (isFatalError) {
+        console.log("DEBUG: Fatal stock error, aborting save");
         return; // Abort saving for fatal error (no stock at all)
       }
       // For non-fatal errors (insufficient stock), the modal will show, but we proceed.
+      console.log("DEBUG: Non-fatal stock error, proceeding with save");
     } else {
       setStockCheckFailed(false);
       setMissingItems([]);
+      console.log("DEBUG: Stock validation passed");
     }
 
     setSubmitting(true);
 
     try {
+      console.log("DEBUG: Serializing invoice items...");
       const serializedItems: InvoiceItem[] = items.map((item) => {
+        console.log("DEBUG: Processing item:", item);
+
         const serializedItem: InvoiceItem = {
           id: item.id,
           type: item.type,
@@ -1888,6 +1927,8 @@ function InvoiceForm({
           serializedItem.maintenanceType = item.maintenanceType;
         if (item.deviceModel !== undefined)
           serializedItem.deviceModel = item.deviceModel;
+
+        console.log("DEBUG: Serialized item:", serializedItem);
         return serializedItem;
       });
 
@@ -1911,14 +1952,19 @@ function InvoiceForm({
             : serviceRequest?.subscriberId || serviceRequest?.customerId,
       };
 
+      console.log("DEBUG: Created new invoice:", newInvoice);
+
       const stockReduced = await reduceUserStock(newInvoice);
       // If stock reduction failed (e.g., due to an unexpected error during the process,
       // not due to initial validation which might allow proceeding with warning), then stop.
       if (!stockReduced) {
         setSubmitting(false);
         // Toast message is shown within reduceUserStock on error
+        console.log("DEBUG: Stock reduction failed, aborting invoice save");
         return;
       }
+
+      console.log("DEBUG: Stock reduction successful, saving invoice to database");
 
       const invoiceRef = firestore().collection("invoices").doc(newInvoice.id);
       await invoiceRef.set(newInvoice);
@@ -2092,7 +2138,7 @@ function InvoiceForm({
               <View style={styles.itemListContainer}>
                 {items.map((item, index) => (
                   <View
-                    key={item.id}
+                    key={item.id || `form-item-${index}`}
                     style={[
                       styles.itemRow,
                       index === items.length - 1 && styles.itemRowLast,
@@ -2104,8 +2150,14 @@ function InvoiceForm({
                         {`الكمية: ${item.quantity
                           }  ·  السعر: ${item.unitPrice.toLocaleString()} د.ع`}
                       </Text>
+                      {/* Display cable info by name if present */}
+                      {item.cableLength && (
+                        <Text style={styles.itemDetail}>
+                          نوع الكيبل: {item.cableLength}
+                        </Text>
+                      )}
                     </View>
-                    <Text style={styles.itemTotal}>
+                    <Text style={styles.itemTotal}> 
                       {item.totalPrice.toLocaleString()} د.ع
                     </Text>
                     <Pressable
@@ -2154,10 +2206,6 @@ function InvoiceForm({
                 currentItem={currentItem}
                 setCurrentItem={setCurrentItem}
                 invoiceSettings={invoiceSettings!}
-                customCableLength={customCableLength}
-                handleCustomCableLengthInputChange={
-                  handleCustomCableLengthInputChange
-                }
                 handlePackageTypeChange={handlePackageTypeChange}
                 handleCableLengthChange={handleCableLengthChange}
                 handleDeviceModelChange={handleDeviceModelChange}
@@ -2226,7 +2274,7 @@ function InvoiceForm({
                   {missingItems
                     .filter((item) => item.type !== "general")
                     .map((item, index) => (
-                      <View key={index} style={styles.missingItemCard}>
+                      <View key={`${item.type}-${item.name}-${index}`} style={styles.missingItemCard}>
                         <Text style={styles.missingItemName}>{item.name}</Text>
                         <View style={styles.missingItemDetails}>
                           <Text style={styles.missingItemDetail}>
@@ -2860,7 +2908,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ ticketId, subscriberId, onInv
                 العناصر:
               </Text>
               {invoice.items.map((item, index) => (
-                <View key={item.id || index} style={styles.itemContainer}>
+                <View key={item.id || `item-${index}`} style={styles.itemContainer}>
                   <Text style={styles.itemDescription}>{item.description}</Text>
                   <View
                     style={{
@@ -2873,6 +2921,12 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ ticketId, subscriberId, onInv
                       سعر الوحدة: {item.unitPrice.toLocaleString()} د.ع
                     </Text>
                   </View>
+                  {/* Display cable info by name if present */}
+                  {item.cableLength && (
+                    <Text style={styles.itemDetail}>
+                      نوع الكيبل: {item.cableLength}
+                    </Text>
+                  )}
                   <Text
                     style={[styles.itemDetail, { fontWeight: "bold", textAlign: "left" }]}
                   >

@@ -9,6 +9,7 @@ export interface PackageType {
 
 export interface CableLength {
   id: string;
+  name?: string;
   length: number;
   price: number;
   isCustom?: boolean;

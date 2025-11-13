@@ -93,12 +93,30 @@ interface Comment {
 
 const getMediaDate = (timestamp: any) => {
     if (!timestamp) return new Date();
-    return typeof timestamp.toDate === 'function' ? timestamp.toDate() : new Date(timestamp);
+    
+    // Handle serialized timestamp objects
+    if (typeof timestamp === 'object' && timestamp._seconds !== undefined && timestamp._nanoseconds !== undefined) {
+        return new Date(timestamp._seconds * 1000 + timestamp._nanoseconds / 1000000);
+    }
+    
+    // Handle Firebase Timestamp objects
+    if (typeof timestamp.toDate === 'function') {
+        return timestamp.toDate();
+    }
+    
+    // Handle ISO date strings
+    if (typeof timestamp === 'string') {
+        return new Date(timestamp);
+    }
+    
+    // Fallback
+    return new Date(timestamp);
 };
 
-const formatTimestamp = (timestamp: Timestamp | null | undefined): string => {
+const formatTimestamp = (timestamp: any): string => {
     if (!timestamp) return '';
-    const date = timestamp.toDate();
+    
+    const date = getMediaDate(timestamp);
     return formatDistanceToNowStrict(date, { addSuffix: true, locale: arSA });
 };
 
@@ -135,7 +153,12 @@ const useKeyboardSpacer = (insets: any) => {
 };
 
 // --- UPDATED COMPONENT: MediaViewerRenderer with expo-video ---
-const MediaViewerRenderer = ({ item, isActive, setScrollEnabled, styles }) => {
+const MediaViewerRenderer = ({ item, isActive, setScrollEnabled, styles }: { 
+  item: any; 
+  isActive: boolean; 
+  setScrollEnabled: (enabled: boolean) => void; 
+  styles: any; 
+}) => {
     const PAN_SPEED_MULTIPLIER = 4;
 
     // A single loading state for both images and videos
@@ -321,7 +344,7 @@ const MediaViewerRenderer = ({ item, isActive, setScrollEnabled, styles }) => {
 export default function PostDetailScreen() {
     const { postId, editing } = useLocalSearchParams();
     const { theme } = useTheme();
-    const { userdoc } = usePermissions();
+    const { userdoc } = usePermissions();   
     const currentUser = { id: userdoc?.uid, name: userdoc?.name || 'مستخدم', avatar: userdoc?.photoURL || 'https://via.placeholder.com/100' };
 
     const insets = useSafeAreaInsets();
@@ -417,55 +440,86 @@ export default function PostDetailScreen() {
 
 
     useEffect(() => {
-        if (!postIdString) return;
+        if (!postIdString) {
+            setLoading(false);
+            return;
+        }
+        
         const unsubscribe = firestore().collection('posts').doc(postIdString)
             .onSnapshot(async (doc) => {
-                if (doc.exists()) {
-                    const postData = doc.data();
-                    if (!postData) { setLoading(false); return; }
+                try {
+                    if (doc.exists()) {
+                        const postData = doc.data();
+                        if (!postData) { 
+                            setLoading(false); 
+                            return; 
+                        }
 
-                    const postUserSnapshot = await firestore().collection('users').where('uid', '==', postData.userId).get();
-                    const postUser = postUserSnapshot.docs[0]?.data() ?? { name: 'مستخدم', photoURL: 'https://via.placeholder.com/100' };
+                        // Fetch post user data
+                        const postUserSnapshot = await firestore().collection('users').where('uid', '==', postData.userId).get();
+                        const postUser = postUserSnapshot.docs[0]?.data() ?? { name: 'مستخدم', photoURL: 'https://via.placeholder.com/100' };
 
-                    const commentsWithUsers = await Promise.all(
-                        (postData.comments || []).map(async (comment: any) => {
-                            const commentUserSnapshot = await firestore().collection('users').where('uid', '==', comment.userId).get();
-                            const commentUser = commentUserSnapshot.docs[0]?.data() ?? { name: 'مستخدم', photoURL: 'https://via.placeholder.com/100' };
-                            return {
-                                ...comment,
-                                user: { name: commentUser.name, avatar: commentUser.photoURL },
-                                formattedTimestamp: formatTimestamp(comment.timestamp),
-                            };
-                        })
-                    );
+                        // Fetch comments with user data
+                        const commentsWithUsers = await Promise.all(
+                            (postData.comments || []).map(async (comment: any) => {
+                                try {
+                                    const commentUserSnapshot = await firestore().collection('users').where('uid', '==', comment.userId).get();
+                                    const commentUser = commentUserSnapshot.docs[0]?.data() ?? { name: 'مستخدم', photoURL: 'https://via.placeholder.com/100' };
+                                    return {
+                                        ...comment,
+                                        user: { name: commentUser.name, avatar: commentUser.photoURL },
+                                        formattedTimestamp: formatTimestamp(comment.timestamp),
+                                    };
+                                } catch (error) {
+                                    console.error("Error fetching comment user data: ", error);
+                                    // Return comment with default user data if fetch fails
+                                    return {
+                                        ...comment,
+                                        user: { name: 'مستخدم', avatar: 'https://via.placeholder.com/100' },
+                                        formattedTimestamp: formatTimestamp(comment.timestamp),
+                                    };
+                                }
+                            })
+                        );
 
-                    const fetchedPost = {
-                        id: doc.id,
-                        userId: postData.userId,
-                        content: postData.content,
-                        media: postData.media || [],
-                        timestamp: postData.timestamp,
-                        likes: postData.likes || 0,
-                        likedBy: postData.likedBy || [],
-                        comments: commentsWithUsers.sort((a, b) => a.timestamp?.toMillis() - b.timestamp?.toMillis()),
-                        user: { name: postUser.name, avatar: postUser.photoURL },
-                        likedByUser: postData.likedBy?.includes(currentUser?.id) || false,
-                        formattedTimestamp: formatTimestamp(postData.timestamp),
-                    };
-                    setPost(fetchedPost);
+                        const fetchedPost = {
+                            id: doc.id,
+                            userId: postData.userId,
+                            content: postData.content,
+                            media: postData.media || [],
+                            timestamp: postData.timestamp,
+                            likes: postData.likes || 0,
+                            likedBy: postData.likedBy || [],
+                            comments: commentsWithUsers.sort((a, b) => {
+                                // Handle potential undefined timestamps using getMediaDate
+                                const aTime = getMediaDate(a.timestamp).getTime();
+                                const bTime = getMediaDate(b.timestamp).getTime();
+                                return aTime - bTime;
+                            }),
+                            user: { name: postUser.name, avatar: postUser.photoURL },
+                            likedByUser: postData.likedBy?.includes(currentUser?.id) || false,
+                            formattedTimestamp: formatTimestamp(postData.timestamp),
+                        };
+                        
+                        setPost(fetchedPost);
 
-                    if (editing === 'true' && fetchedPost.userId === currentUser.id) {
-                        setIsEditing(true);
-                        setEditableContent(fetchedPost.content || '');
+                        if (editing === 'true' && fetchedPost.userId === currentUser?.id) {
+                            setIsEditing(true);
+                            setEditableContent(fetchedPost.content || '');
+                        }
+                    } else {
+                        Alert.alert("خطأ", "لم يتم العثور على المنشور.");
+                        router.back();
                     }
-
-                } else {
-                    Alert.alert("خطأ", "لم يتم العثور على المنشور.");
-                    router.back();
+                } catch (error) {
+                    console.error("Error processing post data: ", error);
+                    Alert.alert("خطأ", "حدث خطأ أثناء تحميل المنشور.");
+                } finally {
+                    setLoading(false);
                 }
-                setLoading(false);
             }, (error) => {
                 console.error("Error fetching post details: ", error);
+                Alert.alert("خطأ", "فشل في تحميل تفاصيل المنشور.");
                 setLoading(false);
             });
         return () => unsubscribe();
@@ -666,13 +720,13 @@ export default function PostDetailScreen() {
                 {post.media && post.media.length > 0 && (
                     <PostMediaGrid
                         media={post.media}
-                        onMediaPress={(mediaItem) => {
-                            const mediaWithContext = post.media.map(m => ({
+                        onMediaPress={(mediaItem: any) => {
+                            const mediaWithContext = post.media?.map(m => ({
                                 ...m,
                                 user: post.user,
                                 timestamp: post.timestamp,
                                 isPostMedia: true
-                            }));
+                            })) || [];
                             openMediaViewer(mediaWithContext, mediaItem.url)
                         }}
                     />
@@ -929,7 +983,7 @@ const PostMediaGrid = ({ media, onMediaPress }: any) => {
 
     return (
         <View style={styles.gridFourContainer}>
-            {visibleMedia.map((item, index) => (
+            {visibleMedia.map((item: any, index: number) => (
                 <GridMediaItem key={index} item={item} style={styles.gridImageFour} onPress={onMediaPress}>
                     {index === 3 && extraCount > 0 && (
                         <View style={styles.gridOverlay}>
