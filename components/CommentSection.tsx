@@ -49,6 +49,7 @@ const getAvatarFallback = (name: string = 'مستخدم غير معروف') => {
     .substring(0, 2);
 };
 
+
 const getCommentDate = (timestamp: any): Date => {
   if (!timestamp) return new Date();
   if (typeof timestamp.toDate === 'function') {
@@ -56,6 +57,8 @@ const getCommentDate = (timestamp: any): Date => {
   }
   if (timestamp instanceof Date) {
     return timestamp;
+
+    
   }
   if (typeof timestamp === 'string') {
     const date = new Date(timestamp);
