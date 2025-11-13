@@ -1396,25 +1396,19 @@ function InvoiceForm({
             quantity: item.numBags * itemQty,
           });
         }
-        if (
-          item.cableLength &&
-          typeof item.cableLength === "number" &&
-          item.cableLength > 0
-        ) {
-          // Find the cable length setting to get its name
-          let cableName = "كيبل فايبر";
-          const cableLengthSetting = invoiceSettings.cableLengths.find(
-            (cl) => cl.length === item.cableLength
+        // Cable: reduce ONE unit of the specific selected cable for this item.
+        if (item.cableLength && typeof item.cableLength === "string") {
+          const cableByName = invoiceSettings.cableLengths.find(
+            (cl) => cl.name === item.cableLength
           );
-          if (cableLengthSetting && cableLengthSetting.name) {
-            cableName = cableLengthSetting.name;
+          if (cableByName) {
+            requiredStockItems.push({
+              type: "cableLength",
+              id: cableByName.id,
+              name: cableByName.name || "كيبل",
+              quantity: 1,
+            });
           }
-          requiredStockItems.push({
-            type: "cable",
-            id: "FIBER_CABLE_METERS",
-            name: cableName,
-            quantity: item.cableLength * itemQty,
-          });
         }
       } else if (item.type === "maintenance") {
         if (
@@ -1453,23 +1447,20 @@ function InvoiceForm({
         if (
           item.maintenanceType === "cableReplacement" &&
           item.cableLength &&
-          typeof item.cableLength === "number" &&
-          item.cableLength > 0
+          typeof item.cableLength === "string"
         ) {
-          // Find the cable length setting to get its name
-          let cableName = "كيبل فايبر";
-          const cableLengthSetting = invoiceSettings.cableLengths.find(
-            (cl) => cl.length === item.cableLength
+          // Maintenance cable replacement: require ONE unit of the selected cable length
+          const cableByName = invoiceSettings.cableLengths.find(
+            (cl) => cl.name === item.cableLength
           );
-          if (cableLengthSetting && cableLengthSetting.name) {
-            cableName = cableLengthSetting.name;
+          if (cableByName) {
+            requiredStockItems.push({
+              type: "cableLength",
+              id: cableByName.id,
+              name: cableByName.name || "كيبل",
+              quantity: 1,
+            });
           }
-          requiredStockItems.push({
-            type: "cable",
-            id: "FIBER_CABLE_METERS",
-            name: cableName,
-            quantity: item.cableLength * itemQty,
-          });
         }
       }
 
@@ -1647,23 +1638,17 @@ function InvoiceForm({
             cableLengthToReduce = item.cableLength;
           }
           if (cableLengthToReduce > 0) {
-            // Find the cable length setting to get its name
-            let cableName = "كيبل فايبر";
-            if (item.cableLength === "custom") {
-              cableName = "كيبل مخصص";
-            } else {
-              const cableLengthSetting = invoiceSettings.cableLengths.find(
-                (cl) => cl.length === cableLengthToReduce
-              );
-              if (cableLengthSetting && cableLengthSetting.name) {
-                cableName = cableLengthSetting.name;
-              }
-            }
+            // Reduce ONE unit of the specific cable length selected for this item.
+            const cableLengthSetting = invoiceSettings.cableLengths.find(
+              (cl) => cl.length === cableLengthToReduce
+            );
+            const cableId = cableLengthSetting?.id || "FIBER_CABLE_METERS";
+            const cableName = cableLengthSetting?.name || "كيبل";
             requiredStockDetails.push({
-              type: "cable",
-              id: "FIBER_CABLE_METERS",
+              type: "cableLength",
+              id: cableId,
               name: cableName,
-              quantity: cableLengthToReduce * invoiceItemQuantity,
+              quantity: 1,
             });
           }
         } else if (item.type === "maintenance") {
@@ -1699,6 +1684,7 @@ function InvoiceForm({
                 quantity: invoiceItemQuantity,
               });
           }
+          // CableReplacement: reduce ONE unit of the specific selected cable
           if (
             item.maintenanceType === "cableReplacement" &&
             item.cableLength &&
@@ -1708,14 +1694,13 @@ function InvoiceForm({
               (cl) => cl.name === item.cableLength
             );
             if (cableByName) {
-              requiredStockDetails.push({
-                type: "cable",
-                id: "FIBER_CABLE_METERS",
-                name: cableByName.name || "كيبل",
-                // No reliable numeric length: reduce stock as 1 unit per invoice item by convention
-                quantity: invoiceItemQuantity,
-              });
-            }
+            requiredStockDetails.push({
+              type: "cableLength",
+              id: cableByName.id,
+              name: cableByName.name || "كيبل",
+              quantity: 1,
+            });
+          }
           }
         }
 
@@ -1729,22 +1714,23 @@ function InvoiceForm({
 
           if (existingItemIndex !== -1) {
             console.log(`DEBUG: Found item in stock. Current quantity: ${updatedStockItems[existingItemIndex].quantity}`);
+            // Allow stock to go negative when consuming more than available
             updatedStockItems[existingItemIndex].quantity -= required.quantity;
             updatedStockItems[existingItemIndex].lastUpdated = timestamp;
             console.log(`DEBUG: New quantity: ${updatedStockItems[existingItemIndex].quantity}`);
           } else {
-            // This case should ideally not happen if stock validation passed,
-            // but if it does, it implies an item not in stock is being "reduced"
+            // If no existing stock item, create one starting from negative quantity.
             console.warn(
-              `Attempting to reduce non-existent stock item: ${required.name} (ID: ${required.id})`
+              `No stock item found for ${required.name} (ID: ${required.id}). Creating negative stock entry.`
             );
-            // Create it with negative quantity, or handle as error
-            // For now, let's assume validation should prevent this.
-            // If we proceed, it implies creating a negative stock entry.
-            // updatedStockItems.push({
-            //     id: uuidv4(), itemType: required.type, itemId: required.id, itemName: required.name,
-            //     quantity: -required.quantity, lastUpdated: timestamp
-            // });
+            updatedStockItems.push({
+              id: uuidv4(),
+              itemType: required.type,
+              itemId: required.id,
+              itemName: required.name,
+              quantity: -required.quantity,
+              lastUpdated: timestamp,
+            });
           }
 
           stockTransactions.push({
