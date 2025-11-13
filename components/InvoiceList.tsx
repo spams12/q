@@ -1633,23 +1633,20 @@ function InvoiceForm({
               quantity: item.numBags * invoiceItemQuantity,
             });
           }
-          let cableLengthToReduce = 0;
-          if (typeof item.cableLength === "number") {
-            cableLengthToReduce = item.cableLength;
-          }
-          if (cableLengthToReduce > 0) {
-            // Reduce ONE unit of the specific cable length selected for this item.
-            const cableLengthSetting = invoiceSettings.cableLengths.find(
-              (cl) => cl.length === cableLengthToReduce
+          // Cable for newCustomerInstallation: treat cableLength as a NAME string and
+          // reduce ONE unit of the selected cable type (to mirror checkStockForItem).
+          if (item.cableLength) {
+            const cableByName = invoiceSettings.cableLengths.find(
+              (cl) => cl.name === item.cableLength
             );
-            const cableId = cableLengthSetting?.id || "FIBER_CABLE_METERS";
-            const cableName = cableLengthSetting?.name || "كيبل";
-            requiredStockDetails.push({
-              type: "cableLength",
-              id: cableId,
-              name: cableName,
-              quantity: 1,
-            });
+            if (cableByName) {
+              requiredStockDetails.push({
+                type: "cableLength",
+                id: cableByName.id,
+                name: cableByName.name || "كيبل",
+                quantity: 1,
+              });
+            }
           }
         } else if (item.type === "maintenance") {
           if (
@@ -1893,15 +1890,14 @@ function InvoiceForm({
 
         if (item.packageType !== undefined)
           serializedItem.packageType = item.packageType;
+
+        // Preserve cableLength exactly as selected/stored in the UI.
+        // It is used for:
+        //  - display in invoice
+        //  - lookup by name in stock reduction (reduceUserStock)
+        // Parsing to number here breaks that mapping and caused inconsistencies.
         if (item.cableLength !== undefined) {
-          if (
-            typeof item.cableLength === "string" &&
-            item.cableLength !== "custom"
-          ) {
-            serializedItem.cableLength = parseInt(item.cableLength) || 0;
-          } else {
-            serializedItem.cableLength = item.cableLength;
-          }
+          serializedItem.cableLength = item.cableLength;
         }
         if (item.connectorType !== undefined)
           serializedItem.connectorType = item.connectorType;
@@ -2138,8 +2134,8 @@ function InvoiceForm({
                       </Text>
                       {/* Display cable info by name if present */}
                       {item.cableLength && (
-                        <Text style={styles.itemDetail}>
-                          نوع الكيبل: {item.cableLength}
+                        <Text style={styles.cableInfo}>
+                          {item.cableLength}
                         </Text>
                       )}
                     </View>
@@ -2247,9 +2243,9 @@ function InvoiceForm({
               <Text style={styles.modalTitle}>نقص في المخزون</Text>
             </View>
             <Text style={styles.modalText}>
-              {missingItems.some((item) => item.type === "general")
-                ? "لا يوجد لديك مخزون مخصص أو المستخدم لم يقم بتسجيل الدخول. لا يمكن المتابعة بدون مخزون أولي."
-                : "لا يتوفر لديك مخزون كافٍ لبعض العناصر. يمكنك المتابعة وسيتم تسجيل النقص في حال توفر المخزون الأساسي لهذه العناصر."}
+              {(missingItems && missingItems.some((item) => item.type === "general"))
+                ? "لا يوجد لديك مخزون مسجل أو المستخدم لم يقم بتسجيل الدخول. سيتم إنشاء عناصر مخزون بالسالب تلقائيًا عند خصم المواد من الفاتورة."
+                : "لا يتوفر لديك مخزون كافٍ لبعض العناصر. سيتم المتابعة وإنشاء أو تحديث عناصر المخزون بالسالب لتسجيل هذا النقص."}
             </Text>
             {missingItems.filter((item) => item.type !== "general").length >
               0 && (
@@ -2535,6 +2531,12 @@ const getStyles = (theme: Theme, themeName: "light" | "dark") =>
       marginBottom: 8,
       borderWidth: 1,
       borderColor: theme.border,
+    },
+    cableInfo: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      textAlign: "right",
+      marginTop: 2,
     },
     totalContainer: {
       flexDirection: "row-reverse",
@@ -2909,7 +2911,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ ticketId, subscriberId, onInv
                   </View>
                   {/* Display cable info by name if present */}
                   {item.cableLength && (
-                    <Text style={styles.itemDetail}>
+                    <Text style={styles.cableInfo}>
                       نوع الكيبل: {item.cableLength}
                     </Text>
                   )}
