@@ -22,7 +22,7 @@
         "policy": "appVersion"
       },
       "bundleIdentifier": "com.tmody.QTM",
-      "buildNumber": "28",
+      "buildNumber": "29",
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "splash": {
@@ -58,7 +58,7 @@
         "android.permission.ACCESS_MEDIA_LOCATION",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
-      "versionCode": 25,
+      "versionCode": 26,
       "runtimeVersion": "1.0.0"
     },
     "web": {

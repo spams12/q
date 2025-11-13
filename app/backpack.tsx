@@ -47,13 +47,18 @@ const StockManagementScreen: React.FC = () => {
         setLoading(true);
 
         const userDocRef = db.collection('users').doc(userUid);
-        const unsubscribeUser = userDocRef.onSnapshot((doc) => {
+        const unsubscribeUser = userDocRef.onSnapshot((doc: any) => {
+            // Access exists as a property, not a method
             if (doc.exists) {
                 const userData = { id: doc.id, ...doc.data() } as User;
-                // Sort stock items by name
-                const sortedItems = (userData.stockItems || []).sort((a, b) =>
-                    a.itemName.localeCompare(b.itemName, 'ar')
-                );
+                // Sort stock items by name with null check (handle both itemName and name properties)
+                const sortedItems = (userData.stockItems || []).sort((a, b) => {
+                    const itemA = a as any;
+                    const itemB = b as any;
+                    const nameA = itemA.itemName || itemA.name || '';
+                    const nameB = itemB.itemName || itemB.name || '';
+                    return nameA.localeCompare(nameB, 'ar');
+                });
                 setStockItems(sortedItems);
             } else {
                 console.error('User document does not exist');
@@ -68,8 +73,14 @@ const StockManagementScreen: React.FC = () => {
 
         const unsubscribeTransactions = transactionsQuery.onSnapshot((snapshot) => {
             const transactionData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StockTransaction));
-            // Sort transactions by item name
-            transactionData.sort((a, b) => a.itemName.localeCompare(b.itemName, 'ar'));
+            // Sort transactions by item name with null check (handle both itemName and name properties)
+            transactionData.sort((a, b) => {
+                const itemA = a as any;
+                const itemB = b as any;
+                const nameA = itemA.itemName || itemA.name || '';
+                const nameB = itemB.itemName || itemB.name || '';
+                return nameA.localeCompare(nameB, 'ar');
+            });
             setTransactions(transactionData);
             setLoading(false);
         }, (error) => {
@@ -135,7 +146,7 @@ const StockManagementScreen: React.FC = () => {
                 </View>
                 <Text style={[styles.quantityText, { color: theme.text }]}>{item.quantity}</Text>
             </View>
-            <Text style={[styles.itemName, { color: theme.text }]}>{item.itemName}</Text>
+            <Text style={[styles.itemName, { color: theme.text }]}>{(item as any).itemName || (item as any).name}</Text>
             <Text style={styles.lastUpdated}>آخر تحديث: {formatDate(item.lastUpdated)}</Text>
             {item.notes && <Text style={styles.notes}>{item.notes}</Text>}
         </View>
@@ -151,7 +162,7 @@ const StockManagementScreen: React.FC = () => {
                     {item.type === 'addition' ? '+' : '-'}{item.quantity}
                 </Text>
             </View>
-            <Text style={[styles.transactionItemName, { color: theme.text }]}>{item.itemName}</Text>
+            <Text style={[styles.transactionItemName, { color: theme.text }]}>{(item as any).itemName || (item as any).name}</Text>
             <View style={styles.transactionDetails}>
                 <Text style={styles.transactionDate}>{formatDate(item.timestamp)}</Text>
                 <View style={[styles.itemTypeBadge, { backgroundColor: getItemTypeColor(item.itemType) }]}>
