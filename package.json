@@ -25,6 +25,7 @@
     "@react-navigation/native": "^7.1.6",
     "algoliasearch": "^5.35.0",
     "date-fns": "^4.1.0",
+    "eas": "^0.1.0",
     "expo": "~53.0.11",
     "expo-av": "~15.1.6",
     "expo-blur": "~14.1.5",
