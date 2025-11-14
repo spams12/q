@@ -4,7 +4,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { Timestamp } from "firebase/firestore";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Platform,
@@ -16,6 +16,7 @@ import {
 } from "react-native";
 
 import { Theme, useTheme } from "@/context/ThemeContext";
+import { db } from "@/lib/firebase";
 import { Invoice } from "@/lib/types";
 
 interface InvoiceDetailsProps {
@@ -66,9 +67,41 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
 }) => {
   const { theme, themeName } = useTheme();
   const styles = getStyles(theme, themeName);
+  const [displayCustomerName, setDisplayCustomerName] = useState(invoice.customerName || "غير محدد");
+
+  // Fetch customer name from linked service request if missing in invoice
+  useEffect(() => {
+    const fetchCustomerName = async () => {
+      if (invoice.customerName) {
+        setDisplayCustomerName(invoice.customerName);
+        return;
+      }
+
+      if (invoice.linkedServiceRequestId) {
+        try {
+          const serviceRequestRef = db.collection("serviceRequests").doc(invoice.linkedServiceRequestId);
+          const serviceRequestSnap = await serviceRequestRef.get();
+          if (serviceRequestSnap.exists()) {
+            const serviceRequestData = serviceRequestSnap.data();
+            const name = serviceRequestData?.customerName || serviceRequestData?.name || "غير محدد";
+            setDisplayCustomerName(name);
+          }
+        } catch (error) {
+          console.warn("Could not fetch customer name from service request:", error);
+          setDisplayCustomerName("غير محدد");
+        }
+      } else {
+        setDisplayCustomerName("غير محدد");
+      }
+    };
+
+    fetchCustomerName();
+  }, [invoice.customerName, invoice.linkedServiceRequestId]);
 
   const generatePdf = async () => {
-   
+    // Use the displayCustomerName state which has already been fetched
+    const customerNameForPdf = displayCustomerName;
+    
     const subscriberNoticeHtml =
       invoice.type === "newsubscriberinstall"
         ? `
@@ -239,7 +272,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
               <table>
                 <tr>
                   <td>
-                    العميل: ${invoice.customerName || "N/A"}<br>
+                    العميل: ${customerNameForPdf}<br>
                     بواسطة: ${invoice.creatorName || "N/A"}
                   </td>
                   <td style="text-align: left;">
@@ -262,18 +295,17 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
           let subDetails = "";
           if (item.type === "newCustomerInstallation") {
             subDetails = `
-                            <br><small style="color: #6B7280;">الباقة: ${item.packageType
-              }</small>
+                            <br><small style="color: #6B7280;">الباقة: ${item.packageType || ""}</small>
                             ${item.cableLength
-                ? `<br><small style="color: #6B7280;">المستخدم الكيبل: ${item.cableLength} </small>`
+                ? `<br><small style="color: #6B7280;">الكيبل المستخدم: ${item.cableLength} </small>`
                 : ""
               }
-                            ${item.connectorType
-                ? `<br><small style="color: #6B7280;">نوع الكونيكتر: ${item.connectorType}</small>`
+                            ${item.connectorType && item.connectorType.length > 0
+                ? `<br><small style="color: #6B7280;">أنواع الكونيكتر: ${item.connectorType.join(', ')}</small>`
                 : ""
               }
-                            ${item.receiverDevice
-                ? `<br><small style="color: #6B7280;">جهاز الاستقبال: ${item.receiverDevice}</small>`
+                            ${item.deviceModel
+                ? `<br><small style="color: #6B7280;">جهاز الاستقبال: ${item.deviceModel}</small>`
                 : ""
               }
                             ${item.numHooks || item.numHooks === 0
@@ -300,6 +332,14 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
               }</small>
                             ${item.deviceModel
                 ? `<br><small style="color: #6B7280;">نوع الجهاز: ${item.deviceModel}</small>`
+                : ""
+              }
+                            ${item.cableLength
+                ? `<br><small style="color: #6B7280;">الكيبل المستخدم: ${item.cableLength}</small>`
+                : ""
+              }
+                            ${item.connectorType && item.connectorType.length > 0
+                ? `<br><small style="color: #6B7280;">أنواع الكونيكتر: ${item.connectorType.join(', ')}</small>`
                 : ""
               }
                         `;
@@ -382,7 +422,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
           <View>
             <Text style={styles.sectionTitle}>فاتورة خدمة</Text>
             <Text style={styles.detailTextSemibold}>
-              المستفيد: {invoice.customerName || "بدون اسم"}
+              المستفيد: {displayCustomerName || "بدون اسم"}
             </Text>
             <Text style={styles.detailText}>
               رقم الفاتورة: #{invoice.id.substring(0, 8)}
