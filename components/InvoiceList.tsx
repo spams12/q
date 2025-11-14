@@ -173,7 +173,7 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                 ]}
               />
               {/* Custom cable length input removed */}
- 
+  
               <Text style={styles.label}>جهاز الاستقبال</Text>
               <CustomDropdown
                 selectedValue={currentItem.deviceModel}
@@ -382,7 +382,7 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                 </>
               )}
 
-              {/* Manual custom maintenance: free text + price */}
+              {/* Manual custom maintenance: free text + price - ALLOWING ZERO PRICING */}
               {currentItem.maintenanceType === "customMaintenanceManual" && (
                 <>
                   <Text style={styles.label}>وصف الصيانة</Text>
@@ -395,7 +395,7 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                     placeholder="أدخل وصف الصيانة..."
                     placeholderTextColor={theme.placeholder}
                   />
-                  <Text style={styles.label}>السعر (د.ع)</Text>
+                  <Text style={styles.label}>السعر (د.ع) - مسموح بالصفر</Text>
                   <TextInput
                     style={styles.input}
                     keyboardType="numeric"
@@ -447,7 +447,7 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                 placeholder="أدخل وصف العنصر..."
                 placeholderTextColor={theme.placeholder}
               />
-              <Text style={styles.label}>السعر (د.ع)</Text>
+              <Text style={styles.label}>السعر (د.ع) - مسموح بالصفر</Text>
               <TextInput
                 style={styles.input}
                 keyboardType="numeric"
@@ -1350,26 +1350,10 @@ function InvoiceForm({
         totalPrice = unitPrice * (currentItem.quantity || 1);
       }
 
-      if (totalPrice === 0 && currentItem.type !== "newCustomerInstallation") {
-        if (
-          currentItem.type === "maintenance" &&
-          currentItem.maintenanceType === "connectorReplacement" &&
-          (currentItem.connectorType?.length ?? 0) > 0
-        ) {
-          // Price is handled by useEffect for connectorType, can be 0.
-        } else if (
-          currentItem.type === "maintenance" &&
-          currentItem.maintenanceType === "customMaintenance"
-        ) {
-          // Allow 0 for custom maintenance if explicitly set.
-        } else if (currentItem.type !== "maintenance") {
-          Alert.alert(
-            "خطأ",
-            "الرجاء إدخال سعر العنصر أو التأكد من تفاصيل الصيانة"
-          );
-          return;
-        }
-      }
+      // CRITICAL FIX: Complete removal of all price-based restrictions
+      // Zero-priced invoices are now fully supported - no price validation
+      // Users can create invoices with ANY total amount including 0
+      console.log("DEBUG: Creating item with price:", { unitPrice, totalPrice });
 
       // Preserve cableLength exactly as selected/stored in the UI.
       // It is used for:
@@ -1996,6 +1980,8 @@ function InvoiceForm({
       return;
     }
 
+    console.log("DEBUG: Invoice total amount:", calculateTotal());
+
     console.log("DEBUG: Validating user stock...");
     const missingStockItems = validateUserStock();
     console.log("DEBUG: Stock validation result:", missingStockItems);
@@ -2062,6 +2048,8 @@ function InvoiceForm({
         return serializedItem;
       });
 
+      const totalAmount = calculateTotal();
+
       const newInvoice: Invoice = {
         id: uuidv4(),
         linkedServiceRequestId: ticketId,
@@ -2069,7 +2057,7 @@ function InvoiceForm({
         createdAt: new Date().toISOString(),
         lastUpdated: new Date().toISOString(),
         items: serializedItems,
-        totalAmount: calculateTotal(),
+        totalAmount: totalAmount, // Allow zero total amount - no price restrictions
         status: "draft",
         notes: notes.trim(),
         customerName: customerName || serviceRequest?.customerName || "",
@@ -2082,7 +2070,7 @@ function InvoiceForm({
             : serviceRequest?.subscriberId || serviceRequest?.customerId,
       };
 
-      console.log("DEBUG: Created new invoice:", newInvoice);
+      console.log("DEBUG: Created new invoice with total amount:", totalAmount);
 
       const stockReduced = await reduceUserStock(newInvoice);
       // If stock reduction failed (e.g., due to an unexpected error during the process,
@@ -2109,7 +2097,7 @@ function InvoiceForm({
         id: `comment_${Date.now()}`,
         userId: user?.uid || "",
         userName: currentUserDisplayName || user?.displayName || "",
-        content: `تم إنشاء فاتورة جديدة بقيمة ${calculateTotal().toLocaleString()} دينار عراقي.`,
+        content: `تم إنشاء فاتورة جديدة بقيمة ${totalAmount.toLocaleString()} دينار عراقي.`,
         timestamp: new Date().toISOString(),
         isStatusChange: true
       };
@@ -2176,18 +2164,10 @@ function InvoiceForm({
     );
   }
 
+  // CRITICAL FIX: Complete removal of all price-based validation restrictions
+  // Zero-priced invoices are now fully supported with complete flexibility
   const isAddItemDisabled =
     !currentItem.description ||
-    (currentItem.type !== "maintenance" &&
-      (currentItem.unitPrice ?? 0) <= 0 &&
-      currentItem.type !== "newCustomerInstallation") ||
-    (currentItem.type === "maintenance" &&
-      currentItem.maintenanceType !== "connectorReplacement" &&
-      currentItem.maintenanceType !== "customMaintenance" &&
-      (currentItem.unitPrice ?? 0) <= 0) ||
-    (currentItem.type === "maintenance" &&
-      currentItem.maintenanceType === "customMaintenance" &&
-      (currentItem.unitPrice ?? 0) < 0) ||
     (currentItem.type === "newCustomerInstallation" && !currentItem.packageType);
 
   return (

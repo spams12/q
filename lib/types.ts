@@ -74,6 +74,7 @@ export interface InvoiceItem {
   additionalNotes?: string;
   subscriberId?: string | null;
   isPaid?: boolean;
+  customMaintenanceId?: string; // For custom maintenance items from list
 }
 
 export interface Attachment {

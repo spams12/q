@@ -55,7 +55,9 @@ const formatTimestamp = (timestamp: string | Timestamp | any) => {
 };
 
 const formatPrice = (price: number) => {
-  return `${price.toLocaleString()} د.ع`;
+  // Ensure zero values are handled correctly for zero-priced invoices
+  const formattedPrice = (price || 0).toLocaleString();
+  return `${formattedPrice} د.ع`;
 };
 
 const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
@@ -100,9 +102,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
       `
         : "";
 
-    const footerNoticeHtml =
-      invoice.type === "newsubscriberinstall"
-        ? `
+    const footerNoticeHtml = `
         <div class="footer-notice">
           <p><strong>شكراً لتعاملكم معنا</strong></p>
           <p>
@@ -110,8 +110,12 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
             للمشروع الوطني للأنترنت في محافظة واسط
           </p>
         </div>
-      `
-        : "";
+        <div class="arabic-footer">
+          <p><strong>جوه اكتبلي .. عزيزي المشترك في حال تم اخذ منك مبلغ مخالف لتفاصيل الفاتوره اعلاه فيحق لك تقديم شكوى بالاتصال بالوكيل او برقم شركتنا الساخن 6119 للتبليغ عن هذه الحالات التي تخالف القانون الداخلي ولا تمثل رؤية الادارة العليا للمشروع الوطني للانترنت</strong></p>
+          <p><strong>حيدر علي المياحي<br>منذ 2 ساعة</strong></p>
+          <p><strong>شكرا لكم على اختياركم الوطني من ايرثلنك ،</strong></p>
+        </div>
+      `;
 
     const htmlContent = `
       <html>
@@ -203,6 +207,23 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
               font-size: 14px;
               color: #6B7280;
             }
+            .arabic-footer {
+              margin-top: 30px;
+              padding: 15px;
+              border: 1px solid #E5E7EB;
+              border-radius: 6px;
+              background-color: #F9FAFB;
+              text-align: center;
+            }
+            .arabic-footer p {
+              font-size: 12px;
+              line-height: 18px;
+              color: #374151;
+              margin-bottom: 12px;
+            }
+            .arabic-footer strong {
+              font-weight: bold;
+            }
           </style>
         </head>
         <body>
@@ -274,8 +295,8 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
                 : item.maintenanceType === "connectorReplacement"
                   ? "استبدال كونيكتر"
                   : item.maintenanceType === "deviceReplacement"
-                    ? "استبدال جهاز" 
-                    : "صيانة أخرى"
+                    ? "استبدال جهاز"
+                    : "صيانة مخصص"
               }</small>
                             ${item.deviceModel
                 ? `<br><small style="color: #6B7280;">نوع الجهاز: ${item.deviceModel}</small>`
@@ -430,7 +451,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
         ? "استبدال كونيكتر"
         : item.maintenanceType === "deviceReplacement"
         ? "استبدال جهاز"
-        : "صيانة أخرى"}
+        : "صيانة مخصص"}
     </Text>
     {item.deviceModel && <Text style={styles.subDetailText}>نوع الجهاز: {item.deviceModel}</Text>}
     {item.cableLength && <Text style={styles.subDetailText}>الكيبل المستخدم: {item.cableLength}</Text>}
@@ -495,6 +516,18 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
             </View>
           </View>
         )}
+
+        {/* Arabic Footer Text for all invoice types */}
+        <View style={styles.arabicFooterContainer}>
+          <Text style={styles.arabicFooterTitle}>عزيزي المشترك</Text>
+          <Text style={styles.arabicFooterText}>
+            في حال تم اخذ منك مبلغ مخالف لتفاصيل الفاتوره اعلاه فيحق لك تقديم شكوى بالاتصال بالوكيل او برقم شركتنا الساخن 6119
+            للتبليغ عن هذه الحالات التي تخالف القانون الداخلي ولا تمثل رؤية الادارة العليا للمشروع الوطني للانترنت
+          </Text>
+          <Text style={styles.arabicFooterSignature}>حيدر علي المياحي</Text>
+          <Text style={styles.arabicFooterTime}>منذ 2 ساعة</Text>
+          <Text style={styles.arabicFooterClosing}>شكرا لكم على اختياركم الوطني من ايرثلنك ،</Text>
+        </View>
       </ScrollView>
       <View style={styles.footer}>
         <Pressable
@@ -674,6 +707,48 @@ const getStyles = (theme: Theme, themeName: "light" | "dark") =>
       color: theme.white,
       fontSize: 16,
       fontWeight: "600",
+    },
+    // Arabic Footer Styles
+    arabicFooterContainer: {
+      marginTop: 32,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: "#E5E7EB",
+      borderRadius: 8,
+      backgroundColor: "#F9FAFB",
+    },
+    arabicFooterTitle: {
+      fontSize: 14,
+      fontWeight: "bold",
+      color: "#374151",
+      textAlign: "center",
+      marginBottom: 12,
+    },
+    arabicFooterText: {
+      fontSize: 12,
+      color: "#374151",
+      lineHeight: 18,
+      textAlign: "center",
+      marginBottom: 12,
+    },
+    arabicFooterSignature: {
+      fontSize: 12,
+      fontWeight: "bold",
+      color: "#374151",
+      textAlign: "center",
+      marginBottom: 4,
+    },
+    arabicFooterTime: {
+      fontSize: 11,
+      color: "#6B7280",
+      textAlign: "center",
+      marginBottom: 8,
+    },
+    arabicFooterClosing: {
+      fontSize: 12,
+      fontWeight: "bold",
+      color: "#374151",
+      textAlign: "center",
     },
   });
 
