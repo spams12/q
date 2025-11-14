@@ -22,7 +22,7 @@
         "policy": "appVersion"
       },
       "bundleIdentifier": "com.tmody.QTM",
-      "buildNumber": "30",
+      "buildNumber": "31",
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "splash": {
