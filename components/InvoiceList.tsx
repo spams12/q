@@ -1371,13 +1371,12 @@ function InvoiceForm({
         }
       }
 
+      // Preserve cableLength exactly as selected/stored in the UI.
+      // It is used for:
+      //  - display in invoice
+      //  - lookup by name in stock reduction (reduceUserStock)
+      // Parsing to number here breaks that mapping and caused inconsistencies.
       let finalCableLength: number | string | undefined = currentItem.cableLength;
-      if (typeof currentItem.cableLength === "string") {
-        const numValue = parseInt(currentItem.cableLength);
-        finalCableLength = isNaN(numValue)
-          ? currentItem.cableLength
-          : numValue;
-      }
 
       const newItem: InvoiceItem = {
         id: uuidv4(),
