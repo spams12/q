@@ -51,13 +51,11 @@ const StockManagementScreen: React.FC = () => {
             // Access exists as a property, not a method
             if (doc.exists) {
                 const userData = { id: doc.id, ...doc.data() } as User;
-                // Sort stock items by name with null check (handle both itemName and name properties)
+                // Sort stock items by lastUpdated timestamp in descending order
                 const sortedItems = (userData.stockItems || []).sort((a, b) => {
-                    const itemA = a as any;
-                    const itemB = b as any;
-                    const nameA = itemA.itemName || itemA.name || '';
-                    const nameB = itemB.itemName || itemB.name || '';
-                    return nameA.localeCompare(nameB, 'ar');
+                    const timeA = a.lastUpdated?.toDate?.() || new Date(a.lastUpdated) || new Date(0);
+                    const timeB = b.lastUpdated?.toDate?.() || new Date(b.lastUpdated) || new Date(0);
+                    return timeB.getTime() - timeA.getTime(); // Descending order (newest first)
                 });
                 setStockItems(sortedItems);
             } else {
@@ -73,13 +71,11 @@ const StockManagementScreen: React.FC = () => {
 
         const unsubscribeTransactions = transactionsQuery.onSnapshot((snapshot) => {
             const transactionData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StockTransaction));
-            // Sort transactions by item name with null check (handle both itemName and name properties)
+            // Sort transactions by timestamp in descending order (newest first)
             transactionData.sort((a, b) => {
-                const itemA = a as any;
-                const itemB = b as any;
-                const nameA = itemA.itemName || itemA.name || '';
-                const nameB = itemB.itemName || itemB.name || '';
-                return nameA.localeCompare(nameB, 'ar');
+                const timeA = a.timestamp?.toDate?.() || new Date(a.timestamp) || new Date(0);
+                const timeB = b.timestamp?.toDate?.() || new Date(b.timestamp) || new Date(0);
+                return timeB.getTime() - timeA.getTime(); // Descending order (newest first)
             });
             setTransactions(transactionData);
             setLoading(false);
@@ -106,13 +102,15 @@ const StockManagementScreen: React.FC = () => {
         const translations: { [key: string]: string } = {
             // Stock Item Types
             packageType: 'نوع الباقة',
-            cableLength: 'طول الكابل',
+            cableLength: 'الكابل',
             connectorType: 'نوع الموصل',
             deviceModel: 'موديل الجهاز',
             maintenanceType: 'نوع الصيانة',
             // Transaction Types
-            addition: 'إضافة',
-            reduction: 'تقليل',
+            add: 'إضافة',
+            removal: 'إزالة',
+            remove: 'إزالة',
+            reset: 'إعادة تعيين',
             inventory: 'جرد',
             invoice: 'فاتورة',
             hook: 'هوك',
@@ -128,7 +126,7 @@ const StockManagementScreen: React.FC = () => {
     };
 
     const getTransactionTypeColor = (type: string) => {
-        const colors = { addition: '#00B894', reduction: '#E17055', inventory: '#0984E3', invoice: '#6C5CE7' };
+        const colors = { add: '#00B894', remove: '#E17055', reset: '#F39C12', inventory: '#0984E3', invoice: '#6C5CE7' };
         return colors[type as keyof typeof colors] || '#DDD';
     };
 
@@ -141,9 +139,11 @@ const StockManagementScreen: React.FC = () => {
     const renderStockItem = ({ item }: { item: UserStockItem }) => (
         <View style={[styles.stockCard, { backgroundColor: theme.card }]}>
             <View style={styles.stockHeader}>
-                <View style={[styles.itemTypeBadge, { backgroundColor: getItemTypeColor(item.itemType) }]}>
-                    <Text style={styles.itemTypeText}>{translateTypeToArabic(item.itemType)}</Text>
-                </View>
+                {item.itemType && (
+                    <View style={[styles.itemTypeBadge, { backgroundColor: getItemTypeColor(item.itemType) }]}>
+                        <Text style={styles.itemTypeText}>{translateTypeToArabic(item.itemType)}</Text>
+                    </View>
+                )}
                 <Text style={[styles.quantityText, { color: theme.text }]}>{item.quantity}</Text>
             </View>
             <Text style={[styles.itemName, { color: theme.text }]}>{(item as any).itemName || (item as any).name}</Text>
@@ -158,16 +158,18 @@ const StockManagementScreen: React.FC = () => {
                 <View style={[styles.transactionTypeBadge, { backgroundColor: getTransactionTypeColor(item.type) }]}>
                     <Text style={styles.transactionTypeText}>{translateTypeToArabic(item.type)}</Text>
                 </View>
-                <Text style={[styles.quantityChange, { color: item.type === 'addition' ? '#00B894' : '#E17055' }]}>
-                    {item.type === 'addition' ? '+' : '-'}{item.quantity}
+                <Text style={[styles.quantityChange, { color: item.type.toLowerCase() === 'add' ? '#00B894' : '#E17055' }]}>
+                    {item.type.toLowerCase() === 'add' ? '+' : '-'}{item.quantity}
                 </Text>
             </View>
             <Text style={[styles.transactionItemName, { color: theme.text }]}>{(item as any).itemName || (item as any).name}</Text>
             <View style={styles.transactionDetails}>
                 <Text style={styles.transactionDate}>{formatDate(item.timestamp)}</Text>
-                <View style={[styles.itemTypeBadge, { backgroundColor: getItemTypeColor(item.itemType) }]}>
-                    <Text style={styles.itemTypeText}>{translateTypeToArabic(item.itemType)}</Text>
-                </View>
+                {item.itemType && (
+                    <View style={[styles.itemTypeBadge, { backgroundColor: getItemTypeColor(item.itemType) }]}>
+                        <Text style={styles.itemTypeText}>{translateTypeToArabic(item.itemType)}</Text>
+                    </View>
+                )}
             </View>
             {item.sourceName && <Text style={styles.source}>المصدر: {item.sourceName}</Text>}
             {item.notes && <Text style={styles.notes}>ملاحظات: {item.notes}</Text>}

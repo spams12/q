@@ -860,7 +860,7 @@ function InvoiceForm({
   const { theme, themeName } = useTheme();
   const styles = getStyles(theme, themeName);
   const { user } = useFirebaseAuth();
-  const { userName: currentUserDisplayName, currentUserTeamId } =
+  const { userName: currentUserDisplayName, currentUserTeamId , userdoc } =
     usePermissions();
 
   const [items, setItems] = useState<InvoiceItem[]>([]);
@@ -906,7 +906,7 @@ function InvoiceForm({
     (): InvoiceSettings => ({
       id: "invoice-settings-default",
       teamId: currentUserTeamId || "default_team",
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: firestore.Timestamp.now(),
       packageTypes: [
         { id: "pkg1", name: "National Fiber 35", price: 35000, isActive: true },
         { id: "pkg2", name: "National Fiber 50", price: 45000, isActive: true },
@@ -1419,7 +1419,7 @@ function InvoiceForm({
 
         let userNameFromDB;
         let foundStockItems: UserStockItem[] = [];
-        let lastUpdated = new Date().toISOString();
+        let lastUpdated = firestore.Timestamp.now();
 
         if (!querySnapshot.empty && querySnapshot.docs.length > 0) {
           const userDocSnapshot = querySnapshot.docs[0];
@@ -1454,7 +1454,7 @@ function InvoiceForm({
           userName:
             user!.displayName || user!.email?.split("@")[0] || "User",
           items: [],
-          lastUpdated: new Date().toISOString(),
+          lastUpdated: firestore.Timestamp.now(),
         });
       } finally {
         setLoadingUserStock(false);
@@ -1695,7 +1695,7 @@ function InvoiceForm({
         JSON.stringify(userStock.items)
       );
       const stockTransactions: StockTransaction[] = [];
-      const timestamp = new Date().toISOString();
+      const timestamp = firestore.Timestamp.now();
 
       console.log("DEBUG: Current stock items before reduction:", updatedStockItems);
 
@@ -1864,7 +1864,7 @@ function InvoiceForm({
 
           stockTransactions.push({
             id: uuidv4(),
-            userId: user.uid,
+            userId: userdoc?.id || user.uid,
             userName:
               currentUserDisplayName || user.displayName || "N/A",
             itemType: required.type,
@@ -1873,7 +1873,7 @@ function InvoiceForm({
             quantity: required.quantity,
             type: "invoice",
             sourceId: invoice.id,
-            sourceName: `فاتورة #${invoice.id.substring(0, 8)}`,
+            sourceName: `فاتورة #${invoice.id}`,
             timestamp,
             notes: `تم استخدام في فاتورة للعميل ${invoice.customerName || "غير معروف"
               } (تذكرة #${invoice.linkedServiceRequestId.substring(0, 6)})`,
@@ -1908,8 +1908,19 @@ function InvoiceForm({
       }
 
       setUserStock(
-        (prev) =>
-          prev ? { ...prev, items: updatedStockItems, lastUpdated: timestamp } : null
+        (prev) => {
+          if (!prev) return null;
+          // Convert existing lastUpdated to Timestamp if it's a string
+          const updatedLastUpdated = typeof prev.lastUpdated === 'string'
+            ? firestore.Timestamp.fromDate(new Date(prev.lastUpdated))
+            : prev.lastUpdated;
+          
+          return {
+            ...prev,
+            items: updatedStockItems,
+            lastUpdated: updatedLastUpdated
+          };
+        }
       );
       return true;
     } catch (error) {
@@ -2054,8 +2065,8 @@ function InvoiceForm({
         id: uuidv4(),
         linkedServiceRequestId: ticketId,
         createdBy: user?.uid || "",
-        createdAt: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
+        createdAt: firestore.Timestamp.now(),
+        lastUpdated: firestore.Timestamp.now(),
         items: serializedItems,
         totalAmount: totalAmount, // Allow zero total amount - no price restrictions
         status: "draft",
@@ -2090,7 +2101,7 @@ function InvoiceForm({
       const ticketRef = firestore().collection(ticketCollectionName).doc(ticketId);
       await ticketRef.update({
         invoiceIds: firestore.FieldValue.arrayUnion(newInvoice.id),
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: firestore.Timestamp.now(),
       });
 
       const comment: Comment = {
@@ -2098,7 +2109,7 @@ function InvoiceForm({
         userId: user?.uid || "",
         userName: currentUserDisplayName || user?.displayName || "",
         content: `تم إنشاء فاتورة جديدة بقيمة ${totalAmount.toLocaleString()} دينار عراقي.`,
-        timestamp: new Date().toISOString(),
+        timestamp: firestore.Timestamp.now(),
         isStatusChange: true
       };
       await ticketRef.update({ comments: firestore.FieldValue.arrayUnion(comment) });
@@ -2856,8 +2867,24 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ ticketId, subscriberId, onInv
           .map((snap) => ({ id: snap.id, ...snap.data() } as Invoice));
         setInvoices(
           invoicesData.sort(
-            (a, b) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            (a, b) => {
+              let dateA: Date, dateB: Date;
+              
+              // Handle React Native Firebase Timestamp
+              if (a.createdAt && typeof a.createdAt === 'object' && 'toDate' in a.createdAt) {
+                dateA = (a.createdAt as any).toDate();
+              } else {
+                dateA = new Date(a.createdAt);
+              }
+              
+              if (b.createdAt && typeof b.createdAt === 'object' && 'toDate' in b.createdAt) {
+                dateB = (b.createdAt as any).toDate();
+              } else {
+                dateB = new Date(b.createdAt);
+              }
+              
+              return dateB.getTime() - dateA.getTime();
+            }
           )
         ); // Sort by newest first
       } catch (e) {
@@ -3000,7 +3027,15 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ ticketId, subscriberId, onInv
               </Text>
               <Text style={styles.itemDetail}>
                 تاريخ الإنشاء:{" "}
-                {new Date(invoice.createdAt).toLocaleDateString("ar-IQ")}
+                {(() => {
+                  let date: Date;
+                  if (invoice.createdAt && typeof invoice.createdAt === 'object' && 'toDate' in invoice.createdAt) {
+                    date = (invoice.createdAt as any).toDate();
+                  } else {
+                    date = new Date(invoice.createdAt);
+                  }
+                  return date.toLocaleDateString("ar-IQ");
+                })()}
               </Text>
               <Text style={styles.itemDetail}>
                 بواسطة: {invoice.creatorName || "N/A"}

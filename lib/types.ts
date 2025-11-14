@@ -1,4 +1,4 @@
-import { Timestamp } from "firebase/firestore";
+import { Timestamp } from "@react-native-firebase/firestore";
 
 export interface PackageType {
   id: string;
@@ -42,7 +42,7 @@ export interface MaintenanceType {
 export interface InvoiceSettings {
   id: string;
   teamId: string;
-  lastUpdated: string;
+  lastUpdated: Timestamp;
   packageTypes: PackageType[];
   cableLengths: CableLength[];
   connectorTypes: ConnectorType[];
@@ -108,8 +108,8 @@ export interface Invoice {
   id: string;
   linkedServiceRequestId: string;
   createdBy: string;
-  createdAt: string;
-  lastUpdated: string;
+  createdAt: Timestamp;
+  lastUpdated: Timestamp;
   items: InvoiceItem[];
   totalAmount: number;
   status: "draft" | "pending" | "paid" | "cancelled" | "submitted" | "approved";
@@ -188,7 +188,7 @@ export interface UserStockItem {
   itemId: string;
   itemName: string;
   quantity: number;
-  lastUpdated: any;
+  lastUpdated: Timestamp;
   notes?: string;
 }
 
@@ -197,7 +197,7 @@ export interface UserStock {
   userId: string;
   userName?: string | null;
   items: UserStockItem[];
-  lastUpdated: string;
+  lastUpdated: Timestamp;
 }
 
 export interface StockTransaction {
@@ -217,9 +217,9 @@ export interface StockTransaction {
   itemId: string;
   itemName: string;
   quantity: number;
-  type: "addition" | "reduction" | "inventory" | "invoice";
+  type: "Add" | "remove" | "inventory" | "invoice";
   sourceId?: string;
   sourceName?: string;
-  timestamp: any;
+  timestamp: Timestamp;
   notes?: string;
 }
