@@ -273,7 +273,7 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                 items={invoiceSettings.packageTypes
                   .filter((pt: PackageType) => pt.isActive)
                   .map((pt: PackageType) => ({
-                    label: `${pt.name} (${pt.price.toLocaleString()} د.ع)`,
+                    label: `${pt.name} (${((pt as any).firstMonthPrice || pt.price).toLocaleString()} د.ع - أول شهر)`,
                     value: pt.name,
                   }))}
               />
@@ -1318,10 +1318,16 @@ function InvoiceForm({
     const packageType = invoiceSettings.packageTypes.find(
       (pt) => pt.name === value
     );
+
+    // Use firstMonthPrice for new customer installation, regular price for subscription renewal
     let price = packageType?.price || 0;
     let finalDescription = currentItem.description;
 
-    if (currentItem.type === "subscriptionRenewal" && packageType) {
+    if (currentItem.type === "newCustomerInstallation" && packageType) {
+      // Use first month price if available, otherwise fall back to regular price
+      price = (packageType as any).firstMonthPrice || packageType.price || 0;
+      finalDescription = `تنصيب جديد - ${packageType.name}`;
+    } else if (currentItem.type === "subscriptionRenewal" && packageType) {
       finalDescription = `تجديد اشتراك - ${packageType.name}`;
     }
 
@@ -1470,7 +1476,8 @@ function InvoiceForm({
         const packageType = invoiceSettings.packageTypes.find(
           (pt) => pt.name === currentItem.packageType
         );
-        unitPrice = packageType?.price || 0;
+        // Use first month price if available for new customer installation
+        unitPrice = (packageType as any)?.firstMonthPrice || packageType?.price || 0;
         totalPrice = unitPrice * (currentItem.quantity || 1);
       }
 
