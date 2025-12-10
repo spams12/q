@@ -22,6 +22,7 @@ import { Theme, useTheme } from "@/context/ThemeContext";
 import useFirebaseAuth from "@/hooks/use-firebase-auth";
 import { db } from "@/lib/firebase";
 import {
+  BatchUsed,
   CableLength,
   Comment,
   ConnectorType,
@@ -38,6 +39,129 @@ import {
 import firestore from "@react-native-firebase/firestore";
 import { useRouter } from 'expo-router'; // Add this import
 import CustomDropdown from "./ui/CustomDropdown";
+
+// --- HELPERS ---
+
+// Helper to look up Purchase & Selling Price from Main Inventory (Settings)
+// This is used when the user has no stock, so we can estimate the cost and selling price.
+const getFallbackPrice = (type: string, id: string, settings: InvoiceSettings & { bags?: any[], hooks?: any[] }): { purchase: number, selling: number } => {
+  let collection: any[] = [];
+  const s = settings as any;
+
+  // Map invoice item types to settings arrays
+  if (type === 'bag') collection = s.bags || [];
+  else if (type === 'hook') collection = s.hooks || [];
+  else if (type === 'cableLength') collection = s.cableLengths || [];
+  else if (type === 'connectorType') collection = s.connectorTypes || [];
+  else if (type === 'deviceModel') collection = s.deviceModels || [];
+  else if (type === 'packageType') collection = s.packageTypes || [];
+
+  // Find the specific item definition - try exact match first
+  let itemDef = collection.find((i: any) => i.id === id || i.name === id);
+
+  // For hooks and bags with generic IDs (STANDARD_HOOK_UNIT, BAG_ITEM_UNIT), 
+  // fall back to first available item if no exact match
+  if (!itemDef && (type === 'hook' || type === 'bag') && collection.length > 0) {
+    // Use the first active item with batches that has a price
+    itemDef = collection.find((i: any) =>
+      i.isActive !== false &&
+      i.batches?.length > 0 &&
+      i.batches.some((b: any) => Number(b.purchasePrice) > 0)
+    ) || collection[0]; // Fall back to first item if none have prices
+  }
+
+  if (!itemDef) return { purchase: 0, selling: 0 };
+
+  // Strategy: 
+  // 1. Get price from the oldest batch in main inventory that has positive quantity (> 0)
+  if (itemDef.batches && Array.isArray(itemDef.batches) && itemDef.batches.length > 0) {
+
+    // 1. Active Stock Check
+    const availableBatches = itemDef.batches.filter((b: any) => Number(b.quantity) > 0);
+
+    // Sort batches by dateAdded ascending (Oldest first)
+    if (availableBatches.length > 0) {
+      availableBatches.sort((a: any, b: any) =>
+        new Date(a.dateAdded || 0).getTime() - new Date(b.dateAdded || 0).getTime()
+      );
+      const price = Number(availableBatches[0].purchasePrice);
+      if (price > 0) {
+        return {
+          purchase: price,
+          selling: Number(availableBatches[0].sellingPrice) || 0
+        };
+      }
+    }
+
+    // 2. History Check (if no active stock or active stock has 0 price for some reason)
+    // Find the MOST RECENT batch that had a price
+    const batchesWithPrice = itemDef.batches.filter((b: any) => Number(b.purchasePrice) > 0);
+    if (batchesWithPrice.length > 0) {
+      // Sort descending (Newest first) to get latest cost
+      batchesWithPrice.sort((a: any, b: any) =>
+        new Date(b.dateAdded || 0).getTime() - new Date(a.dateAdded || 0).getTime()
+      );
+      return {
+        purchase: Number(batchesWithPrice[0].purchasePrice),
+        selling: Number(batchesWithPrice[0].sellingPrice) || 0
+      };
+    }
+  }
+
+  // Fallback: If no batches exist or no batches have positive quantity, use root price
+  return {
+    purchase: Number(itemDef.purchasePrice) || Number(itemDef.price) || 0,
+    selling: Number(itemDef.sellingPrice) || 0
+  };
+};
+
+// Helper to calculate stock requirements for an invoice item
+const getRequiredStockItems = (item: InvoiceItem, settings: InvoiceSettings & { bags?: any[], hooks?: any[] }) => {
+  const reqs: { type: string, id: string, name: string, quantity: number }[] = [];
+  const qty = Number(item.quantity) || 1;
+  const isInstall = item.type === "newCustomerInstallation";
+  const isMaint = item.type === "maintenance";
+
+  // Connectors
+  if ((isInstall || (isMaint && item.maintenanceType === "connectorReplacement")) && Array.isArray(item.connectorType)) {
+    item.connectorType.forEach(n => {
+      const d = settings.connectorTypes.find(c => c.name === n);
+      if (d) reqs.push({ type: "connectorType", id: d.id, name: d.name, quantity: qty });
+    });
+  }
+  // Devices
+  if ((isInstall || (isMaint && item.maintenanceType === "deviceReplacement")) && item.deviceModel) {
+    const d = settings.deviceModels.find(m => m.name === item.deviceModel);
+    if (d) reqs.push({ type: "deviceModel", id: d.id, name: d.name, quantity: qty });
+  }
+  // Cables
+  if ((isInstall || (isMaint && item.maintenanceType === "cableReplacement")) && item.cableLength) {
+    const s = String(item.cableLength);
+    const d = s.includes("مخصص")
+      ? settings.cableLengths.find(c => c.isCustom || c.name === "مخصص")
+      : settings.cableLengths.find(c => c.name === s);
+    if (d) reqs.push({ type: "cableLength", id: d.id, name: `كيبل - ${d.name}`, quantity: qty });
+  }
+  // Hooks & Bags (Installation only)
+  if (isInstall) {
+    const s = settings as any;
+    if (item.numHooks) {
+      // Look up the first active hook from settings
+      const hookItem = (s.hooks || []).find((h: any) => h.isActive !== false);
+      if (hookItem) {
+        reqs.push({ type: "hook", id: hookItem.id, name: hookItem.name, quantity: qty * Number(item.numHooks) });
+      }
+    }
+    if (item.numBags) {
+      // Look up the first active bag from settings
+      const bagItem = (s.bags || []).find((b: any) => b.isActive !== false);
+      if (bagItem) {
+        reqs.push({ type: "bag", id: bagItem.id, name: bagItem.name, quantity: qty * Number(item.numBags) });
+      }
+    }
+  }
+  return reqs;
+};
 
 // --- HELPER FUNCTION & CONSTANTS ---
 // This function is part of the UI layer as it directly renders UI elements.
@@ -173,7 +297,7 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                 ]}
               />
               {/* Custom cable length input removed */}
-  
+
               <Text style={styles.label}>جهاز الاستقبال</Text>
               <CustomDropdown
                 selectedValue={currentItem.deviceModel}
@@ -860,7 +984,7 @@ function InvoiceForm({
   const { theme, themeName } = useTheme();
   const styles = getStyles(theme, themeName);
   const { user } = useFirebaseAuth();
-  const { userName: currentUserDisplayName, currentUserTeamId , userdoc } =
+  const { userName: currentUserDisplayName, currentUserTeamId, userdoc } =
     usePermissions();
 
   const [items, setItems] = useState<InvoiceItem[]>([]);
@@ -970,7 +1094,7 @@ function InvoiceForm({
     [currentUserTeamId]
   );
 
-  
+
 
   // useEffects for data fetching and setup remain largely unchanged
   useEffect(() => {
@@ -1314,8 +1438,8 @@ function InvoiceForm({
       maintenanceType: value,
       customMaintenanceId:
         value === "cableReplacement" ||
-        value === "connectorReplacement" ||
-        value === "deviceReplacement"
+          value === "connectorReplacement" ||
+          value === "deviceReplacement"
           ? undefined
           : prev.customMaintenanceId,
       description,
@@ -1641,19 +1765,11 @@ function InvoiceForm({
   }[] => {
     console.log("DEBUG: Validating user stock...");
 
+    // Allow invoice creation even without stock - stock will go negative
     if (!userStock || userStock.items.length === 0) {
-      console.log("DEBUG: No user stock found or user stock is empty");
-
-      if (!loadingUserStock) {
-        return [
-          {
-            type: "general",
-            name: "لا يوجد مخزون مخصص أو المستخدم لم يقم بتسجيل الدخول",
-            required: 0,
-            available: 0,
-          },
-        ];
-      }
+      console.log("DEBUG: No user stock found or user stock is empty - allowing invoice creation");
+      // Return empty array to allow invoice creation
+      // The handleSaveInvoice will create negative stock entries as needed
       return [];
     }
 
@@ -1823,13 +1939,13 @@ function InvoiceForm({
               (cl) => cl.name === item.cableLength
             );
             if (cableByName) {
-            requiredStockDetails.push({
-              type: "cableLength",
-              id: cableByName.id,
-              name: cableByName.name || "كيبل",
-              quantity: 1,
-            });
-          }
+              requiredStockDetails.push({
+                type: "cableLength",
+                id: cableByName.id,
+                name: cableByName.name || "كيبل",
+                quantity: 1,
+              });
+            }
           }
         }
 
@@ -1914,7 +2030,7 @@ function InvoiceForm({
           const updatedLastUpdated = typeof prev.lastUpdated === 'string'
             ? firestore.Timestamp.fromDate(new Date(prev.lastUpdated))
             : prev.lastUpdated;
-          
+
           return {
             ...prev,
             items: updatedStockItems,
@@ -2020,55 +2136,211 @@ function InvoiceForm({
     setSubmitting(true);
 
     try {
-      console.log("DEBUG: Serializing invoice items...");
-      const serializedItems: InvoiceItem[] = items.map((item) => {
-        console.log("DEBUG: Processing item:", item);
+      // Deep clone user stock to work with
+      const newStock = JSON.parse(JSON.stringify(userStock?.items || [])) as UserStockItem[];
+      const stockTransactions: StockTransaction[] = [];
+      const timestamp = new Date().toISOString();
+      const ts = firestore.Timestamp.now();
+      const finalItems: InvoiceItem[] = [];
+      let totalPurchasePrice = 0;
 
-        const serializedItem: InvoiceItem = {
+      // Process each invoice item
+      for (const item of items) {
+        // Initialize the processed item with new fields
+        const procItem: InvoiceItem = {
           id: item.id,
           type: item.type,
           description: item.description || "",
           quantity: Number(item.quantity) || 1,
           unitPrice: Number(item.unitPrice) || 0,
           totalPrice: Number(item.totalPrice) || 0,
+          purchasePrice: 0,
+          batchesUsed: [] as BatchUsed[],
+          hasPendingStock: false,
         };
 
-        if (item.packageType !== undefined)
-          serializedItem.packageType = item.packageType;
+        // Copy optional fields
+        if (item.packageType !== undefined) procItem.packageType = item.packageType;
+        if (item.cableLength !== undefined) procItem.cableLength = item.cableLength;
+        if (item.connectorType !== undefined) procItem.connectorType = item.connectorType;
+        if (item.numHooks !== undefined) procItem.numHooks = Number(item.numHooks) || 0;
+        if (item.numBags !== undefined) procItem.numBags = Number(item.numBags) || 0;
+        if (item.maintenanceType !== undefined) procItem.maintenanceType = item.maintenanceType;
+        if (item.deviceModel !== undefined) procItem.deviceModel = item.deviceModel;
+        if (item.additionalNotes !== undefined) procItem.additionalNotes = item.additionalNotes;
 
-        // Preserve cableLength exactly as selected/stored in the UI.
-        // It is used for:
-        //  - display in invoice
-        //  - lookup by name in stock reduction (reduceUserStock)
-        // Parsing to number here breaks that mapping and caused inconsistencies.
-        if (item.cableLength !== undefined) {
-          serializedItem.cableLength = item.cableLength;
+        // Get required stock items using the helper
+        const extendedSettings = invoiceSettings as InvoiceSettings & { bags?: any[], hooks?: any[] };
+        const reqs = getRequiredStockItems(item, extendedSettings);
+        let itemCost = 0;
+
+        for (const req of reqs) {
+          // Find item in user stock
+          let sIdx = newStock.findIndex(si =>
+            (req.type === 'hook' || req.type === 'bag')
+              ? si.itemType === req.type
+              : (si.itemType === req.type && si.itemId === req.id)
+          );
+
+          // If not in user stock list, add it (initially 0 quantity)
+          if (sIdx === -1) {
+            newStock.push({
+              id: uuidv4(),
+              itemType: req.type as any,
+              itemId: req.id,
+              name: req.name,
+              itemName: req.name,
+              quantity: 0,
+              lastUpdated: timestamp,
+              batches: []
+            });
+            sIdx = newStock.length - 1;
+          }
+
+          const sItem = newStock[sIdx];
+          let qtyNeeded = req.quantity;
+
+          // Handle Packages (Simple Qty - no batches)
+          if (sItem.itemType === "packageType") {
+            const available = Number(sItem.quantity) || 0;
+            const fallbackPrices = getFallbackPrice(req.type, req.id, extendedSettings);
+            const costPerUnit = (sItem as any).purchasePrice || fallbackPrices.purchase;
+
+            sItem.quantity = available - qtyNeeded; // Allow negative
+            itemCost += costPerUnit * qtyNeeded;
+
+            if (available < qtyNeeded) {
+              procItem.hasPendingStock = true;
+            }
+          } else {
+            // Handle Batched Items (Complex Qty)
+            if (!sItem.batches) sItem.batches = [];
+
+            // Sort oldest to newest (FIFO)
+            sItem.batches.sort((a, b) =>
+              new Date(a.dateAdded).getTime() - new Date(b.dateAdded).getTime()
+            );
+
+            // 1. Consume existing positive batches
+            for (let i = 0; i < sItem.batches.length && qtyNeeded > 0; i++) {
+              const b = sItem.batches[i];
+              const avail = Number(b.quantity) || 0;
+
+              if (avail > 0) {
+                const take = Math.min(avail, qtyNeeded);
+                b.quantity = avail - take;
+                qtyNeeded -= take;
+
+                const batchCost = Number(b.purchasePrice) || 0;
+                itemCost += take * batchCost;
+
+                procItem.batchesUsed?.push({
+                  stockItemId: sItem.itemId,
+                  stockItemName: req.name,
+                  batchId: b.batchId || b.id,
+                  quantity: take,
+                  purchasePriceAtTime: batchCost
+                });
+              }
+            }
+
+            // 2. Handle Deficit (If still need quantity)
+            if (qtyNeeded > 0) {
+              const fallbackDetails = getFallbackPrice(req.type, req.id, extendedSettings);
+              const fallbackPrice = fallbackDetails.purchase;
+              const fallbackSellingPrice = fallbackDetails.selling;
+
+              itemCost += qtyNeeded * fallbackPrice;
+
+              procItem.batchesUsed?.push({
+                stockItemId: sItem.itemId,
+                stockItemName: req.name,
+                batchId: "PENDING_ASSIGNMENT",
+                isEstimated: true,
+                quantity: qtyNeeded,
+                purchasePriceAtTime: fallbackPrice
+              });
+
+              procItem.hasPendingStock = true;
+
+              // Create/Update "DEFICIT" batch so user sees negative stock
+              const deficitBatch = sItem.batches.find(b => b.batchId === "DEFICIT");
+              if (deficitBatch) {
+                deficitBatch.quantity = (Number(deficitBatch.quantity) || 0) - qtyNeeded;
+                // Track which invoices contributed to this deficit (update notes)
+                deficitBatch.notes = `عجز تلقائي - آخر تحديث: ${timestamp} - ${ticketId.substring(0, 6)}`;
+              } else {
+                sItem.batches.push({
+                  id: uuidv4(),
+                  batchId: "DEFICIT",
+                  dateAdded: timestamp,
+                  quantity: -qtyNeeded,
+                  purchasePrice: fallbackPrice, // Store the estimated price for reference
+                  sellingPrice: fallbackSellingPrice,
+                  notes: `عجز تلقائي - فاتورة: ${ticketId.substring(0, 6)}`
+                });
+              }
+            }
+          }
+
+          // Log transaction
+          stockTransactions.push({
+            id: uuidv4(),
+            userId: userdoc?.id || user?.uid || "",
+            userName: currentUserDisplayName || user?.displayName || "N/A",
+            itemType: req.type as any,
+            itemId: req.id,
+            itemName: req.name,
+            quantity: req.quantity,
+            type: "invoice",
+            timestamp: ts,
+            notes: `فاتورة للتذكرة ${ticketId.substring(0, 6)}`
+          });
         }
-        if (item.connectorType !== undefined)
-          serializedItem.connectorType = item.connectorType;
-        if (item.numHooks !== undefined)
-          serializedItem.numHooks = Number(item.numHooks) || 0;
-        if (item.numBags !== undefined)
-          serializedItem.numBags = Number(item.numBags) || 0;
-        if (item.maintenanceType !== undefined)
-          serializedItem.maintenanceType = item.maintenanceType;
-        if (item.deviceModel !== undefined)
-          serializedItem.deviceModel = item.deviceModel;
 
-        console.log("DEBUG: Serialized item:", serializedItem);
-        return serializedItem;
-      });
+        // Set the calculated cost
+        procItem.purchasePrice = itemCost;
 
-      const totalAmount = calculateTotal();
+        // Build final item without undefined values (Firestore doesn't accept undefined)
+        const cleanItem: InvoiceItem = {
+          id: procItem.id,
+          type: procItem.type,
+          description: procItem.description,
+          quantity: procItem.quantity,
+          unitPrice: procItem.unitPrice,
+          totalPrice: procItem.totalPrice,
+          purchasePrice: procItem.purchasePrice,
+          batchesUsed: procItem.batchesUsed || [],
+          hasPendingStock: procItem.hasPendingStock || false,
+          connectorType: procItem.connectorType || [],
+          numHooks: procItem.numHooks || 0,
+          numBags: procItem.numBags || 0,
+          subscriberId: procItem.subscriberId || null,
+        };
+
+        // Only add optional fields if they have values
+        if (procItem.packageType) cleanItem.packageType = procItem.packageType;
+        if (procItem.cableLength) cleanItem.cableLength = procItem.cableLength;
+        if (procItem.maintenanceType) cleanItem.maintenanceType = procItem.maintenanceType;
+        if (procItem.deviceModel) cleanItem.deviceModel = procItem.deviceModel;
+        if (procItem.additionalNotes) cleanItem.additionalNotes = procItem.additionalNotes;
+
+        finalItems.push(cleanItem);
+        totalPurchasePrice += itemCost;
+      }
+
+      const invId = uuidv4();
+      const invoiceNeedsStockAssignment = finalItems.some(i => i.hasPendingStock === true);
 
       const newInvoice: Invoice = {
-        id: uuidv4(),
+        id: invId,
         linkedServiceRequestId: ticketId,
         createdBy: user?.uid || "",
-        createdAt: firestore.Timestamp.now(),
-        lastUpdated: firestore.Timestamp.now(),
-        items: serializedItems,
-        totalAmount: totalAmount, // Allow zero total amount - no price restrictions
+        createdAt: ts,
+        lastUpdated: ts,
+        items: finalItems,
+        totalAmount: items.reduce((s, i) => s + i.totalPrice, 0),
+        purchasePrice: totalPurchasePrice,
         status: "draft",
         notes: notes.trim(),
         customerName: customerName || serviceRequest?.customerName || "",
@@ -2079,40 +2351,64 @@ function InvoiceForm({
           typeof propSubscriberId === "string"
             ? propSubscriberId
             : serviceRequest?.subscriberId || serviceRequest?.customerId,
+        needsStockAssignment: invoiceNeedsStockAssignment,
       };
 
-      console.log("DEBUG: Created new invoice with total amount:", totalAmount);
+      console.log("DEBUG: Created new invoice with purchase price:", totalPurchasePrice);
 
-      const stockReduced = await reduceUserStock(newInvoice);
-      // If stock reduction failed (e.g., due to an unexpected error during the process,
-      // not due to initial validation which might allow proceeding with warning), then stop.
-      if (!stockReduced) {
-        setSubmitting(false);
-        // Toast message is shown within reduceUserStock on error
-        console.log("DEBUG: Stock reduction failed, aborting invoice save");
-        return;
+      // Update user stock in database
+      if (user?.uid) {
+        const userQueryRef = firestore().collection("users")
+          .where("uid", "==", user.uid);
+        const querySnapshot = await userQueryRef.get();
+
+        if (!querySnapshot.empty) {
+          await querySnapshot.docs[0].ref.update({
+            stockItems: newStock,
+            lastUpdated: timestamp,
+          });
+          console.log("DEBUG: Successfully updated user stock in database");
+        }
       }
 
-      console.log("DEBUG: Stock reduction successful, saving invoice to database");
+      // Create stock transactions
+      for (const transaction of stockTransactions) {
+        await firestore().collection("stockTransactions").doc(transaction.id).set(transaction);
+      }
 
+      // Save invoice
       const invoiceRef = firestore().collection("invoices").doc(newInvoice.id);
       await invoiceRef.set(newInvoice);
 
+      // Update ticket
       const ticketRef = firestore().collection(ticketCollectionName).doc(ticketId);
       await ticketRef.update({
         invoiceIds: firestore.FieldValue.arrayUnion(newInvoice.id),
         lastUpdated: firestore.Timestamp.now(),
       });
 
+      // Add comment
       const comment: Comment = {
         id: `comment_${Date.now()}`,
         userId: user?.uid || "",
         userName: currentUserDisplayName || user?.displayName || "",
-        content: `تم إنشاء فاتورة جديدة بقيمة ${totalAmount.toLocaleString()} دينار عراقي.`,
+        content: `تم إنشاء فاتورة جديدة بقيمة ${newInvoice.totalAmount.toLocaleString()} دينار عراقي.`,
         timestamp: firestore.Timestamp.now(),
         isStatusChange: true
       };
       await ticketRef.update({ comments: firestore.FieldValue.arrayUnion(comment) });
+
+      // Update local state
+      setUserStock(
+        (prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            items: newStock,
+            lastUpdated: firestore.Timestamp.now()
+          };
+        }
+      );
 
       Toast.show({
         type: "success",
@@ -2278,7 +2574,7 @@ function InvoiceForm({
                         </Text>
                       )}
                     </View>
-                    <Text style={styles.itemTotal}> 
+                    <Text style={styles.itemTotal}>
                       {item.totalPrice.toLocaleString()} د.ع
                     </Text>
                     <Pressable
@@ -2869,20 +3165,20 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ ticketId, subscriberId, onInv
           invoicesData.sort(
             (a, b) => {
               let dateA: Date, dateB: Date;
-              
+
               // Handle React Native Firebase Timestamp
               if (a.createdAt && typeof a.createdAt === 'object' && 'toDate' in a.createdAt) {
                 dateA = (a.createdAt as any).toDate();
               } else {
                 dateA = new Date(a.createdAt);
               }
-              
+
               if (b.createdAt && typeof b.createdAt === 'object' && 'toDate' in b.createdAt) {
                 dateB = (b.createdAt as any).toDate();
               } else {
                 dateB = new Date(b.createdAt);
               }
-              
+
               return dateB.getTime() - dateA.getTime();
             }
           )

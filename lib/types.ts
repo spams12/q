@@ -50,15 +50,24 @@ export interface InvoiceSettings {
   maintenanceTypes: MaintenanceType[];
 }
 
+export interface BatchUsed {
+  stockItemId: string;
+  stockItemName: string;
+  batchId: string;
+  quantity: number;
+  purchasePriceAtTime: number;
+  isEstimated?: boolean;
+}
+
 export interface InvoiceItem {
   id: string;
   type:
-    | "newCustomerInstallation"
-    | "maintenance"
-    | "transportationFee"
-    | "expenseReimbursement"
-    | "subscriptionRenewal"
-    | "customItem";
+  | "newCustomerInstallation"
+  | "maintenance"
+  | "transportationFee"
+  | "expenseReimbursement"
+  | "subscriptionRenewal"
+  | "customItem";
   description: string;
   quantity: number;
   unitPrice: number;
@@ -75,6 +84,9 @@ export interface InvoiceItem {
   subscriberId?: string | null;
   isPaid?: boolean;
   customMaintenanceId?: string; // For custom maintenance items from list
+  purchasePrice?: number; // Cost price from stock batches
+  batchesUsed?: BatchUsed[]; // Track which batches were used
+  hasPendingStock?: boolean; // Flag: True if price was estimated from main inventory
 }
 
 export interface Attachment {
@@ -99,7 +111,7 @@ export interface User {
   stockItems?: UserStockItem[];
   lastClearTimes: any[]
   uid: string;
-  expoPushTokens :any[]
+  expoPushTokens: any[]
 }
 
 
@@ -112,6 +124,7 @@ export interface Invoice {
   lastUpdated: Timestamp;
   items: InvoiceItem[];
   totalAmount: number;
+  purchasePrice?: number; // Total cost from stock batches
   status: "draft" | "pending" | "paid" | "cancelled" | "submitted" | "approved";
   notes?: string;
   customerName?: string;
@@ -120,6 +133,7 @@ export interface Invoice {
   teamId?: string | null;
   teamCreatorId?: string | null; // Assuming this might exist
   subscriberId?: string | null;
+  needsStockAssignment?: boolean; // Flag for invoices with pending stock issues
 }
 
 export interface Comment {
@@ -139,7 +153,7 @@ export interface Comment {
 }
 
 export interface ServiceRequest {
-  onLocation:boolean,
+  onLocation: boolean,
   id: string;
   customerId: string;
   customerName: string;
@@ -147,14 +161,14 @@ export interface ServiceRequest {
   customerPhone?: string;
   title: string;
   description: string;
-  type: string; 
-  status: string; 
-  priority: string; 
-  date: string; 
-  createdAt: Timestamp; 
+  type: string;
+  status: string;
+  priority: string;
+  date: string;
+  createdAt: Timestamp;
   lastUpdated: string;
   assignedUsers?: string[];
-  attachments?: string[]; 
+  attachments?: string[];
   comments?: Comment[];
   creatorId: string;
   creatorName: string;
@@ -162,7 +176,7 @@ export interface ServiceRequest {
   subscriberId?: string | null;
   invoiceIds?: string[];
   userResponses?: UserResponse[];
-completionTimestamp?: any;
+  completionTimestamp?: any;
   onLocationTimestamp?: any;
   estimatedTime?: number;
 }
@@ -173,23 +187,36 @@ export interface UserResponse {
   timestamp: string;
 }
 
+export interface StockBatch {
+  id: string;
+  batchId: string;
+  dateAdded: string;
+  quantity: number;
+  purchasePrice: number;
+  sellingPrice?: number;
+  notes?: string;
+}
+
 export interface UserStockItem {
   id: string;
   itemType:
-    | "packageType"
-    | "cableLength"
-    | "connectorType"
-    | "deviceModel"
-    | "maintenanceType"
-    | "hook"
-    | "bag"
-    | "cable"
-    | string;
+  | "packageType"
+  | "cableLength"
+  | "connectorType"
+  | "deviceModel"
+  | "maintenanceType"
+  | "hook"
+  | "bag"
+  | "cable"
+  | string;
   itemId: string;
-  itemName: string;
+  itemName?: string;
+  name?: string;
   quantity: number;
-  lastUpdated: Timestamp;
+  lastUpdated: Timestamp | string;
   notes?: string;
+  batches?: StockBatch[];
+  purchasePrice?: number;
 }
 
 export interface UserStock {
@@ -205,15 +232,15 @@ export interface StockTransaction {
   userId: string;
   userName: string;
   itemType:
-    | "packageType"
-    | "cableLength"
-    | "connectorType"
-    | "deviceModel"
-    | "maintenanceType"
-    | "hook"
-    | "bag"
-    | "cable"
-    | string;
+  | "packageType"
+  | "cableLength"
+  | "connectorType"
+  | "deviceModel"
+  | "maintenanceType"
+  | "hook"
+  | "bag"
+  | "cable"
+  | string;
   itemId: string;
   itemName: string;
   quantity: number;

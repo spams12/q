@@ -401,10 +401,7 @@ const generatePdf = async () => {
         )}</td>
               </tr>
             </table>
-            ${invoice.notes
-        ? `<div style="margin-top: 20px;"><strong>ملاحظات:</strong><br>${invoice.notes}</div>`
-        : ""
-      }
+    
             ${subscriberNoticeHtml}
             ${footerNoticeHtml}
           </div>
