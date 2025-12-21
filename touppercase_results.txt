@@ -1,0 +1,4 @@
+app/family.tsx:28:    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+app/fliters.tsx:163:                                        {item.label.charAt(0).toUpperCase()}
+components/CommentSection.tsx:48:    .toUpperCase()
+components/FilterDialog.tsx:526:                      {item.name.charAt(0).toUpperCase()}

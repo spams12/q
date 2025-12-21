@@ -2399,7 +2399,7 @@ function InvoiceForm({
         id: `comment_${Date.now()}`,
         userId: user?.uid || "",
         userName: currentUserDisplayName || user?.displayName || "",
-        content: `تم إنشاء فاتورة جديدة بقيمة ${newInvoice.totalAmount.toLocaleString()} دينار عراقي.`,
+        content: `تم إنشاء فاتورة جديدة بقيمة ${(newInvoice.totalAmount || 0).toLocaleString()} دينار عراقي.`,
         timestamp: firestore.Timestamp.now(),
         isStatusChange: true
       };
@@ -2572,7 +2572,7 @@ function InvoiceForm({
                       <Text style={styles.itemDescription}>{item.description}</Text>
                       <Text style={styles.itemMeta}>
                         {`الكمية: ${item.quantity
-                          }  ·  السعر: ${item.unitPrice.toLocaleString()} د.ع`}
+                          }  ·  السعر: ${(item.unitPrice || 0).toLocaleString()} د.ع`}
                       </Text>
                       {/* Display cable info by name if present */}
                       {item.cableLength && (
@@ -2582,7 +2582,7 @@ function InvoiceForm({
                       )}
                     </View>
                     <Text style={styles.itemTotal}>
-                      {item.totalPrice.toLocaleString()} د.ع
+                      {(item.totalPrice || 0).toLocaleString()} د.ع
                     </Text>
                     <Pressable
                       onPress={() => removeItem(item.id)}
@@ -3166,7 +3166,13 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ ticketId, subscriberId, onInv
         );
         const invoiceSnaps = await Promise.all(invoicePromises);
         const invoicesData = invoiceSnaps
-          .filter((snap) => snap.exists)
+          .filter((snap) => {
+            // Only include invoices that exist AND have valid data
+            if (!snap.exists) return false;
+            const data = snap.data();
+            // Ensure the invoice has meaningful data (at least an id or items)
+            return data && (data.items || data.totalAmount !== undefined);
+          })
           .map((snap) => ({ id: snap.id, ...snap.data() } as Invoice));
         setInvoices(
           invoicesData.sort(
@@ -3322,7 +3328,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ ticketId, subscriberId, onInv
                     ...statusStyle,
                   }}
                 >
-                  {invoice.status.toUpperCase()}
+
                 </Text>
               </View>
               <Text style={styles.itemDetail}>
@@ -3353,7 +3359,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ ticketId, subscriberId, onInv
                   marginBottom: 8,
                 }}
               >
-                الإجمالي: {invoice.totalAmount.toLocaleString()} د.ع
+                الإجمالي: {(invoice.totalAmount || 0).toLocaleString()} د.ع
               </Text>
 
               <Text
@@ -3361,7 +3367,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ ticketId, subscriberId, onInv
               >
                 العناصر:
               </Text>
-              {invoice.items.map((item, index) => (
+              {(invoice.items || []).map((item, index) => (
                 <View key={item.id || `item-${index}`} style={styles.itemContainer}>
                   <Text style={styles.itemDescription}>{item.description}</Text>
                   <View
@@ -3372,7 +3378,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ ticketId, subscriberId, onInv
                   >
                     <Text style={styles.itemDetail}>الكمية: {item.quantity}</Text>
                     <Text style={styles.itemDetail}>
-                      سعر الوحدة: {item.unitPrice.toLocaleString()} د.ع
+                      سعر الوحدة: {(item.unitPrice || 0).toLocaleString()} د.ع
                     </Text>
                   </View>
                   {/* Display cable info by name if present */}
@@ -3384,7 +3390,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ ticketId, subscriberId, onInv
                   <Text
                     style={[styles.itemDetail, { fontWeight: "bold", textAlign: "left" }]}
                   >
-                    إجمالي العنصر: {item.totalPrice.toLocaleString()} د.ع
+                    إجمالي العنصر: {(item.totalPrice || 0).toLocaleString()} د.ع
                   </Text>
                 </View>
               ))}
