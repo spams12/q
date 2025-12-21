@@ -136,21 +136,26 @@ const StockManagementScreen: React.FC = () => {
         return date.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }) + ' ' + date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
     };
 
-    const renderStockItem = ({ item }: { item: UserStockItem }) => (
-        <View style={[styles.stockCard, { backgroundColor: theme.card }]}>
-            <View style={styles.stockHeader}>
-                {item.itemType && (
-                    <View style={[styles.itemTypeBadge, { backgroundColor: getItemTypeColor(item.itemType) }]}>
-                        <Text style={styles.itemTypeText}>{translateTypeToArabic(item.itemType)}</Text>
-                    </View>
-                )}
-                <Text style={[styles.quantityText, { color: theme.text }]}>{item.quantity}</Text>
+    const renderStockItem = ({ item }: { item: UserStockItem }) => {
+        // Calculate quantity from batches instead of legacy quantity field
+        const totalQuantity = (item as any).batches?.reduce((sum: number, batch: any) => sum + (batch.quantity || 0), 0) ?? item.quantity ?? 0;
+
+        return (
+            <View style={[styles.stockCard, { backgroundColor: theme.card }]}>
+                <View style={styles.stockHeader}>
+                    {item.itemType && (
+                        <View style={[styles.itemTypeBadge, { backgroundColor: getItemTypeColor(item.itemType) }]}>
+                            <Text style={styles.itemTypeText}>{translateTypeToArabic(item.itemType)}</Text>
+                        </View>
+                    )}
+                    <Text style={[styles.quantityText, { color: totalQuantity < 0 ? '#E17055' : theme.text }]}>{totalQuantity}</Text>
+                </View>
+                <Text style={[styles.itemName, { color: theme.text }]}>{(item as any).itemName || (item as any).name}</Text>
+                <Text style={styles.lastUpdated}>آخر تحديث: {formatDate(item.lastUpdated)}</Text>
+                {item.notes && <Text style={styles.notes}>{item.notes}</Text>}
             </View>
-            <Text style={[styles.itemName, { color: theme.text }]}>{(item as any).itemName || (item as any).name}</Text>
-            <Text style={styles.lastUpdated}>آخر تحديث: {formatDate(item.lastUpdated)}</Text>
-            {item.notes && <Text style={styles.notes}>{item.notes}</Text>}
-        </View>
-    );
+        );
+    };
 
     const renderTransactionItem = ({ item }: { item: StockTransaction }) => (
         <View style={[styles.transactionCard, { backgroundColor: theme.card }]}>
@@ -229,7 +234,7 @@ const StockManagementScreen: React.FC = () => {
     ListHeader.displayName = 'ListHeader';
 
     const renderListEmpty = () => {
-        if (loading) return null; // The main loading indicator is covering this.
+        if (loading) return null;
         return (
             <View style={styles.emptyContainer}>
                 <Ionicons name="archive-outline" size={48} color="#ccc" />

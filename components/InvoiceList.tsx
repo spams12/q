@@ -273,7 +273,7 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                 items={invoiceSettings.packageTypes
                   .filter((pt: PackageType) => pt.isActive)
                   .map((pt: PackageType) => ({
-                    label: `${pt.name} (${((pt as any).firstMonthPrice || pt.price).toLocaleString()} د.ع - أول شهر)`,
+                    label: `${pt.name} (${((pt as any).firstMonthPrice || pt.price || 0).toLocaleString()} د.ع - أول شهر)`,
                     value: pt.name,
                   }))}
               />
@@ -419,7 +419,7 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                     items={invoiceSettings.maintenanceTypes
                       .filter((mt) => mt.isActive)
                       .map((mt) => ({
-                        label: `${mt.name} (${mt.basePrice.toLocaleString()} د.ع)`,
+                        label: `${mt.name} (${(mt.basePrice || 0).toLocaleString()} د.ع)`,
                         value: mt.id,
                       }))}
                   />
@@ -445,7 +445,7 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                         .map((cl: CableLength) => ({
                           label:
                             cl.name ||
-                            `${cl.length} متر (${cl.price.toLocaleString()} د.ع)`,
+                            `${cl.length} متر (${(cl.price || 0).toLocaleString()} د.ع)`,
                           value: cl.name || `${cl.length} متر`,
                         })),
                     ]}
@@ -481,7 +481,7 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                             style={styles.checkboxBase}
                           />
                           <Text style={styles.checkboxLabel}>{`${ct.name
-                            } (${ct.price.toLocaleString()} د.ع)`}</Text>
+                            } (${(ct.price || 0).toLocaleString()} د.ع)`}</Text>
                         </View>
                       ))}
                   </View>
@@ -499,7 +499,7 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                       .filter((dm: DeviceModel) => dm.isActive)
                       .map((dm: DeviceModel) => ({
                         label: `${dm.name
-                          } (${dm.price.toLocaleString()} د.ع)`,
+                          } (${(dm.price || 0).toLocaleString()} د.ع)`,
                         value: dm.name,
                       }))}
                   />
@@ -550,7 +550,7 @@ const RenderItemSpecificFields: React.FC<RenderItemSpecificFieldsProps> =
                 items={invoiceSettings.packageTypes
                   .filter((pt: PackageType) => pt.isActive)
                   .map((pt: PackageType) => ({
-                    label: `${pt.name} (${pt.price.toLocaleString()} د.ع)`,
+                    label: `${pt.name} (${(pt.price || 0).toLocaleString()} د.ع)`,
                     value: pt.name,
                   }))}
               />

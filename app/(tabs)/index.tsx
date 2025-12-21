@@ -93,7 +93,7 @@ const DynamicStatusCountsProvider = ({ setStatusCounts, userUid, indexName }) =>
           ]);
           const facets = results[0]?.facets || {};
           const counts = facets.status || {};
-          const closedCount = (counts['مكتمل'] || 0) + (counts['مغلق'] || 0);
+          const closedCount = counts['مكتمل'] || 0;
           setStatusCounts({
             open: counts['مفتوح'] || 0,
             pending: counts['قيد المعالجة'] || 0,
@@ -359,6 +359,17 @@ const HybridList = ({ requestView, sortOrder, users, isTabSwitching, listHeader,
     const unsubscribe = serviceRequestsQuery.onSnapshot(
       querySnapshot => {
         const requestsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
+        console.log(`\n========== [Tab: ${requestView}] ==========`);
+        console.log(`Firebase returned: ${requestsData.length} tickets`);
+        console.log('Ticket IDs:', requestsData.map(t => t.id));
+        console.log('Tickets with details:', requestsData.map(t => ({
+          id: t.id,
+          status: t.status,
+          deleted: t.deleted,
+          assignedUsers: t.assignedUsers,
+          customerName: t.customerName
+        })));
+        console.log('==========================================\n');
         setFirebaseRequests(requestsData);
         setIsFirebaseLoading(false);
       },
