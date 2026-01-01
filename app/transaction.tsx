@@ -220,6 +220,7 @@ const AccountBalanceScreen = () => {
       const query = firestore()
         .collection("transactions")
         .where("assineduser", "==", userdoc.id)
+        .where("status", "!=", "cleared")
         .orderBy("createdAt", "desc")
         .limit(PAGE_SIZE);
 
@@ -250,6 +251,7 @@ const AccountBalanceScreen = () => {
     const query = firestore()
       .collection("transactions")
       .where("assineduser", "==", userdoc.id)
+      .where("status", "!=", "cleared")
       .orderBy("createdAt", "desc")
       .limit(PAGE_SIZE);
 
@@ -285,6 +287,7 @@ const AccountBalanceScreen = () => {
       const snapshots = await firestore()
         .collection("transactions")
         .where("assineduser", "==", userdoc.id)
+        .where("status", "!=", "cleared")
         .orderBy("createdAt", "desc")
         .startAfter(lastVisible)
         .limit(PAGE_SIZE)
